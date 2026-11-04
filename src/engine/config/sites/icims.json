@@ -1,0 +1,149 @@
+{
+  "ats": "iCIMS",
+  "urls": [
+    "*://*.icims.com/*"
+  ],
+  "urlsExcluded": [],
+  "embeddedPaths": [],
+  "pathsExcluded": [],
+  "containerPath": [],
+  "containerRequired": false,
+  "defaultMethod": "default",
+  "submitButtonPaths": [],
+  "submittedSuccessPaths": [],
+  "trackedInputSelectors": [],
+  "inputSelectors": [
+    [
+      "resume",
+      [
+        {
+          "path": [
+            ".//input[@type='file'][contains(@name,'Resume_File')]"
+          ],
+          "method": "uploadResume"
+        }
+      ]
+    ],
+    [
+      "country",
+      [
+        ".//a[contains(@id,'.AddressCountry_icimsDropdown')]"
+      ]
+    ],
+    [
+      "state",
+      [
+        ".//a[contains(@id,'.AddressState_icimsDropdown')]"
+      ]
+    ],
+    [
+      "education",
+      [
+        {
+          "containerPath": [
+            ".//*[contains(@class,'iCIMS_CollectionContainer')][.//*[contains(@name,'CandProfileFields.School') or contains(@id,'CandProfileFields.School')]]"
+          ],
+          "inputSelectors": [
+            [
+              "school",
+              [
+                ".//a[contains(@id,'.School_icimsDropdown')]"
+              ]
+            ],
+            [
+              "name_optional",
+              [
+                {
+                  "path": [
+                    ".//input[contains(@name,'CandProfileFields.OtherSchool')]"
+                  ],
+                  "valueKey": "school"
+                }
+              ]
+            ],
+            [
+              "degree",
+              [
+                {
+                  "path": [
+                    ".//a[contains(@id,'.Degree_icimsDropdown')]"
+                  ],
+                  "values": {
+                    "Associate's degree": [
+                      "Associates Degree"
+                    ],
+                    "Bachelor's degree": [
+                      "Bachelors Degree"
+                    ],
+                    "Master's degree": [
+                      "Masters Degree"
+                    ]
+                  }
+                }
+              ]
+            ],
+            [
+              "major",
+              [
+                ".//a[contains(@id,'.Major_icimsDropdown')]"
+              ]
+            ],
+            [
+              "graduated",
+              [
+                {
+                  "path": [
+                    ".//select[contains(@name,'CandProfileFields.IsGraduated')]"
+                  ],
+                  "valueKey": "graduated_flag"
+                }
+              ]
+            ],
+            [
+              "start_month",
+              [
+                ".//select[contains(@name,'StartDate_Month')]"
+              ]
+            ],
+            [
+              "start_day",
+              [
+                ".//select[contains(@name,'StartDate_Date')]"
+              ]
+            ],
+            [
+              "start_year",
+              [
+                ".//input[contains(@name,'StartDate_Year')]"
+              ]
+            ],
+            [
+              "end_month",
+              [
+                ".//select[contains(@name,'EndDate_Month') or contains(@name,'GraduationDate_Month')]"
+              ]
+            ],
+            [
+              "end_day",
+              [
+                ".//select[contains(@name,'EndDate_Date') or contains(@name,'GraduationDate_Date')]"
+              ]
+            ],
+            [
+              "end_year",
+              [
+                ".//input[contains(@name,'EndDate_Year') or contains(@name,'GraduationDate_Year')]"
+              ]
+            ],
+            [
+              "gpa",
+              [
+                ".//input[contains(@name,'CandProfileFields.GPA')]"
+              ]
+            ]
+          ]
+        }
+      ]
+    ]
+  ]
+}

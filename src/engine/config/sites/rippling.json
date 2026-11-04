@@ -1,0 +1,139 @@
+{
+  "ats": "Rippling",
+  "urls": [
+    "*://ats.rippling.com/*",
+    "*://ats.*.rippling.com/*"
+  ],
+  "urlsExcluded": [],
+  "embeddedPaths": [],
+  "pathsExcluded": [],
+  "containerPath": [],
+  "containerRequired": false,
+  "defaultMethod": "default",
+  "submitButtonPaths": [
+    "//button[@data-testid='Apply']"
+  ],
+  "submittedSuccessPaths": [
+    "//*[starts-with(normalize-space(text()),'You have successfully applied')]"
+  ],
+  "trackedInputSelectors": [],
+  "inputSelectors": [
+    [
+      "first_name",
+      [
+        "//input[@data-testid='input-first_name']"
+      ]
+    ],
+    [
+      "last_name",
+      [
+        "//input[@data-testid='input-last_name']"
+      ]
+    ],
+    [
+      "email",
+      [
+        "//input[@data-testid='input-email']"
+      ]
+    ],
+    [
+      "phone",
+      [
+        "//input[@data-testid='input-phone_number']"
+      ]
+    ],
+    [
+      "resume",
+      [
+        {
+          "path": "//input[@data-testid='input-resume']",
+          "method": "uploadResume"
+        }
+      ]
+    ],
+    [
+      "gender",
+      [
+        {
+          "path": "//*[@data-testid='eeoc.gender']//*[@role='combobox']",
+          "actions": [
+            {
+              "method": "click"
+            },
+            {
+              "path": [
+                "%INPUTPATH%/ancestor::*[starts-with(@data-testid,'eeoc.')][1]//*[@role='option'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')='%LOWERVALUE%']",
+                "//*[@role='listbox']//*[@role='option'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')='%LOWERVALUE%']"
+              ],
+              "method": "click",
+              "time": 3000
+            }
+          ]
+        }
+      ]
+    ],
+    [
+      "hispanic",
+      [
+        {
+          "path": "//*[@data-testid='eeoc.hispanicOrLatino']//*[@role='combobox']",
+          "actions": [
+            {
+              "method": "click"
+            },
+            {
+              "path": [
+                "%INPUTPATH%/ancestor::*[starts-with(@data-testid,'eeoc.')][1]//*[@role='option'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')='%LOWERVALUE%']",
+                "//*[@role='listbox']//*[@role='option'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')='%LOWERVALUE%']"
+              ],
+              "method": "click",
+              "time": 3000
+            }
+          ]
+        }
+      ]
+    ],
+    [
+      "ethnicity",
+      [
+        {
+          "path": "//*[@data-testid='eeoc.race']//*[@role='combobox']",
+          "actions": [
+            {
+              "method": "click"
+            },
+            {
+              "path": [
+                "%INPUTPATH%/ancestor::*[starts-with(@data-testid,'eeoc.')][1]//*[@role='option'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')='%LOWERVALUE%']",
+                "//*[@role='listbox']//*[@role='option'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')='%LOWERVALUE%']"
+              ],
+              "method": "click",
+              "time": 3000
+            }
+          ]
+        }
+      ]
+    ],
+    [
+      "veteran",
+      [
+        {
+          "path": "//*[@data-testid='eeoc.veteranStatus']//*[@role='combobox']",
+          "actions": [
+            {
+              "method": "click"
+            },
+            {
+              "path": [
+                "%INPUTPATH%/ancestor::*[starts-with(@data-testid,'eeoc.')][1]//*[@role='option'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')='%LOWERVALUE%']",
+                "//*[@role='listbox']//*[@role='option'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')='%LOWERVALUE%']"
+              ],
+              "method": "click",
+              "time": 3000
+            }
+          ]
+        }
+      ]
+    ]
+  ]
+}

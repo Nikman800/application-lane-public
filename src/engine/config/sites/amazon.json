@@ -1,0 +1,42 @@
+{
+  "ats": "Amazon",
+  "urls": [
+    "*://account.amazon.jobs/*/applicant/*",
+    "*://www.amazon.jobs/*/applicant/*"
+  ],
+  "urlsExcluded": [],
+  "embeddedPaths": [],
+  "pathsExcluded": [],
+  "containerPath": [],
+  "containerRequired": false,
+  "defaultMethod": "default",
+  "submitButtonPaths": [],
+  "submittedSuccessPaths": [],
+  "trackedInputSelectors": [],
+  "inputSelectors": [
+    [
+      "over18",
+      [
+        "//div[contains(@class,'question')][.//div[contains(@class,'question-label')]//label[contains(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'18 years')]]//select"
+      ]
+    ],
+    [
+      "country",
+      [
+        "//div[contains(@class,'question')][.//div[contains(@class,'question-label')]//label[contains(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'country')]]//select"
+      ]
+    ],
+    [
+      "city",
+      [
+        "//div[contains(@class,'question')][.//div[contains(@class,'question-label')]//label[translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')='city']]//input[@type='text']"
+      ]
+    ],
+    [
+      "postal_code",
+      [
+        "//div[contains(@class,'question')][.//div[contains(@class,'question-label')]//label[translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')='zip code' or translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')='postal code']]//input[@type='text']"
+      ]
+    ]
+  ]
+}

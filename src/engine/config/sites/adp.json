@@ -1,0 +1,231 @@
+{
+  "ats": "ADP",
+  "urls": [
+    "*://myjobs.adp.com/*",
+    "*://*.adp.com/*/cx/*"
+  ],
+  "urlsExcluded": [],
+  "embeddedPaths": [],
+  "pathsExcluded": [],
+  "containerPath": [],
+  "containerRequired": false,
+  "defaultMethod": "default",
+  "submitButtonPaths": [],
+  "submittedSuccessPaths": [],
+  "trackedInputSelectors": [
+    {
+      "kind": "file",
+      "fieldPath": "//adp-form-group[.//dynamic-form-sdf-upload]",
+      "labelPath": "./label",
+      "requiredPath": "./label/span[contains(@class,'required')]",
+      "inputTextPath": [
+        ".//div[contains(@class,'filename')]"
+      ],
+      "fillActions": [
+        {
+          "path": ".//sdf-button[@icon='action-upload']",
+          "method": "click"
+        },
+        {
+          "path": ".//sdf-focus-pane//sdf-file-uploader/shadow-root/input",
+          "method": "uploadFile",
+          "time": 5000
+        },
+        {
+          "path": ".//sdf-focus-pane/shadow-root/sdf-button",
+          "method": "click",
+          "time": 3000
+        }
+      ]
+    },
+    {
+      "fieldPath": "//adp-form-group[.//sdf-radio-group]",
+      "labelPath": "./label",
+      "requiredPath": "./label/span[contains(@class,'required')]",
+      "optionsPath": [
+        ".//sdf-radio-button[@role='radio'][not(@hidden)]"
+      ],
+      "optionsTextPath": [
+        "./shadow-root/label"
+      ]
+    }
+  ],
+  "inputSelectors": [
+    [
+      "phone_stripped",
+      [
+        {
+          "path": [
+            ".//sdf-phone-number-input/shadow-root/input"
+          ],
+          "method": "trustedType"
+        }
+      ]
+    ],
+    [
+      "phone_type",
+      [
+        {
+          "path": [
+            ".//adp-form-group[label[@data-adp-field-label='Phone Type' or normalize-space(text()[1])='Phone Type']]//sdf-select-simple/shadow-root/div[contains(@class,'trigger-button')]"
+          ],
+          "actions": [
+            {
+              "method": "click"
+            },
+            {
+              "path": ".//adp-form-group[label[@data-adp-field-label='Phone Type' or normalize-space(text()[1])='Phone Type']]//sdf-select-simple/shadow-root/sdf-select-item[normalize-space(.)=\"%VALUE%\"]",
+              "method": "click",
+              "time": 3000
+            }
+          ],
+          "values": {
+            "Mobile": [
+              "Cell",
+              "Mobile"
+            ],
+            "Home": [
+              "Home"
+            ],
+            "Work": [
+              "Work"
+            ]
+          }
+        }
+      ]
+    ],
+    [
+      "country",
+      [
+        {
+          "path": [
+            ".//adp-form-group[label[@data-adp-field-label='Country' or normalize-space(text()[1])='Country']]//sdf-select-simple/shadow-root/div[contains(@class,'trigger-button')]"
+          ],
+          "actions": [
+            {
+              "method": "click"
+            },
+            {
+              "path": ".//adp-form-group[label[@data-adp-field-label='Country' or normalize-space(text()[1])='Country']]//sdf-select-simple/shadow-root/sdf-select-item[normalize-space(.)=\"%VALUE%\"]",
+              "method": "click",
+              "time": 3000
+            }
+          ]
+        }
+      ]
+    ],
+    [
+      "state",
+      [
+        {
+          "path": [
+            ".//adp-form-group[label[@data-adp-field-label='State' or normalize-space(text()[1])='State']]//sdf-select-simple/shadow-root/div[contains(@class,'trigger-button')]"
+          ],
+          "actions": [
+            {
+              "method": "click"
+            },
+            {
+              "path": ".//adp-form-group[label[@data-adp-field-label='State' or normalize-space(text()[1])='State']]//sdf-select-simple/shadow-root/sdf-select-item[normalize-space(.)=\"%VALUE%\"]",
+              "method": "click",
+              "time": 3000
+            }
+          ]
+        }
+      ]
+    ],
+    [
+      "experience",
+      [
+        {
+          "containerPath": [
+            ".//sdf-expandable-box[div[@slot='header'][starts-with(normalize-space(.),'Employer')]]"
+          ],
+          "addButtonPath": [
+            ".//*[contains(@class,'add-button-container')]//sdf-button[contains(@aria-label,'Add employer')]"
+          ],
+          "inputSelectors": [
+            [
+              "expand",
+              [
+                {
+                  "path": [
+                    "./shadow-root/button[@aria-controls='content'][@aria-expanded='false']"
+                  ],
+                  "method": "click",
+                  "valueRequired": false
+                }
+              ]
+            ],
+            [
+              "currently_working",
+              [
+                {
+                  "path": [
+                    ".//adp-form-group[label[@data-adp-field-label='Type' or normalize-space(text()[1])='Type']]//sdf-select-simple/shadow-root/div[contains(@class,'trigger-button')]"
+                  ],
+                  "actions": [
+                    {
+                      "method": "click"
+                    },
+                    {
+                      "path": ".//adp-form-group[label[@data-adp-field-label='Type' or normalize-space(text()[1])='Type']]//sdf-select-simple/shadow-root/sdf-select-item[normalize-space(.)=\"%VALUE%\"]",
+                      "method": "click",
+                      "time": 3000
+                    }
+                  ],
+                  "values": {
+                    "Yes": [
+                      "Current Employer",
+                      "Current"
+                    ],
+                    "No": [
+                      "Previous Employer",
+                      "Previous"
+                    ]
+                  }
+                }
+              ]
+            ],
+            [
+              "company",
+              [
+                ".//adp-form-group[label[@data-adp-field-label='Employer' or normalize-space(text()[1])='Employer']]//sdf-input/shadow-root/input"
+              ]
+            ],
+            [
+              "city",
+              [
+                ".//adp-form-group[label[@data-adp-field-label='City' or normalize-space(text()[1])='City']]//sdf-input/shadow-root/input"
+              ]
+            ],
+            [
+              "start_date_slashes_mmddyyyy",
+              [
+                ".//adp-form-group[label[@data-adp-field-label='Start Date' or normalize-space(text()[1])='Start Date']]//sdf-date-picker/shadow-root/sdf-input/shadow-root/input"
+              ]
+            ],
+            [
+              "end_date_slashes_mmddyyyy",
+              [
+                ".//adp-form-group[label[@data-adp-field-label='End Date' or normalize-space(text()[1])='End Date']]//sdf-date-picker/shadow-root/sdf-input/shadow-root/input"
+              ]
+            ],
+            [
+              "title",
+              [
+                ".//adp-form-group[label[@data-adp-field-label='Position/Title' or normalize-space(text()[1])='Position/Title']]//sdf-input/shadow-root/input"
+              ]
+            ],
+            [
+              "description",
+              [
+                ".//adp-form-group[label[@data-adp-field-label='Job Duties' or normalize-space(text()[1])='Job Duties']]//sdf-textarea/shadow-root/textarea"
+              ]
+            ]
+          ]
+        }
+      ]
+    ]
+  ]
+}

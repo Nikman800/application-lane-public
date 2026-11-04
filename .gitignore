@@ -1,0 +1,28 @@
+node_modules/
+# Also as the links the report fixer's checkout makes to them
+node_modules
+eval/corpus
+dist/
+.local/
+# The applicant's own transcripts (uploaded to transcript fields), never committed
+transcripts/
+# The report fixer's copy of one report (scripts/fixer.ts), never committed
+.fixer/
+# Per-machine Claude Code settings (permission mode)
+.claude/settings.local.json
+.env
+playwright-report/
+test-results/
+*.log
+# Local reference material, never committed
+*-decompile/
+# Eval corpora and run outputs (large; synced separately)
+eval/corpus/
+eval/runs/
+# Container images
+*.sif
+# Points at a local run folder
+eval/reports/nightly-latest.html
+__pycache__/
+# Release artifacts (npm run package)
+release/

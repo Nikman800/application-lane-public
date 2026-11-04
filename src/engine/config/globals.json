@@ -1,0 +1,689 @@
+{
+  "countries": {
+    "AD": "Andorra",
+    "AE": [
+      "United Arab Emirates",
+      "UAE"
+    ],
+    "AF": "Afghanistan",
+    "AG": "Antigua and Barbuda",
+    "AI": "Anguilla",
+    "AL": "Albania",
+    "AM": "Armenia",
+    "AO": "Angola",
+    "AQ": "Antarctica",
+    "AR": "Argentina",
+    "AS": "American Samoa",
+    "AT": "Austria",
+    "AU": "Australia",
+    "AW": "Aruba",
+    "AX": [
+      "Åland Islands",
+      "Aland Islands"
+    ],
+    "AZ": "Azerbaijan",
+    "BA": [
+      "Bosnia and Herzegovina",
+      "Bosnia"
+    ],
+    "BB": "Barbados",
+    "BD": "Bangladesh",
+    "BE": "Belgium",
+    "BF": "Burkina Faso",
+    "BG": "Bulgaria",
+    "BH": "Bahrain",
+    "BI": "Burundi",
+    "BJ": "Benin",
+    "BL": [
+      "Saint Barthélemy",
+      "Saint Barthelemy"
+    ],
+    "BM": "Bermuda",
+    "BN": [
+      "Brunei Darussalam",
+      "Brunei"
+    ],
+    "BO": [
+      "Bolivia",
+      "Bolivia (Plurinational State of)"
+    ],
+    "BQ": [
+      "Bonaire, Sint Eustatius and Saba",
+      "Caribbean Netherlands"
+    ],
+    "BR": "Brazil",
+    "BS": [
+      "Bahamas",
+      "The Bahamas"
+    ],
+    "BT": "Bhutan",
+    "BV": "Bouvet Island",
+    "BW": "Botswana",
+    "BY": "Belarus",
+    "BZ": "Belize",
+    "CA": "Canada",
+    "CC": [
+      "Cocos (Keeling) Islands",
+      "Cocos Islands"
+    ],
+    "CD": [
+      "Democratic Republic of the Congo",
+      "Congo, Democratic Republic of the",
+      "Congo (Democratic Republic)",
+      "DR Congo",
+      "Congo (Kinshasa)"
+    ],
+    "CF": "Central African Republic",
+    "CG": [
+      "Republic of the Congo",
+      "Congo",
+      "Congo (Brazzaville)"
+    ],
+    "CH": "Switzerland",
+    "CI": [
+      "Côte d'Ivoire",
+      "Cote d'Ivoire",
+      "Ivory Coast"
+    ],
+    "CK": "Cook Islands",
+    "CL": "Chile",
+    "CM": "Cameroon",
+    "CN": [
+      "China",
+      "People's Republic of China"
+    ],
+    "CO": "Colombia",
+    "CR": "Costa Rica",
+    "CU": "Cuba",
+    "CV": [
+      "Cabo Verde",
+      "Cape Verde"
+    ],
+    "CW": [
+      "Curaçao",
+      "Curacao"
+    ],
+    "CX": "Christmas Island",
+    "CY": "Cyprus",
+    "CZ": [
+      "Czechia",
+      "Czech Republic"
+    ],
+    "DE": "Germany",
+    "DJ": "Djibouti",
+    "DK": "Denmark",
+    "DM": "Dominica",
+    "DO": "Dominican Republic",
+    "DZ": "Algeria",
+    "EC": "Ecuador",
+    "EE": "Estonia",
+    "EG": "Egypt",
+    "EH": "Western Sahara",
+    "ER": "Eritrea",
+    "ES": "Spain",
+    "ET": "Ethiopia",
+    "FI": "Finland",
+    "FJ": "Fiji",
+    "FK": [
+      "Falkland Islands",
+      "Falkland Islands (Malvinas)"
+    ],
+    "FM": [
+      "Micronesia",
+      "Micronesia (Federated States of)"
+    ],
+    "FO": "Faroe Islands",
+    "FR": "France",
+    "GA": "Gabon",
+    "GB": [
+      "United Kingdom",
+      "United Kingdom of Great Britain and Northern Ireland",
+      "UK",
+      "U.K.",
+      "Great Britain",
+      "Britain"
+    ],
+    "GD": "Grenada",
+    "GE": "Georgia",
+    "GF": "French Guiana",
+    "GG": "Guernsey",
+    "GH": "Ghana",
+    "GI": "Gibraltar",
+    "GL": "Greenland",
+    "GM": [
+      "Gambia",
+      "The Gambia"
+    ],
+    "GN": "Guinea",
+    "GP": "Guadeloupe",
+    "GQ": "Equatorial Guinea",
+    "GR": "Greece",
+    "GS": "South Georgia and the South Sandwich Islands",
+    "GT": "Guatemala",
+    "GU": "Guam",
+    "GW": "Guinea-Bissau",
+    "GY": "Guyana",
+    "HK": [
+      "Hong Kong",
+      "Hong Kong SAR"
+    ],
+    "HM": "Heard Island and McDonald Islands",
+    "HN": "Honduras",
+    "HR": "Croatia",
+    "HT": "Haiti",
+    "HU": "Hungary",
+    "ID": "Indonesia",
+    "IE": [
+      "Ireland",
+      "Republic of Ireland"
+    ],
+    "IL": "Israel",
+    "IM": "Isle of Man",
+    "IN": "India",
+    "IO": "British Indian Ocean Territory",
+    "IQ": "Iraq",
+    "IR": [
+      "Iran",
+      "Iran, Islamic Republic of"
+    ],
+    "IS": "Iceland",
+    "IT": "Italy",
+    "JE": "Jersey",
+    "JM": "Jamaica",
+    "JO": "Jordan",
+    "JP": "Japan",
+    "KE": "Kenya",
+    "KG": "Kyrgyzstan",
+    "KH": "Cambodia",
+    "KI": "Kiribati",
+    "KM": "Comoros",
+    "KN": "Saint Kitts and Nevis",
+    "KP": [
+      "North Korea",
+      "Korea, Democratic People's Republic of"
+    ],
+    "KR": [
+      "South Korea",
+      "Korea, Republic of",
+      "Republic of Korea",
+      "Korea"
+    ],
+    "KW": "Kuwait",
+    "KY": "Cayman Islands",
+    "KZ": "Kazakhstan",
+    "LA": [
+      "Laos",
+      "Lao People's Democratic Republic"
+    ],
+    "LB": "Lebanon",
+    "LC": "Saint Lucia",
+    "LI": "Liechtenstein",
+    "LK": "Sri Lanka",
+    "LR": "Liberia",
+    "LS": "Lesotho",
+    "LT": "Lithuania",
+    "LU": "Luxembourg",
+    "LV": "Latvia",
+    "LY": "Libya",
+    "MA": "Morocco",
+    "MC": "Monaco",
+    "MD": [
+      "Moldova",
+      "Moldova, Republic of"
+    ],
+    "ME": "Montenegro",
+    "MF": [
+      "Saint Martin",
+      "Saint Martin (French part)"
+    ],
+    "MG": "Madagascar",
+    "MH": "Marshall Islands",
+    "MK": [
+      "North Macedonia",
+      "Macedonia"
+    ],
+    "ML": "Mali",
+    "MM": [
+      "Myanmar",
+      "Burma"
+    ],
+    "MN": "Mongolia",
+    "MO": [
+      "Macao",
+      "Macau"
+    ],
+    "MP": "Northern Mariana Islands",
+    "MQ": "Martinique",
+    "MR": "Mauritania",
+    "MS": "Montserrat",
+    "MT": "Malta",
+    "MU": "Mauritius",
+    "MV": "Maldives",
+    "MW": "Malawi",
+    "MX": "Mexico",
+    "MY": "Malaysia",
+    "MZ": "Mozambique",
+    "NA": "Namibia",
+    "NC": "New Caledonia",
+    "NE": "Niger",
+    "NF": "Norfolk Island",
+    "NG": "Nigeria",
+    "NI": "Nicaragua",
+    "NL": [
+      "Netherlands",
+      "The Netherlands",
+      "Holland"
+    ],
+    "NO": "Norway",
+    "NP": "Nepal",
+    "NR": "Nauru",
+    "NU": "Niue",
+    "NZ": "New Zealand",
+    "OM": "Oman",
+    "PA": "Panama",
+    "PE": "Peru",
+    "PF": "French Polynesia",
+    "PG": "Papua New Guinea",
+    "PH": "Philippines",
+    "PK": "Pakistan",
+    "PL": "Poland",
+    "PM": "Saint Pierre and Miquelon",
+    "PN": [
+      "Pitcairn",
+      "Pitcairn Islands"
+    ],
+    "PR": "Puerto Rico",
+    "PS": [
+      "Palestine",
+      "Palestine, State of"
+    ],
+    "PT": "Portugal",
+    "PW": "Palau",
+    "PY": "Paraguay",
+    "QA": "Qatar",
+    "RE": [
+      "Réunion",
+      "Reunion"
+    ],
+    "RO": "Romania",
+    "RS": "Serbia",
+    "RU": [
+      "Russia",
+      "Russian Federation"
+    ],
+    "RW": "Rwanda",
+    "SA": "Saudi Arabia",
+    "SB": "Solomon Islands",
+    "SC": "Seychelles",
+    "SD": "Sudan",
+    "SE": "Sweden",
+    "SG": "Singapore",
+    "SH": [
+      "Saint Helena, Ascension and Tristan da Cunha",
+      "Saint Helena"
+    ],
+    "SI": "Slovenia",
+    "SJ": "Svalbard and Jan Mayen",
+    "SK": "Slovakia",
+    "SL": "Sierra Leone",
+    "SM": "San Marino",
+    "SN": "Senegal",
+    "SO": "Somalia",
+    "SR": "Suriname",
+    "SS": "South Sudan",
+    "ST": [
+      "Sao Tome and Principe",
+      "São Tomé and Príncipe"
+    ],
+    "SV": "El Salvador",
+    "SX": [
+      "Sint Maarten",
+      "Sint Maarten (Dutch part)"
+    ],
+    "SY": [
+      "Syria",
+      "Syrian Arab Republic"
+    ],
+    "SZ": [
+      "Eswatini",
+      "Swaziland"
+    ],
+    "TC": "Turks and Caicos Islands",
+    "TD": "Chad",
+    "TF": "French Southern Territories",
+    "TG": "Togo",
+    "TH": "Thailand",
+    "TJ": "Tajikistan",
+    "TK": "Tokelau",
+    "TL": [
+      "Timor-Leste",
+      "East Timor"
+    ],
+    "TM": "Turkmenistan",
+    "TN": "Tunisia",
+    "TO": "Tonga",
+    "TR": [
+      "Türkiye",
+      "Turkey",
+      "Turkiye"
+    ],
+    "TT": "Trinidad and Tobago",
+    "TV": "Tuvalu",
+    "TW": [
+      "Taiwan",
+      "Taiwan, Province of China"
+    ],
+    "TZ": [
+      "Tanzania",
+      "Tanzania, United Republic of"
+    ],
+    "UA": "Ukraine",
+    "UG": "Uganda",
+    "UM": "United States Minor Outlying Islands",
+    "US": [
+      "United States",
+      "United States of America",
+      "USA",
+      "U.S.A.",
+      "U.S."
+    ],
+    "UY": "Uruguay",
+    "UZ": "Uzbekistan",
+    "VA": [
+      "Holy See",
+      "Vatican City"
+    ],
+    "VC": "Saint Vincent and the Grenadines",
+    "VE": [
+      "Venezuela",
+      "Venezuela (Bolivarian Republic of)"
+    ],
+    "VG": [
+      "British Virgin Islands",
+      "Virgin Islands (British)"
+    ],
+    "VI": [
+      "U.S. Virgin Islands",
+      "Virgin Islands (U.S.)",
+      "US Virgin Islands"
+    ],
+    "VN": [
+      "Vietnam",
+      "Viet Nam"
+    ],
+    "VU": "Vanuatu",
+    "WF": "Wallis and Futuna",
+    "WS": "Samoa",
+    "XK": "Kosovo",
+    "YE": "Yemen",
+    "YT": "Mayotte",
+    "ZA": "South Africa",
+    "ZM": "Zambia",
+    "ZW": "Zimbabwe"
+  },
+  "regionsByCountry": {
+    "US": {
+      "AL": "Alabama",
+      "AK": "Alaska",
+      "AZ": "Arizona",
+      "AR": "Arkansas",
+      "CA": "California",
+      "CO": "Colorado",
+      "CT": "Connecticut",
+      "DE": "Delaware",
+      "DC": [
+        "District of Columbia",
+        "Washington, D.C.",
+        "Washington DC"
+      ],
+      "FL": "Florida",
+      "GA": "Georgia",
+      "HI": "Hawaii",
+      "ID": "Idaho",
+      "IL": "Illinois",
+      "IN": "Indiana",
+      "IA": "Iowa",
+      "KS": "Kansas",
+      "KY": "Kentucky",
+      "LA": "Louisiana",
+      "ME": "Maine",
+      "MD": "Maryland",
+      "MA": "Massachusetts",
+      "MI": "Michigan",
+      "MN": "Minnesota",
+      "MS": "Mississippi",
+      "MO": "Missouri",
+      "MT": "Montana",
+      "NE": "Nebraska",
+      "NV": "Nevada",
+      "NH": "New Hampshire",
+      "NJ": "New Jersey",
+      "NM": "New Mexico",
+      "NY": "New York",
+      "NC": "North Carolina",
+      "ND": "North Dakota",
+      "OH": "Ohio",
+      "OK": "Oklahoma",
+      "OR": "Oregon",
+      "PA": "Pennsylvania",
+      "RI": "Rhode Island",
+      "SC": "South Carolina",
+      "SD": "South Dakota",
+      "TN": "Tennessee",
+      "TX": "Texas",
+      "UT": "Utah",
+      "VT": "Vermont",
+      "VA": "Virginia",
+      "WA": "Washington",
+      "WV": "West Virginia",
+      "WI": "Wisconsin",
+      "WY": "Wyoming",
+      "AS": "American Samoa",
+      "GU": "Guam",
+      "MP": "Northern Mariana Islands",
+      "PR": "Puerto Rico",
+      "VI": [
+        "U.S. Virgin Islands",
+        "Virgin Islands"
+      ]
+    },
+    "CA": {
+      "AB": "Alberta",
+      "BC": "British Columbia",
+      "MB": "Manitoba",
+      "NB": "New Brunswick",
+      "NL": [
+        "Newfoundland and Labrador",
+        "Newfoundland"
+      ],
+      "NS": "Nova Scotia",
+      "NT": "Northwest Territories",
+      "NU": "Nunavut",
+      "ON": "Ontario",
+      "PE": "Prince Edward Island",
+      "QC": [
+        "Quebec",
+        "Québec"
+      ],
+      "SK": "Saskatchewan",
+      "YT": "Yukon"
+    },
+    "AU": {
+      "ACT": "Australian Capital Territory",
+      "NSW": "New South Wales",
+      "NT": "Northern Territory",
+      "QLD": "Queensland",
+      "SA": "South Australia",
+      "TAS": "Tasmania",
+      "VIC": "Victoria",
+      "WA": "Western Australia"
+    },
+    "IN": {
+      "AN": "Andaman and Nicobar Islands",
+      "AP": "Andhra Pradesh",
+      "AR": "Arunachal Pradesh",
+      "AS": "Assam",
+      "BR": "Bihar",
+      "CH": "Chandigarh",
+      "CG": "Chhattisgarh",
+      "DH": "Dadra and Nagar Haveli and Daman and Diu",
+      "DL": [
+        "Delhi",
+        "New Delhi",
+        "National Capital Territory of Delhi"
+      ],
+      "GA": "Goa",
+      "GJ": "Gujarat",
+      "HR": "Haryana",
+      "HP": "Himachal Pradesh",
+      "JK": "Jammu and Kashmir",
+      "JH": "Jharkhand",
+      "KA": "Karnataka",
+      "KL": "Kerala",
+      "LA": "Ladakh",
+      "LD": "Lakshadweep",
+      "MP": "Madhya Pradesh",
+      "MH": "Maharashtra",
+      "MN": "Manipur",
+      "ML": "Meghalaya",
+      "MZ": "Mizoram",
+      "NL": "Nagaland",
+      "OD": [
+        "Odisha",
+        "Orissa"
+      ],
+      "PY": [
+        "Puducherry",
+        "Pondicherry"
+      ],
+      "PB": "Punjab",
+      "RJ": "Rajasthan",
+      "SK": "Sikkim",
+      "TN": "Tamil Nadu",
+      "TS": "Telangana",
+      "TR": "Tripura",
+      "UP": "Uttar Pradesh",
+      "UK": "Uttarakhand",
+      "WB": "West Bengal"
+    },
+    "GB": {
+      "ENG": "England",
+      "NIR": "Northern Ireland",
+      "SCT": "Scotland",
+      "WLS": "Wales"
+    },
+    "MX": {
+      "AGU": "Aguascalientes",
+      "BCN": "Baja California",
+      "BCS": "Baja California Sur",
+      "CAM": "Campeche",
+      "CHP": "Chiapas",
+      "CHH": "Chihuahua",
+      "CMX": [
+        "Ciudad de México",
+        "Mexico City",
+        "Ciudad de Mexico"
+      ],
+      "COA": [
+        "Coahuila",
+        "Coahuila de Zaragoza"
+      ],
+      "COL": "Colima",
+      "DUR": "Durango",
+      "GUA": "Guanajuato",
+      "GRO": "Guerrero",
+      "HID": "Hidalgo",
+      "JAL": "Jalisco",
+      "MEX": [
+        "México",
+        "Estado de México",
+        "State of Mexico"
+      ],
+      "MIC": [
+        "Michoacán",
+        "Michoacan",
+        "Michoacán de Ocampo"
+      ],
+      "MOR": "Morelos",
+      "NAY": "Nayarit",
+      "NLE": [
+        "Nuevo León",
+        "Nuevo Leon"
+      ],
+      "OAX": "Oaxaca",
+      "PUE": "Puebla",
+      "QUE": [
+        "Querétaro",
+        "Queretaro"
+      ],
+      "ROO": "Quintana Roo",
+      "SLP": [
+        "San Luis Potosí",
+        "San Luis Potosi"
+      ],
+      "SIN": "Sinaloa",
+      "SON": "Sonora",
+      "TAB": "Tabasco",
+      "TAM": "Tamaulipas",
+      "TLA": "Tlaxcala",
+      "VER": [
+        "Veracruz",
+        "Veracruz de Ignacio de la Llave"
+      ],
+      "YUC": [
+        "Yucatán",
+        "Yucatan"
+      ],
+      "ZAC": "Zacatecas"
+    },
+    "DE": {
+      "BW": [
+        "Baden-Württemberg",
+        "Baden-Wurttemberg"
+      ],
+      "BY": [
+        "Bayern",
+        "Bavaria"
+      ],
+      "BE": "Berlin",
+      "BB": "Brandenburg",
+      "HB": "Bremen",
+      "HH": "Hamburg",
+      "HE": [
+        "Hessen",
+        "Hesse"
+      ],
+      "MV": [
+        "Mecklenburg-Vorpommern",
+        "Mecklenburg-Western Pomerania"
+      ],
+      "NI": [
+        "Niedersachsen",
+        "Lower Saxony"
+      ],
+      "NW": [
+        "Nordrhein-Westfalen",
+        "North Rhine-Westphalia"
+      ],
+      "RP": [
+        "Rheinland-Pfalz",
+        "Rhineland-Palatinate"
+      ],
+      "SL": "Saarland",
+      "SN": [
+        "Sachsen",
+        "Saxony"
+      ],
+      "ST": [
+        "Sachsen-Anhalt",
+        "Saxony-Anhalt"
+      ],
+      "SH": "Schleswig-Holstein",
+      "TH": [
+        "Thüringen",
+        "Thuringia"
+      ]
+    }
+  },
+  "fieldNameAliases": {}
+}

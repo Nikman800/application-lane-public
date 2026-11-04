@@ -1,0 +1,1047 @@
+{
+  "ats": "Workday",
+  "urls": [
+    "*://*.myworkdayjobs.com/*",
+    "*://*.myworkdaysite.com/*"
+  ],
+  "urlsExcluded": [],
+  "embeddedPaths": [],
+  "pathsExcluded": [],
+  "containerPath": [],
+  "containerRequired": false,
+  "defaultMethod": "default",
+  "submitButtonPaths": [
+    "//button[@data-automation-id='pageFooterNextButton']",
+    "//button[@data-automation-id='bottom-navigation-next-button']"
+  ],
+  "submittedSuccessPaths": [],
+  "trackedInputSelectors": [
+    {
+      "kind": "file",
+      "label": "Resume",
+      "fieldPath": "//input[@data-automation-id='file-upload-input-ref'] | //*[@data-automation-id='attachments-FileUpload']//input[@type='file']",
+      "labelPath": [
+        "ancestor::*[@role='group'][1]//h4",
+        "ancestor::*[@role='group'][1]//label"
+      ],
+      "inputTextPath": [
+        "ancestor::*[@role='group'][1]//*[@data-automation-id='file-upload-item-name'][contains(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'resume')]"
+      ],
+      "fillActions": [
+        {
+          "path": "%INPUTPATH%/ancestor::*[@role='group'][1]//button[@data-automation-id='delete-file'][contains(translate(@aria-label,'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'resume')]",
+          "method": "click",
+          "allowFailure": true
+        },
+        {
+          "method": "uploadFile"
+        }
+      ]
+    },
+    {
+      "kind": "file",
+      "label": "Cover letter",
+      "fieldPath": "//*[@role='group'][.//*[@data-automation-id='instructionalText'][contains(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'cover letter')]]//button[@data-automation-id='select-files']",
+      "labelPath": [
+        "ancestor::*[@role='group'][1]//*[@data-automation-id='instructionalText']"
+      ],
+      "inputTextPath": [
+        "ancestor::*[@role='group'][1]//*[@data-automation-id='file-upload-item-name'][contains(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'cover')]"
+      ],
+      "fillActions": [
+        {
+          "path": "%INPUTPATH%/ancestor::*[@role='group'][1]//input[@type='file']",
+          "method": "uploadFile"
+        }
+      ]
+    }
+  ],
+  "inputSelectors": [
+    [
+      "country",
+      [
+        {
+          "path": [
+            ".//button[@name='country']",
+            ".//*[@data-automation-id='formField-country']//button",
+            ".//button[@data-automation-id='countryDropdown']"
+          ],
+          "actions": [
+            {
+              "method": "click"
+            },
+            {
+              "path": [
+                "//*[@data-automation-activepopup='true' or @data-automation-id='activeListContainer']//*[@data-automation-id='promptOption'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]",
+                "//*[@data-automation-activepopup='true' or @data-automation-id='activeListContainer']//*[@data-automation-id='promptOption' or @data-automation-id='promptLeafNode' or @role='option'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]"
+              ],
+              "method": "click",
+              "time": 4000
+            }
+          ]
+        }
+      ]
+    ],
+    [
+      "source",
+      [
+        {
+          "path": [
+            ".//button[@name='source']",
+            ".//*[@data-automation-id='formField-source']//button"
+          ],
+          "actions": [
+            {
+              "method": "click"
+            },
+            {
+              "path": [
+                "//*[@data-automation-activepopup='true' or @data-automation-id='activeListContainer']//*[@data-automation-id='promptOption'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]",
+                "//*[@data-automation-activepopup='true' or @data-automation-id='activeListContainer']//*[@data-automation-id='promptOption' or @data-automation-id='promptLeafNode' or @role='option'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]"
+              ],
+              "method": "click",
+              "time": 4000
+            }
+          ]
+        },
+        {
+          "path": [
+            ".//*[@data-automation-id='formField-source']//*[@data-automation-id='multiSelectContainer']//input"
+          ],
+          "actions": [
+            {
+              "method": "trustedType"
+            },
+            {
+              "event": "keydown",
+              "eventOptions": {
+                "key": "Enter",
+                "code": "Enter",
+                "keyCode": 13,
+                "which": 13
+              }
+            },
+            {
+              "path": [
+                "//*[@data-automation-activepopup='true' or @data-automation-id='activeListContainer']//*[@data-automation-id='promptOption'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]",
+                "//*[@data-automation-activepopup='true' or @data-automation-id='activeListContainer']//*[@data-automation-id='promptOption' or @data-automation-id='promptLeafNode' or @role='option'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]"
+              ],
+              "method": "click",
+              "time": 5000
+            }
+          ]
+        }
+      ]
+    ],
+    [
+      "first_name",
+      [
+        ".//input[@name='legalName--firstName']",
+        ".//*[@data-automation-id='formField-legalName--firstName']//input",
+        ".//input[@name='firstName']",
+        ".//*[@data-automation-id='formField-firstName']//input"
+      ]
+    ],
+    [
+      "middle_name",
+      [
+        ".//input[@name='legalName--middleName']",
+        ".//*[@data-automation-id='formField-legalName--middleName']//input"
+      ]
+    ],
+    [
+      "last_name",
+      [
+        ".//input[@name='legalName--lastName']",
+        ".//*[@data-automation-id='formField-legalName--lastName']//input",
+        ".//input[@name='lastName']",
+        ".//*[@data-automation-id='formField-lastName']//input"
+      ]
+    ],
+    [
+      "address",
+      [
+        ".//input[@name='addressLine1']",
+        ".//*[@data-automation-id='formField-addressLine1']//input"
+      ]
+    ],
+    [
+      "address_line_2",
+      [
+        ".//input[@name='addressLine2']",
+        ".//*[@data-automation-id='formField-addressLine2']//input"
+      ]
+    ],
+    [
+      "city",
+      [
+        ".//input[@name='city']",
+        ".//*[@data-automation-id='formField-city']//input"
+      ]
+    ],
+    [
+      "county",
+      [
+        ".//input[@name='regionSubdivision1']",
+        ".//*[@data-automation-id='formField-regionSubdivision1']//input"
+      ]
+    ],
+    [
+      "state",
+      [
+        {
+          "path": [
+            ".//button[@name='countryRegion']",
+            ".//*[@data-automation-id='formField-countryRegion']//button"
+          ],
+          "actions": [
+            {
+              "method": "click"
+            },
+            {
+              "path": [
+                "//*[@data-automation-activepopup='true' or @data-automation-id='activeListContainer']//*[@data-automation-id='promptOption'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]",
+                "//*[@data-automation-activepopup='true' or @data-automation-id='activeListContainer']//*[@data-automation-id='promptOption' or @data-automation-id='promptLeafNode' or @role='option'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]"
+              ],
+              "method": "click",
+              "time": 4000
+            }
+          ]
+        }
+      ]
+    ],
+    [
+      "postal_code",
+      [
+        ".//input[@name='postalCode']",
+        ".//*[@data-automation-id='formField-postalCode']//input"
+      ]
+    ],
+    [
+      "email",
+      [
+        ".//input[@name='email']",
+        ".//*[@data-automation-id='formField-email']//input"
+      ]
+    ],
+    [
+      "phone_type",
+      [
+        {
+          "path": [
+            ".//button[@name='phoneType']",
+            ".//*[@data-automation-id='formField-phoneType']//button"
+          ],
+          "actions": [
+            {
+              "method": "click"
+            },
+            {
+              "path": [
+                "//*[@data-automation-activepopup='true' or @data-automation-id='activeListContainer']//*[@data-automation-id='promptOption'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]",
+                "//*[@data-automation-activepopup='true' or @data-automation-id='activeListContainer']//*[@data-automation-id='promptOption' or @data-automation-id='promptLeafNode' or @role='option'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]"
+              ],
+              "method": "click",
+              "time": 4000
+            }
+          ]
+        }
+      ]
+    ],
+    [
+      "phone",
+      [
+        ".//input[@name='phoneNumber']",
+        ".//*[@data-automation-id='formField-phoneNumber']//input"
+      ]
+    ],
+    [
+      "linkedin",
+      [
+        ".//input[@name='linkedInAccount']",
+        ".//*[@data-automation-id='formField-linkedInAccount']//input",
+        ".//*[@data-automation-id='formField-linkedinQuestion']//input"
+      ]
+    ],
+    [
+      "experience",
+      [
+        {
+          "inputSelectors": [
+            [
+              "title",
+              [
+                ".//input[@name='jobTitle']",
+                ".//input[@data-automation-id='jobTitle']"
+              ]
+            ],
+            [
+              "company",
+              [
+                ".//input[@name='companyName']",
+                ".//input[@data-automation-id='company']"
+              ]
+            ],
+            [
+              "location",
+              [
+                ".//input[@name='location']",
+                ".//input[@data-automation-id='location']"
+              ]
+            ],
+            [
+              "currently_working",
+              [
+                {
+                  "path": [
+                    ".//input[@name='currentlyWorkHere']",
+                    ".//input[@data-automation-id='currentlyWorkHere']"
+                  ],
+                  "method": "default"
+                }
+              ]
+            ],
+            [
+              "start_month",
+              [
+                {
+                  "path": [
+                    ".//*[@data-automation-id='formField-startDate']//input[@data-automation-id='dateSectionMonth-input' or contains(@id,'dateSectionMonth-input')]"
+                  ],
+                  "method": "trustedType"
+                }
+              ]
+            ],
+            [
+              "start_year",
+              [
+                {
+                  "path": [
+                    ".//*[@data-automation-id='formField-startDate']//input[@data-automation-id='dateSectionYear-input' or contains(@id,'dateSectionYear-input')]"
+                  ],
+                  "method": "trustedType"
+                }
+              ]
+            ],
+            [
+              "end_month",
+              [
+                {
+                  "path": [
+                    ".//*[@data-automation-id='formField-endDate']//input[@data-automation-id='dateSectionMonth-input' or contains(@id,'dateSectionMonth-input')]"
+                  ],
+                  "method": "trustedType"
+                }
+              ]
+            ],
+            [
+              "end_year",
+              [
+                {
+                  "path": [
+                    ".//*[@data-automation-id='formField-endDate']//input[@data-automation-id='dateSectionYear-input' or contains(@id,'dateSectionYear-input')]"
+                  ],
+                  "method": "trustedType"
+                }
+              ]
+            ],
+            [
+              "description",
+              [
+                ".//textarea[contains(@id,'roleDescription')]",
+                ".//*[@data-automation-id='formField-roleDescription']//textarea",
+                ".//textarea[@data-automation-id='description']"
+              ]
+            ]
+          ],
+          "containerPath": [
+            ".//div[@role='group'][@aria-labelledby='Work-Experience-%NUMBER0%-panel']",
+            ".//*[@data-automation-id='workExperience-%NUMBER0%']"
+          ],
+          "addButtonPath": [
+            ".//div[@role='group'][@aria-labelledby='Work-Experience-section']//button[@data-automation-id='add-button']"
+          ],
+          "confirmAddedPath": [
+            ".//div[@role='group'][@aria-labelledby='Work-Experience-%NUMBER0%-panel']",
+            ".//*[@data-automation-id='workExperience-%NUMBER0%']"
+          ]
+        }
+      ]
+    ],
+    [
+      "education",
+      [
+        {
+          "inputSelectors": [
+            [
+              "school",
+              [
+                {
+                  "path": [
+                    ".//*[@data-automation-id='formField-school']//*[@data-automation-id='multiSelectContainer']//input",
+                    ".//*[@data-automation-id='formField-schoolName']//*[@data-automation-id='multiSelectContainer']//input"
+                  ],
+                  "actions": [
+                    {
+                      "method": "trustedType"
+                    },
+                    {
+                      "event": "keydown",
+                      "eventOptions": {
+                        "key": "Enter",
+                        "code": "Enter",
+                        "keyCode": 13,
+                        "which": 13
+                      }
+                    },
+                    {
+                      "path": [
+                        "//*[@data-automation-activepopup='true' or @data-automation-id='activeListContainer']//*[@data-automation-id='promptOption'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]",
+                        "//*[@data-automation-activepopup='true' or @data-automation-id='activeListContainer']//*[@data-automation-id='promptOption' or @data-automation-id='promptLeafNode' or @role='option'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]"
+                      ],
+                      "method": "click",
+                      "time": 5000
+                    }
+                  ]
+                },
+                ".//input[@name='schoolName']",
+                ".//*[@data-automation-id='formField-school']//input",
+                ".//*[@data-automation-id='formField-schoolName']//input",
+                ".//input[@data-automation-id='school']"
+              ]
+            ],
+            [
+              "degree",
+              [
+                {
+                  "path": [
+                    ".//button[@name='degree']",
+                    ".//*[@data-automation-id='formField-degree']//button"
+                  ],
+                  "actions": [
+                    {
+                      "method": "click"
+                    },
+                    {
+                      "path": [
+                        "//*[@data-automation-activepopup='true' or @data-automation-id='activeListContainer']//*[@data-automation-id='promptOption'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]",
+                        "//*[@data-automation-activepopup='true' or @data-automation-id='activeListContainer']//*[@data-automation-id='promptOption' or @data-automation-id='promptLeafNode' or @role='option'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]"
+                      ],
+                      "method": "click",
+                      "time": 4000
+                    }
+                  ],
+                  "optionsSource": {
+                    "urlTemplate": "https://{{host}}/wday/calypso/cxs/jobapplication/{{tenant}}/values/educations/degrees",
+                    "extractors": {
+                      "host": {
+                        "template": "{{hostname}}"
+                      },
+                      "tenant": [
+                        {
+                          "urlPattern": "/recruiting/:tenant(/*)",
+                          "template": "{{tenant}}"
+                        },
+                        {
+                          "template": "{{hostnameSplit[0]}}"
+                        }
+                      ]
+                    },
+                    "responseItemsPath": "",
+                    "responseTextPath": "descriptor"
+                  }
+                }
+              ]
+            ],
+            [
+              "major",
+              [
+                {
+                  "path": [
+                    ".//*[@data-automation-id='formField-fieldOfStudy']//input",
+                    ".//input[@data-automation-id='fieldOfStudy']"
+                  ],
+                  "actions": [
+                    {
+                      "method": "trustedSearch"
+                    },
+                    {
+                      "path": [
+                        "//*[@data-automation-activepopup='true' or @data-automation-id='activeListContainer']//*[@data-automation-id='promptOption'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]",
+                        "//*[@data-automation-activepopup='true' or @data-automation-id='activeListContainer']//*[@data-automation-id='promptOption' or @data-automation-id='promptLeafNode' or @role='option'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]"
+                      ],
+                      "method": "click",
+                      "time": 5000,
+                      "allowFailure": true
+                    }
+                  ],
+                  "optionsSource": {
+                    "urlTemplate": "https://{{host}}/wday/calypso/cxs/jobapplication/{{tenant}}/values/educations/fieldsOfStudy",
+                    "extractors": {
+                      "host": {
+                        "template": "{{hostname}}"
+                      },
+                      "tenant": [
+                        {
+                          "urlPattern": "/recruiting/:tenant(/*)",
+                          "template": "{{tenant}}"
+                        },
+                        {
+                          "template": "{{hostnameSplit[0]}}"
+                        }
+                      ]
+                    },
+                    "responseItemsPath": "",
+                    "responseTextPath": "descriptor"
+                  }
+                }
+              ]
+            ],
+            [
+              "gpa",
+              [
+                ".//input[@name='gradeAverage']",
+                ".//*[@data-automation-id='formField-gradeAverage']//input"
+              ]
+            ],
+            [
+              "start_year",
+              [
+                {
+                  "path": [
+                    ".//*[@data-automation-id='formField-firstYearAttended']//input[@data-automation-id='dateSectionYear-input' or contains(@id,'dateSectionYear-input')]"
+                  ],
+                  "method": "trustedType"
+                }
+              ]
+            ],
+            [
+              "end_year",
+              [
+                {
+                  "path": [
+                    ".//*[@data-automation-id='formField-lastYearAttended']//input[@data-automation-id='dateSectionYear-input' or contains(@id,'dateSectionYear-input')]"
+                  ],
+                  "method": "trustedType"
+                }
+              ]
+            ]
+          ],
+          "containerPath": [
+            ".//div[@role='group'][@aria-labelledby='Education-%NUMBER0%-panel']",
+            ".//*[@data-automation-id='education-%NUMBER0%']"
+          ],
+          "addButtonPath": [
+            ".//div[@role='group'][@aria-labelledby='Education-section']//button[@data-automation-id='add-button']"
+          ],
+          "confirmAddedPath": [
+            ".//div[@role='group'][@aria-labelledby='Education-%NUMBER0%-panel']",
+            ".//*[@data-automation-id='education-%NUMBER0%']"
+          ]
+        }
+      ]
+    ],
+    [
+      "language",
+      [
+        {
+          "array": true,
+          "inputSelectors": [
+            [
+              "language",
+              [
+                {
+                  "path": [
+                    ".//*[@data-automation-id='formField-language']//button",
+                    ".//button[@name='language']"
+                  ],
+                  "actions": [
+                    {
+                      "method": "click"
+                    },
+                    {
+                      "path": [
+                        "//*[@data-automation-activepopup='true' or @data-automation-id='activeListContainer']//*[@data-automation-id='promptOption'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]",
+                        "//*[@data-automation-activepopup='true' or @data-automation-id='activeListContainer']//*[@data-automation-id='promptOption' or @data-automation-id='promptLeafNode' or @role='option'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]",
+                        "//*[@role='listbox'][@id=//button[@aria-haspopup='listbox' and @aria-expanded='true']/@aria-controls]//*[@role='option'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]"
+                      ],
+                      "method": "click",
+                      "time": 4000
+                    }
+                  ]
+                }
+              ]
+            ],
+            [
+              "fluent",
+              [
+                {
+                  "path": [
+                    ".//input[@name='native']"
+                  ],
+                  "method": "default"
+                }
+              ]
+            ],
+            [
+              "level",
+              [
+                {
+                  "path": [
+                    ".//*[starts-with(@data-automation-id,'formField-')][not(@data-automation-id='formField-language')]//button[@aria-haspopup='listbox']"
+                  ],
+                  "actions": [
+                    {
+                      "method": "click"
+                    },
+                    {
+                      "path": [
+                        "//*[@data-automation-activepopup='true' or @data-automation-id='activeListContainer']//*[@data-automation-id='promptOption'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]",
+                        "//*[@data-automation-activepopup='true' or @data-automation-id='activeListContainer']//*[@data-automation-id='promptOption' or @data-automation-id='promptLeafNode' or @role='option'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]"
+                      ],
+                      "method": "click",
+                      "time": 4000
+                    }
+                  ]
+                }
+              ]
+            ],
+            [
+              "level_2",
+              [
+                {
+                  "path": [
+                    ".//*[starts-with(@data-automation-id,'formField-')][not(@data-automation-id='formField-language')]//button[@aria-haspopup='listbox']"
+                  ],
+                  "actions": [
+                    {
+                      "method": "click"
+                    },
+                    {
+                      "path": [
+                        "//*[@data-automation-activepopup='true' or @data-automation-id='activeListContainer']//*[@data-automation-id='promptOption'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]",
+                        "//*[@data-automation-activepopup='true' or @data-automation-id='activeListContainer']//*[@data-automation-id='promptOption' or @data-automation-id='promptLeafNode' or @role='option'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]"
+                      ],
+                      "method": "click",
+                      "time": 4000
+                    }
+                  ]
+                }
+              ]
+            ],
+            [
+              "level_3",
+              [
+                {
+                  "path": [
+                    ".//*[starts-with(@data-automation-id,'formField-')][not(@data-automation-id='formField-language')]//button[@aria-haspopup='listbox']"
+                  ],
+                  "actions": [
+                    {
+                      "method": "click"
+                    },
+                    {
+                      "path": [
+                        "//*[@data-automation-activepopup='true' or @data-automation-id='activeListContainer']//*[@data-automation-id='promptOption'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]",
+                        "//*[@data-automation-activepopup='true' or @data-automation-id='activeListContainer']//*[@data-automation-id='promptOption' or @data-automation-id='promptLeafNode' or @role='option'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]"
+                      ],
+                      "method": "click",
+                      "time": 4000
+                    }
+                  ]
+                }
+              ]
+            ],
+            [
+              "level_4",
+              [
+                {
+                  "path": [
+                    ".//*[starts-with(@data-automation-id,'formField-')][not(@data-automation-id='formField-language')]//button[@aria-haspopup='listbox']"
+                  ],
+                  "actions": [
+                    {
+                      "method": "click"
+                    },
+                    {
+                      "path": [
+                        "//*[@data-automation-activepopup='true' or @data-automation-id='activeListContainer']//*[@data-automation-id='promptOption'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]",
+                        "//*[@data-automation-activepopup='true' or @data-automation-id='activeListContainer']//*[@data-automation-id='promptOption' or @data-automation-id='promptLeafNode' or @role='option'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]"
+                      ],
+                      "method": "click",
+                      "time": 4000
+                    }
+                  ]
+                }
+              ]
+            ]
+          ],
+          "containerPath": [
+            ".//div[@role='group'][@aria-labelledby='Languages-%NUMBER0%-panel']",
+            ".//*[@data-automation-id='language-%NUMBER0%']"
+          ],
+          "addButtonPath": [
+            ".//div[@role='group'][@aria-labelledby='Languages-section']//button[@data-automation-id='add-button']"
+          ],
+          "confirmAddedPath": [
+            ".//div[@role='group'][@aria-labelledby='Languages-%NUMBER0%-panel']",
+            ".//*[@data-automation-id='language-%NUMBER0%']"
+          ]
+        }
+      ]
+    ],
+    [
+      "skill",
+      [
+        {
+          "path": [
+            ".//*[@data-automation-id='formField-skills']//input"
+          ],
+          "actions": [
+            {
+              "method": "trustedType"
+            },
+            {
+              "event": "keydown",
+              "eventOptions": {
+                "key": "Enter",
+                "code": "Enter",
+                "keyCode": 13,
+                "which": 13
+              }
+            },
+            {
+              "path": "//*[@data-automation-activepopup='true' or @data-automation-id='activeListContainer']//*[@data-automation-id='promptOption' or @data-automation-id='promptLeafNode'][normalize-space(.)=\"%VALUE%\" or starts-with(normalize-space(.),\"%VALUE% (\")]",
+              "method": "click",
+              "time": 5000,
+              "allowFailure": true
+            },
+            {
+              "method": "clearValue",
+              "allowFailure": true
+            },
+            {
+              "path": [
+                "//*[@id='mainContent']",
+                "//main"
+              ],
+              "event": "mousedown",
+              "method": "click",
+              "allowFailure": true
+            }
+          ],
+          "everyValue": true,
+          "limit": 25
+        }
+      ]
+    ],
+    [
+      "websites",
+      [
+        {
+          "array": true,
+          "inputSelectors": [
+            [
+              "url",
+              [
+                ".//input[@name='url']",
+                ".//*[@data-automation-id='formField-url']//input",
+                ".//input[@data-automation-id='website']"
+              ]
+            ]
+          ],
+          "containerPath": [
+            ".//div[@role='group'][@aria-labelledby='Websites-%NUMBER0%-panel']",
+            ".//*[@data-automation-id='websitePanelSet-%NUMBER0%']"
+          ],
+          "addButtonPath": [
+            ".//div[@role='group'][@aria-labelledby='Websites-section']//button[@data-automation-id='add-button']"
+          ],
+          "confirmAddedPath": [
+            ".//div[@role='group'][@aria-labelledby='Websites-%NUMBER0%-panel']",
+            ".//*[@data-automation-id='websitePanelSet-%NUMBER0%']"
+          ]
+        }
+      ]
+    ],
+    [
+      "gender",
+      [
+        {
+          "path": [
+            ".//button[@name='gender']",
+            ".//*[@data-automation-id='formField-gender']//button"
+          ],
+          "actions": [
+            {
+              "method": "click"
+            },
+            {
+              "path": [
+                "//*[@data-automation-activepopup='true' or @data-automation-id='activeListContainer']//*[@data-automation-id='promptOption'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]",
+                "//*[@data-automation-activepopup='true' or @data-automation-id='activeListContainer']//*[@data-automation-id='promptOption' or @data-automation-id='promptLeafNode' or @role='option'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]"
+              ],
+              "method": "click",
+              "time": 4000
+            }
+          ]
+        }
+      ]
+    ],
+    [
+      "ethnicity",
+      [
+        {
+          "path": [
+            ".//button[@name='ethnicity']",
+            ".//*[@data-automation-id='formField-ethnicity']//button"
+          ],
+          "actions": [
+            {
+              "method": "click"
+            },
+            {
+              "path": [
+                "//*[@data-automation-activepopup='true' or @data-automation-id='activeListContainer']//*[@data-automation-id='promptOption'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]",
+                "//*[@data-automation-activepopup='true' or @data-automation-id='activeListContainer']//*[@data-automation-id='promptOption' or @data-automation-id='promptLeafNode' or @role='option'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]"
+              ],
+              "method": "click",
+              "time": 4000
+            }
+          ]
+        },
+        {
+          "path": [
+            ".//*[@data-automation-id='ethnicityMulti-CheckboxGroup']//input[@type='checkbox'][@id=//label[translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\" or starts-with(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),\"%LOWERVALUE% (\")]/@for]"
+          ],
+          "method": "checkOption"
+        }
+      ]
+    ],
+    [
+      "hispanic",
+      [
+        {
+          "path": [
+            ".//button[@name='hispanicOrLatino']",
+            ".//*[@data-automation-id='formField-hispanicOrLatino']//button"
+          ],
+          "actions": [
+            {
+              "method": "click"
+            },
+            {
+              "path": [
+                "//*[@data-automation-activepopup='true' or @data-automation-id='activeListContainer']//*[@data-automation-id='promptOption'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]",
+                "//*[@data-automation-activepopup='true' or @data-automation-id='activeListContainer']//*[@data-automation-id='promptOption' or @data-automation-id='promptLeafNode' or @role='option'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]"
+              ],
+              "method": "click",
+              "time": 4000
+            }
+          ]
+        }
+      ]
+    ],
+    [
+      "veteran",
+      [
+        {
+          "path": [
+            ".//button[@name='veteranStatus']",
+            ".//*[@data-automation-id='formField-veteranStatus']//button"
+          ],
+          "actions": [
+            {
+              "method": "click"
+            },
+            {
+              "path": [
+                "//*[@data-automation-activepopup='true' or @data-automation-id='activeListContainer']//*[@data-automation-id='promptOption'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]",
+                "//*[@data-automation-activepopup='true' or @data-automation-id='activeListContainer']//*[@data-automation-id='promptOption' or @data-automation-id='promptLeafNode' or @role='option'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]"
+              ],
+              "method": "click",
+              "time": 4000
+            }
+          ]
+        }
+      ]
+    ],
+    [
+      "disability",
+      [
+        {
+          "path": [
+            ".//*[@data-automation-id='disabilityStatus-CheckboxGroup']//input[@type='checkbox'][@id=//label[starts-with(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),\"%LOWERVALUE%\")]/@for]"
+          ],
+          "method": "checkOption"
+        }
+      ]
+    ],
+    [
+      "full_name",
+      [
+        ".//*[@data-automation-id='formField-name']//input"
+      ]
+    ],
+    [
+      "over18",
+      [
+        {
+          "path": [
+            ".//*[starts-with(@data-automation-id,'formField-')][.//legend[contains(translate(.,'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'age of 18') or contains(translate(.,'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'18 years') or contains(translate(.,'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'age of majority')]]//button[@aria-haspopup='listbox']"
+          ],
+          "actions": [
+            {
+              "method": "click"
+            },
+            {
+              "path": [
+                "//*[@data-automation-activepopup='true' or @data-automation-id='activeListContainer']//*[@data-automation-id='promptOption'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]",
+                "//*[@data-automation-activepopup='true' or @data-automation-id='activeListContainer']//*[@data-automation-id='promptOption' or @data-automation-id='promptLeafNode' or @role='option'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]"
+              ],
+              "method": "click",
+              "time": 4000
+            }
+          ]
+        }
+      ]
+    ],
+    [
+      "work_auth",
+      [
+        {
+          "path": [
+            ".//*[starts-with(@data-automation-id,'formField-')][.//legend[contains(translate(.,'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'authorized to work') or contains(translate(.,'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'authorised to work') or contains(translate(.,'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'eligible to work')]]//button[@aria-haspopup='listbox']"
+          ],
+          "actions": [
+            {
+              "method": "click"
+            },
+            {
+              "path": [
+                "//*[@data-automation-activepopup='true' or @data-automation-id='activeListContainer']//*[@data-automation-id='promptOption'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]",
+                "//*[@data-automation-activepopup='true' or @data-automation-id='activeListContainer']//*[@data-automation-id='promptOption' or @data-automation-id='promptLeafNode' or @role='option'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]"
+              ],
+              "method": "click",
+              "time": 4000
+            }
+          ]
+        }
+      ]
+    ],
+    [
+      "sponsorship",
+      [
+        {
+          "path": [
+            ".//*[starts-with(@data-automation-id,'formField-')][.//legend[contains(translate(.,'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'sponsorship')]]//button[@aria-haspopup='listbox']"
+          ],
+          "actions": [
+            {
+              "method": "click"
+            },
+            {
+              "path": [
+                "//*[@data-automation-activepopup='true' or @data-automation-id='activeListContainer']//*[@data-automation-id='promptOption'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]",
+                "//*[@data-automation-activepopup='true' or @data-automation-id='activeListContainer']//*[@data-automation-id='promptOption' or @data-automation-id='promptLeafNode' or @role='option'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]"
+              ],
+              "method": "click",
+              "time": 4000
+            }
+          ]
+        }
+      ]
+    ],
+    [
+      "relocation",
+      [
+        {
+          "path": [
+            ".//*[starts-with(@data-automation-id,'formField-')][.//legend[contains(translate(.,'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'relocat')]]//button[@aria-haspopup='listbox']"
+          ],
+          "actions": [
+            {
+              "method": "click"
+            },
+            {
+              "path": [
+                "//*[@data-automation-activepopup='true' or @data-automation-id='activeListContainer']//*[@data-automation-id='promptOption'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]",
+                "//*[@data-automation-activepopup='true' or @data-automation-id='activeListContainer']//*[@data-automation-id='promptOption' or @data-automation-id='promptLeafNode' or @role='option'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]"
+              ],
+              "method": "click",
+              "time": 4000
+            }
+          ]
+        }
+      ]
+    ],
+    [
+      "prior_employment",
+      [
+        {
+          "path": [
+            ".//*[starts-with(@data-automation-id,'formField-')][.//legend[contains(translate(.,'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'employed by') or contains(translate(.,'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'work for') or contains(translate(.,'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'worked for')]]//button[@aria-haspopup='listbox']"
+          ],
+          "actions": [
+            {
+              "method": "click"
+            },
+            {
+              "path": [
+                "//*[@data-automation-activepopup='true' or @data-automation-id='activeListContainer']//*[@data-automation-id='promptOption'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]",
+                "//*[@data-automation-activepopup='true' or @data-automation-id='activeListContainer']//*[@data-automation-id='promptOption' or @data-automation-id='promptLeafNode' or @role='option'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]"
+              ],
+              "method": "click",
+              "time": 4000
+            }
+          ]
+        }
+      ]
+    ],
+    [
+      "current_date_mm",
+      [
+        {
+          "path": [
+            ".//*[@data-automation-id='formField-dateSignedOn' or @data-automation-id='formField-todaysDate' or @data-automation-id='formField-currentDate']//input[@data-automation-id='dateSectionMonth-input' or contains(@id,'dateSectionMonth-input')]"
+          ],
+          "method": "trustedType"
+        }
+      ]
+    ],
+    [
+      "current_date_dd",
+      [
+        {
+          "path": [
+            ".//*[@data-automation-id='formField-dateSignedOn' or @data-automation-id='formField-todaysDate' or @data-automation-id='formField-currentDate']//input[@data-automation-id='dateSectionDay-input' or contains(@id,'dateSectionDay-input')]"
+          ],
+          "method": "trustedType"
+        }
+      ]
+    ],
+    [
+      "current_date_yyyy",
+      [
+        {
+          "path": [
+            ".//*[@data-automation-id='formField-dateSignedOn' or @data-automation-id='formField-todaysDate' or @data-automation-id='formField-currentDate']//input[@data-automation-id='dateSectionYear-input' or contains(@id,'dateSectionYear-input')]"
+          ],
+          "method": "trustedType"
+        }
+      ]
+    ],
+    [
+      "acknowledge_terms",
+      [
+        {
+          "path": [
+            ".//input[@name='acceptTermsAndAgreements']",
+            ".//*[@data-automation-id='formField-acceptTermsAndAgreements']//input"
+          ],
+          "method": "default"
+        }
+      ]
+    ]
+  ]
+}

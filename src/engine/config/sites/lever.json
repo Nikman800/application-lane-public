@@ -1,0 +1,171 @@
+{
+  "ats": "Lever",
+  "urls": [
+    "*://jobs.lever.co/*",
+    "*://jobs.eu.lever.co/*"
+  ],
+  "urlsExcluded": [],
+  "embeddedPaths": [],
+  "pathsExcluded": [],
+  "containerPath": [],
+  "containerRequired": false,
+  "defaultMethod": "default",
+  "submitButtonPaths": [
+    "//button[@id='btn-submit']",
+    "//button[@data-qa='btn-submit']",
+    "//button[@type='submit']"
+  ],
+  "submittedSuccessPaths": [],
+  "trackedInputSelectors": [],
+  "inputSelectors": [
+    [
+      "full_name",
+      [
+        ".//input[@name='name'][@data-qa='name-input']",
+        ".//input[@name='name']"
+      ]
+    ],
+    [
+      "email",
+      [
+        ".//input[@name='email']"
+      ]
+    ],
+    [
+      "phone",
+      [
+        ".//input[@name='phone']"
+      ]
+    ],
+    [
+      "city_state",
+      [
+        {
+          "path": ".//input[@name='location'][contains(@class,'location-input')]",
+          "actions": [
+            {
+              "method": "defaultWithoutBlur"
+            },
+            {
+              "event": "keydown",
+              "eventOptions": {
+                "key": "Unidentified"
+              }
+            },
+            {
+              "path": "//div[contains(@class,'dropdown-results')]//div[contains(@class,'dropdown-location')][1]",
+              "event": "mousedown",
+              "time": 4000,
+              "allowFailure": true,
+              "pickRequired": true
+            },
+            {
+              "event": "blur"
+            }
+          ]
+        }
+      ]
+    ],
+    [
+      "current_company_name",
+      [
+        ".//input[@name='org']"
+      ]
+    ],
+    [
+      "linkedin",
+      [
+        ".//input[@name='urls[LinkedIn]']"
+      ]
+    ],
+    [
+      "github",
+      [
+        ".//input[@name='urls[GitHub]']"
+      ]
+    ],
+    [
+      "portfolio",
+      [
+        ".//input[@name='urls[Portfolio]']"
+      ]
+    ],
+    [
+      "website",
+      [
+        ".//input[@name='urls[Other]']"
+      ]
+    ],
+    [
+      "source",
+      [
+        ".//input[@type='radio'][@name='source'][@value='%VALUE%']"
+      ]
+    ],
+    [
+      "gender",
+      [
+        ".//select[@name='eeo[gender]']"
+      ]
+    ],
+    [
+      "ethnicity",
+      [
+        ".//select[@name='eeo[race]']"
+      ]
+    ],
+    [
+      "veteran",
+      [
+        {
+          "path": ".//select[@name='eeo[veteran]']",
+          "values": {
+            "Yes": [
+              "I am a veteran"
+            ],
+            "No": [
+              "I am not a veteran"
+            ],
+            "Decline": [
+              "Decline to self-identify"
+            ]
+          }
+        }
+      ]
+    ],
+    [
+      "disability",
+      [
+        {
+          "path": ".//select[@name='eeo[disability]']",
+          "values": {
+            "Yes": [
+              "Yes, I have a disability (or previously had a disability)",
+              "Yes, I have a disability, or have had one in the past"
+            ],
+            "No": [
+              "No, I do not have a disability and have not had one in the past",
+              "No, I don't have a disability"
+            ],
+            "Decline": [
+              "I do not want to answer",
+              "I don't wish to answer"
+            ]
+          }
+        }
+      ]
+    ],
+    [
+      "full_name_2",
+      [
+        ".//input[@name='eeo[disabilitySignature]']"
+      ]
+    ],
+    [
+      "current_date_slashes_mmddyyyy",
+      [
+        ".//input[@name='eeo[disabilitySignatureDate]']"
+      ]
+    ]
+  ]
+}

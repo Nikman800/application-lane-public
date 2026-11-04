@@ -1,0 +1,106 @@
+{
+  "ats": "Avature",
+  "urls": [
+    "*://*.avature.net/*"
+  ],
+  "urlsExcluded": [],
+  "embeddedPaths": [],
+  "pathsExcluded": [],
+  "containerPath": [],
+  "containerRequired": false,
+  "defaultMethod": "default",
+  "submitButtonPaths": [],
+  "submittedSuccessPaths": [],
+  "trackedInputSelectors": [],
+  "inputSelectors": [
+    [
+      "experience",
+      [
+        {
+          "containerPath": [
+            ".//div[contains(@class,'datasetField')][*[contains(@class,'WizardFieldLabel')][contains(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'work') or contains(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'employment') or contains(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'experience')]]//fieldset[contains(@class,'datasetField__row')][not(contains(@class,'datasetField__row--sample'))]"
+          ],
+          "addButtonPath": [
+            ".//div[contains(@class,'datasetField')][*[contains(@class,'WizardFieldLabel')][contains(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'work') or contains(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'employment') or contains(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'experience')]]//a[starts-with(@id,'addRowFor_')]"
+          ],
+          "inputSelectors": [
+            [
+              "company",
+              [
+                ".//div[contains(@class,'fieldSpec')][not(contains(@class,'datasetField'))][.//label[starts-with(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'employer') or starts-with(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'company')]]//input"
+              ]
+            ],
+            [
+              "title",
+              [
+                ".//div[contains(@class,'fieldSpec')][not(contains(@class,'datasetField'))][.//label[starts-with(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'position') or starts-with(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'job title') or starts-with(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'title')]]//input"
+              ]
+            ],
+            [
+              "currently_working",
+              [
+                ".//div[contains(@class,'fieldSpec')][not(contains(@class,'datasetField'))][.//label[starts-with(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'current')]]//select"
+              ]
+            ],
+            [
+              "start_dashes_yyyymm",
+              [
+                ".//div[contains(@class,'fieldSpec')][not(contains(@class,'datasetField'))][.//label[starts-with(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'start')]]//input[@type='month']"
+              ]
+            ],
+            [
+              "end_dashes_yyyymm",
+              [
+                ".//div[contains(@class,'fieldSpec')][not(contains(@class,'datasetField'))][.//label[starts-with(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'end')]]//input[@type='month']"
+              ]
+            ]
+          ]
+        }
+      ]
+    ],
+    [
+      "education",
+      [
+        {
+          "containerPath": [
+            ".//div[contains(@class,'datasetField')][*[contains(@class,'WizardFieldLabel')][contains(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'education') or contains(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'school')]]//fieldset[contains(@class,'datasetField__row')][not(contains(@class,'datasetField__row--sample'))]"
+          ],
+          "addButtonPath": [
+            ".//div[contains(@class,'datasetField')][*[contains(@class,'WizardFieldLabel')][contains(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'education') or contains(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'school')]]//a[starts-with(@id,'addRowFor_')]"
+          ],
+          "inputSelectors": [
+            [
+              "degree",
+              [
+                ".//div[contains(@class,'fieldSpec')][not(contains(@class,'datasetField'))][.//label[starts-with(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'degree')]]//select"
+              ]
+            ],
+            [
+              "school",
+              [
+                ".//div[contains(@class,'fieldSpec')][label[contains(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'university') or contains(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'school')]]"
+              ]
+            ],
+            [
+              "major",
+              [
+                ".//div[contains(@class,'fieldSpec')][not(contains(@class,'datasetField'))][.//label[starts-with(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'major') or starts-with(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'field of study')]]//input"
+              ]
+            ],
+            [
+              "graduated",
+              [
+                {
+                  "path": [
+                    ".//div[contains(@class,'fieldSpec')][not(contains(@class,'datasetField'))][.//label[starts-with(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'did you graduate') or starts-with(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'graduated')]]//select"
+                  ],
+                  "valueKey": "graduated_flag"
+                }
+              ]
+            ]
+          ]
+        }
+      ]
+    ]
+  ]
+}

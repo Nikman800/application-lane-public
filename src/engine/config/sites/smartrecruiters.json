@@ -1,0 +1,126 @@
+{
+  "ats": "SmartRecruiters",
+  "urls": [
+    "*://jobs.smartrecruiters.com/oneclick-ui/*"
+  ],
+  "urlsExcluded": [],
+  "embeddedPaths": [],
+  "pathsExcluded": [],
+  "containerPath": [],
+  "containerRequired": false,
+  "defaultMethod": "default",
+  "submitButtonPaths": [],
+  "submittedSuccessPaths": [],
+  "trackedInputSelectors": [],
+  "inputSelectors": [
+    [
+      "first_name",
+      [
+        "//input[@id='first-name-input']"
+      ]
+    ],
+    [
+      "last_name",
+      [
+        "//input[@id='last-name-input']"
+      ]
+    ],
+    [
+      "email",
+      [
+        "//input[@id='email-input']"
+      ]
+    ],
+    [
+      "email_confirm",
+      [
+        "//input[@id='confirm-email-input']"
+      ]
+    ],
+    [
+      "phone",
+      [
+        "//input[@type='tel'][@aria-label='Phone number']"
+      ]
+    ],
+    [
+      "city",
+      [
+        "//spl-autocomplete[@label='City']//input",
+        "//spl-input[@label='City']/shadow-root/input"
+      ]
+    ],
+    [
+      "linkedin",
+      [
+        "//input[@id='linkedin-input']"
+      ]
+    ],
+    [
+      "website",
+      [
+        "//input[@id='website-input']"
+      ]
+    ],
+    [
+      "experience",
+      [
+        {
+          "containerPath": [
+            ".//oc-experience-entry[.//div[@data-test='experience-edit-form']]"
+          ],
+          "addButtonPath": [
+            ".//*[@data-test='add-experience']"
+          ],
+          "savedRowPath": [
+            ".//oc-experience-entry[not(.//div[@data-test='experience-edit-form'])]"
+          ],
+          "inputSelectors": [
+            [
+              "title",
+              [
+                ".//*[@data-test='job-title-autocomplete']//input"
+              ]
+            ],
+            [
+              "company",
+              [
+                ".//*[@data-test='company-autocomplete']//input"
+              ]
+            ],
+            [
+              "location",
+              [
+                ".//*[@data-test='location-autocomplete']//input"
+              ]
+            ],
+            [
+              "description_stripped",
+              [
+                ".//*[@data-test='experience-description']//textarea"
+              ]
+            ],
+            [
+              "currently_working",
+              [
+                ".//*[@data-test='experience-current']//input[@type='checkbox']"
+              ]
+            ],
+            [
+              "save",
+              [
+                {
+                  "path": [
+                    ".//*[@data-test='experience-save']"
+                  ],
+                  "method": "click",
+                  "valueRequired": false
+                }
+              ]
+            ]
+          ]
+        }
+      ]
+    ]
+  ]
+}

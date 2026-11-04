@@ -1,0 +1,190 @@
+{
+  "ats": "Workable",
+  "urls": [
+    "*://apply.workable.com/*"
+  ],
+  "urlsExcluded": [],
+  "embeddedPaths": [],
+  "pathsExcluded": [],
+  "containerPath": [
+    "//form[@data-ui='application-form']"
+  ],
+  "containerRequired": false,
+  "defaultMethod": "default",
+  "submitButtonPaths": [
+    "//button[@data-ui='apply-button']"
+  ],
+  "submittedSuccessPaths": [],
+  "trackedInputSelectors": [],
+  "inputSelectors": [
+    [
+      "first_name",
+      [
+        ".//input[@name='firstname']"
+      ]
+    ],
+    [
+      "last_name",
+      [
+        ".//input[@name='lastname']"
+      ]
+    ],
+    [
+      "email",
+      [
+        ".//input[@name='email']"
+      ]
+    ],
+    [
+      "phone",
+      [
+        ".//input[@name='phone'][@type='tel']"
+      ]
+    ],
+    [
+      "address",
+      [
+        ".//input[@name='address']"
+      ]
+    ],
+    [
+      "city",
+      [
+        ".//input[@name='city']"
+      ]
+    ],
+    [
+      "postal_code",
+      [
+        ".//input[@name='postcode']"
+      ]
+    ],
+    [
+      "resume",
+      [
+        {
+          "path": ".//input[@type='file'][@data-ui='resume']",
+          "method": "uploadResume"
+        }
+      ]
+    ],
+    [
+      "education",
+      [
+        {
+          "addButtonPath": ".//div[@data-ui='education']//button[@data-ui='add-section']",
+          "containerPath": ".//div[@data-ui='education']//div[@data-ui='editor']",
+          "confirmAddedPath": [
+            ".//div[@data-ui='education']//div[@data-ui='editor']"
+          ],
+          "savedRowPath": ".//div[@data-ui='education']//div[@data-ui='group']",
+          "time": 5000,
+          "inputSelectors": [
+            [
+              "school",
+              [
+                ".//input[@name='school']"
+              ]
+            ],
+            [
+              "major",
+              [
+                ".//input[@name='field_of_study']"
+              ]
+            ],
+            [
+              "degree",
+              [
+                ".//input[@name='degree']"
+              ]
+            ],
+            [
+              "start_date_slashes_mmyyyy",
+              [
+                ".//input[@name='start_date']"
+              ]
+            ],
+            [
+              "end_date_slashes_mmyyyy",
+              [
+                ".//input[@name='end_date']"
+              ]
+            ],
+            [
+              "save",
+              [
+                {
+                  "path": ".//button[@data-ui='save-section']",
+                  "method": "click",
+                  "valueRequired": false
+                }
+              ]
+            ]
+          ]
+        }
+      ]
+    ],
+    [
+      "experience",
+      [
+        {
+          "addButtonPath": ".//div[@data-ui='experience']//button[@data-ui='add-section']",
+          "containerPath": ".//div[@data-ui='experience']//div[@data-ui='editor']",
+          "confirmAddedPath": [
+            ".//div[@data-ui='experience']//div[@data-ui='editor']"
+          ],
+          "savedRowPath": ".//div[@data-ui='experience']//div[@data-ui='group']",
+          "time": 5000,
+          "inputSelectors": [
+            [
+              "title",
+              [
+                ".//input[@name='title']"
+              ]
+            ],
+            [
+              "company",
+              [
+                ".//input[@name='company']"
+              ]
+            ],
+            [
+              "description",
+              [
+                ".//textarea[@name='summary']"
+              ]
+            ],
+            [
+              "start_date_slashes_mmyyyy",
+              [
+                ".//input[@name='start_date']"
+              ]
+            ],
+            [
+              "currently_working",
+              [
+                ".//input[@name='current'][@type='checkbox']"
+              ]
+            ],
+            [
+              "end_date_slashes_mmyyyy",
+              [
+                ".//input[@name='end_date']"
+              ]
+            ],
+            [
+              "save",
+              [
+                {
+                  "path": ".//button[@data-ui='save-section']",
+                  "method": "click",
+                  "valueRequired": false
+                }
+              ]
+            ]
+          ]
+        }
+      ]
+    ]
+  ]
+}

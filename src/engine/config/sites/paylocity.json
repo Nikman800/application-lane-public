@@ -1,0 +1,158 @@
+{
+  "ats": "Paylocity",
+  "urls": [
+    "*://recruiting.paylocity.com/Recruiting/Jobs/Apply/*",
+    "*://recruiting.paylocity.com/recruiting/jobs/Apply/*"
+  ],
+  "urlsExcluded": [],
+  "embeddedPaths": [],
+  "pathsExcluded": [],
+  "containerPath": [],
+  "containerRequired": false,
+  "defaultMethod": "default",
+  "submitButtonPaths": [],
+  "submittedSuccessPaths": [],
+  "trackedInputSelectors": [],
+  "inputSelectors": [
+    [
+      "apply_start",
+      [
+        {
+          "path": [
+            "//*[@data-automation-id='btnPublicApply']//a"
+          ],
+          "method": "click",
+          "valueRequired": false
+        }
+      ]
+    ],
+    [
+      "first_name",
+      [
+        "//input[@id='info.firstName']"
+      ]
+    ],
+    [
+      "last_name",
+      [
+        "//input[@id='info.lastName']"
+      ]
+    ],
+    [
+      "email",
+      [
+        "//input[@id='info.email']"
+      ]
+    ],
+    [
+      "country",
+      [
+        {
+          "path": [
+            "//input[@id='public-site-address-country']"
+          ]
+        }
+      ]
+    ],
+    [
+      "state",
+      [
+        {
+          "path": [
+            "//input[@id='public-site-address-us-state']"
+          ],
+          "values": "regionCodes"
+        }
+      ]
+    ],
+    [
+      "experience",
+      [
+        {
+          "containerPath": [
+            ".//*[contains(concat(' ', normalize-space(@class), ' '), ' work-history-group ')]"
+          ],
+          "inputSelectors": [
+            [
+              "company",
+              [
+                ".//input[starts-with(@data-automation-id,'workHistoryCompanyName')]"
+              ]
+            ],
+            [
+              "country",
+              [
+                {
+                  "path": [
+                    ".//input[contains(@id,'work-history-address') and substring(@id, string-length(@id) - 7) = '-country']"
+                  ]
+                }
+              ]
+            ],
+            [
+              "state",
+              [
+                {
+                  "path": [
+                    ".//input[contains(@id,'work-history-address') and contains(@id,'-us-state')]"
+                  ],
+                  "values": "regionCodes"
+                }
+              ]
+            ]
+          ]
+        }
+      ]
+    ],
+    [
+      "education",
+      [
+        {
+          "containerPath": [
+            ".//*[contains(concat(' ', normalize-space(@class), ' '), ' education-history-group ')]"
+          ],
+          "inputSelectors": [
+            [
+              "school",
+              [
+                ".//input[starts-with(@data-automation-id,'educationHistoryName')]"
+              ]
+            ],
+            [
+              "major",
+              [
+                ".//input[starts-with(@data-automation-id,'educationHistoryAreaOfStudy')]"
+              ]
+            ],
+            [
+              "degree",
+              [
+                {
+                  "path": [
+                    ".//*[@role='combobox'][starts-with(@id,'educationHistory.degreeId')]"
+                  ],
+                  "actions": [
+                    {
+                      "method": "click"
+                    },
+                    {
+                      "path": "%INPUTPATH%//*[@role='option'][normalize-space(.)=\"%VALUE%\"]",
+                      "method": "click",
+                      "time": 3000
+                    }
+                  ]
+                }
+              ]
+            ],
+            [
+              "grad_date_slashes_MMYYYY",
+              [
+                ".//input[starts-with(@data-automation-id,'txt-educationHistory-graduationDate')]"
+              ]
+            ]
+          ]
+        }
+      ]
+    ]
+  ]
+}

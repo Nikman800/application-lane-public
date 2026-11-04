@@ -1,0 +1,116 @@
+{
+  "ats": "TalNet",
+  "urls": [
+    "*://*.tal.net/*"
+  ],
+  "urlsExcluded": [],
+  "embeddedPaths": [],
+  "pathsExcluded": [],
+  "containerPath": [],
+  "containerRequired": false,
+  "defaultMethod": "default",
+  "submitButtonPaths": [],
+  "submittedSuccessPaths": [],
+  "trackedInputSelectors": [],
+  "inputSelectors": [
+    [
+      "education",
+      [
+        {
+          "containerPath": [
+            ".//div[contains(@class,'eform_page')][.//h2[contains(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'university education')]]"
+          ],
+          "limit": 1,
+          "inputSelectors": [
+            [
+              "country",
+              [
+                ".//label[contains(@class,'eform_field_label')][starts-with(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'location of study') or starts-with(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'country of study')]/following-sibling::div[contains(@class,'form_value')][1]//select"
+              ]
+            ],
+            [
+              "school",
+              [
+                {
+                  "path": [
+                    ".//label[contains(@class,'eform_field_label')][starts-with(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'current university') or starts-with(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'university') or starts-with(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'school')]/following-sibling::div[contains(@class,'form_value')][1]//select"
+                  ],
+                  "actions": [
+                    {
+                      "path": "%INPUTPATH%/option[normalize-space(.)=\"%VALUE%\"]",
+                      "time": 3000
+                    },
+                    {
+                      "method": "default"
+                    }
+                  ]
+                }
+              ]
+            ],
+            [
+              "degree",
+              [
+                ".//label[contains(@class,'eform_field_label')][starts-with(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'degree type')]/following-sibling::div[contains(@class,'form_value')][1]//select"
+              ]
+            ],
+            [
+              "major",
+              [
+                ".//label[contains(@class,'eform_field_label')][starts-with(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'subject') or starts-with(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'major')]/following-sibling::div[contains(@class,'form_value')][1]//select"
+              ]
+            ],
+            [
+              "graduated",
+              [
+                {
+                  "path": [
+                    ".//label[contains(@class,'eform_field_label')][starts-with(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'degree expected') or starts-with(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'degree obtained')]/following-sibling::div[contains(@class,'form_value')][1]//select"
+                  ],
+                  "valueKey": "graduated_flag",
+                  "values": {
+                    "Yes": [
+                      "Obtained"
+                    ],
+                    "No": [
+                      "Expected"
+                    ]
+                  }
+                }
+              ]
+            ],
+            [
+              "start_month_text",
+              [
+                ".//fieldset[legend[starts-with(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'start date')]]//select[substring(@id, string-length(@id) - 6) = '--MONTH']"
+              ]
+            ],
+            [
+              "start_year",
+              [
+                ".//fieldset[legend[starts-with(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'start date')]]//select[substring(@id, string-length(@id) - 5) = '--YEAR']"
+              ]
+            ],
+            [
+              "end_month_text",
+              [
+                ".//fieldset[legend[starts-with(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'expected graduation')]]//select[substring(@id, string-length(@id) - 6) = '--MONTH']"
+              ]
+            ],
+            [
+              "end_year",
+              [
+                ".//fieldset[legend[starts-with(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'expected graduation')]]//select[substring(@id, string-length(@id) - 5) = '--YEAR']"
+              ]
+            ]
+          ]
+        }
+      ]
+    ],
+    [
+      "more_education",
+      [
+        ".//label[contains(@class,'eform_field_label')][starts-with(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'do you have any previous university')]/following-sibling::div[contains(@class,'form_value')][1]//select"
+      ]
+    ]
+  ]
+}

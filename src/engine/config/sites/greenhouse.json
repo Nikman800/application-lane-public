@@ -1,0 +1,331 @@
+{
+  "ats": "Greenhouse",
+  "urls": [
+    "*://boards.greenhouse.io/*",
+    "*://job-boards.greenhouse.io/*",
+    "*://boards.eu.greenhouse.io/*",
+    "*://job-boards.eu.greenhouse.io/*"
+  ],
+  "urlsExcluded": [],
+  "embeddedPaths": [
+    [
+      "//form[contains(@action,'greenhouse.io')]"
+    ]
+  ],
+  "pathsExcluded": [],
+  "containerPath": [],
+  "containerRequired": false,
+  "defaultMethod": "react",
+  "submitButtonPaths": [
+    "//form//button[@type='submit']",
+    "//input[@type='submit']"
+  ],
+  "submittedSuccessPaths": [
+    "//*[contains(concat(' ',@class,' '),' confirmation__content ')]"
+  ],
+  "trackedInputSelectors": [
+    {
+      "kind": "file",
+      "fieldPath": "//input[@type='file'][@id='resume'][not(ancestor::div[contains(@class,'file-upload')])]",
+      "labelPath": ".",
+      "label": "Resume/CV",
+      "fillActions": [
+        {
+          "method": "uploadFile"
+        }
+      ]
+    },
+    {
+      "kind": "file",
+      "fieldPath": "//input[@type='file'][@id='cover_letter'][not(ancestor::div[contains(@class,'file-upload')])]",
+      "labelPath": ".",
+      "label": "Cover Letter",
+      "fillActions": [
+        {
+          "method": "uploadFile"
+        }
+      ]
+    }
+  ],
+  "inputSelectors": [
+    [
+      "first_name",
+      [
+        ".//input[@id='first_name']",
+        ".//input[@name='job_application[first_name]']"
+      ]
+    ],
+    [
+      "last_name",
+      [
+        ".//input[@id='last_name']",
+        ".//input[@name='job_application[last_name]']"
+      ]
+    ],
+    [
+      "preferred_name",
+      [
+        ".//input[@id='preferred_name']"
+      ]
+    ],
+    [
+      "email",
+      [
+        ".//input[@id='email']",
+        ".//input[@name='email']",
+        ".//input[@name='job_application[email]']"
+      ]
+    ],
+    [
+      "phone",
+      [
+        ".//input[@id='phone'][@type='tel' or @type='text']",
+        ".//input[@name='job_application[phone]']"
+      ]
+    ],
+    [
+      "linkedin",
+      [
+        ".//*[self::input or self::select or self::textarea][@id=//label[contains(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'linkedin')]/@for]"
+      ]
+    ],
+    [
+      "github",
+      [
+        ".//*[self::input or self::select or self::textarea][@id=//label[contains(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'github')]/@for]"
+      ]
+    ],
+    [
+      "website",
+      [
+        ".//*[self::input or self::select or self::textarea][@id=//label[contains(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'website') or contains(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'portfolio')]/@for]"
+      ]
+    ],
+    [
+      "education",
+      [
+        {
+          "inputSelectors": [
+            [
+              "school",
+              [
+                {
+                  "path": ".//input[starts-with(@id,'school--')]",
+                  "optionsSource": {
+                    "urlTemplate": "https://boards.greenhouse.io/v1/boards/{{board}}/education/schools?term={{term}}&page=1",
+                    "extractors": {
+                      "board": [
+                        {
+                          "template": "{{searchParams[for]}}"
+                        },
+                        {
+                          "urlPattern": "/:board/jobs(/*)",
+                          "template": "{{board}}"
+                        }
+                      ]
+                    },
+                    "responseItemsPath": "items",
+                    "responseTextPath": "text",
+                    "maxRequests": 2,
+                    "minTermLength": 2
+                  }
+                }
+              ]
+            ],
+            [
+              "degree",
+              [
+                ".//input[starts-with(@id,'degree--')]"
+              ]
+            ],
+            [
+              "major",
+              [
+                ".//input[starts-with(@id,'discipline--')]"
+              ]
+            ],
+            [
+              "start_month",
+              [
+                {
+                  "path": ".//input[starts-with(@id,'start-month--')]",
+                  "valueKey": "start_month_text"
+                }
+              ]
+            ],
+            [
+              "start_year",
+              [
+                ".//input[starts-with(@id,'start-year--')]"
+              ]
+            ],
+            [
+              "end_month",
+              [
+                {
+                  "path": ".//input[starts-with(@id,'end-month--')]",
+                  "valueKey": "end_month_text"
+                }
+              ]
+            ],
+            [
+              "end_year",
+              [
+                ".//input[starts-with(@id,'end-year--')]"
+              ]
+            ]
+          ],
+          "containerPath": ".//div[contains(concat(' ',@class,' '),' education--form ')]",
+          "addButtonPath": ".//div[contains(@class,'education--container')]//button[contains(@class,'add-another-button')]"
+        }
+      ]
+    ],
+    [
+      "experience",
+      [
+        {
+          "inputSelectors": [
+            [
+              "company",
+              [
+                ".//input[starts-with(@id,'company-name-')]"
+              ]
+            ],
+            [
+              "title",
+              [
+                ".//input[starts-with(@id,'title-')]"
+              ]
+            ],
+            [
+              "start_month",
+              [
+                {
+                  "path": ".//input[starts-with(@id,'start-date-month-')]",
+                  "valueKey": "start_month_text"
+                }
+              ]
+            ],
+            [
+              "start_year",
+              [
+                ".//input[starts-with(@id,'start-date-year-')]"
+              ]
+            ],
+            [
+              "end_month",
+              [
+                {
+                  "path": ".//input[starts-with(@id,'end-date-month-')]",
+                  "valueKey": "end_month_text"
+                }
+              ]
+            ],
+            [
+              "end_year",
+              [
+                ".//input[starts-with(@id,'end-date-year-')]"
+              ]
+            ],
+            [
+              "currently_working",
+              [
+                ".//input[@type='checkbox'][starts-with(@id,'current-role-')]"
+              ]
+            ]
+          ],
+          "containerPath": ".//div[contains(concat(' ',@class,' '),' employment-form ')]",
+          "addButtonPath": ".//div[contains(@class,'employment--container')]//button[contains(@class,'add-another-button')]"
+        }
+      ]
+    ],
+    [
+      "work_auth",
+      [
+        ".//*[self::input or self::select or self::textarea][@id=//label[contains(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'authorized to work') or contains(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'authorization to work') or contains(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'eligible to work')]/@for]",
+        ".//fieldset[contains(translate(normalize-space(legend),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'authorized to work') or contains(translate(normalize-space(legend),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'authorization to work') or contains(translate(normalize-space(legend),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'eligible to work')]//input[@type='radio'][@value='%VALUE%']"
+      ]
+    ],
+    [
+      "sponsorship",
+      [
+        ".//*[self::input or self::select or self::textarea][@id=//label[contains(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'sponsorship') or contains(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'require work authorization')]/@for]",
+        ".//fieldset[contains(translate(normalize-space(legend),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'sponsorship') or contains(translate(normalize-space(legend),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'require work authorization')]//input[@type='radio'][@value='%VALUE%']"
+      ]
+    ],
+    [
+      "gender",
+      [
+        ".//input[@id='gender']"
+      ]
+    ],
+    [
+      "hispanic",
+      [
+        ".//input[@id='hispanic_ethnicity']"
+      ]
+    ],
+    [
+      "ethnicity",
+      [
+        ".//input[@id='race']"
+      ]
+    ],
+    [
+      "veteran",
+      [
+        ".//input[@id='veteran_status']"
+      ]
+    ],
+    [
+      "disability",
+      [
+        ".//input[@id='disability_status']"
+      ]
+    ],
+    [
+      "resume",
+      [
+        {
+          "path": [
+            "//div[@role='group'][contains(@class,'file-upload')][.//*[contains(@class,'upload-label')][contains(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'resume')]]"
+          ],
+          "actions": [
+            {
+              "path": "%INPUTPATH%//button[@aria-label='Remove file']",
+              "method": "click",
+              "allowFailure": true
+            },
+            {
+              "path": "%INPUTPATH%//input[@type='file']",
+              "method": "uploadResume",
+              "time": 5000
+            }
+          ]
+        }
+      ]
+    ],
+    [
+      "coverLetter",
+      [
+        {
+          "path": [
+            "//div[@role='group'][contains(@class,'file-upload')][.//*[contains(@class,'upload-label')][contains(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'cover')]]"
+          ],
+          "actions": [
+            {
+              "path": "%INPUTPATH%//button[@aria-label='Remove file']",
+              "method": "click",
+              "allowFailure": true
+            },
+            {
+              "path": "%INPUTPATH%//input[@type='file']",
+              "method": "uploadCoverLetter",
+              "time": 5000
+            }
+          ]
+        }
+      ]
+    ]
+  ]
+}

@@ -1,0 +1,96 @@
+{
+  "ats": "Ashby",
+  "urls": [
+    "*://jobs.ashbyhq.com/*"
+  ],
+  "urlsExcluded": [],
+  "embeddedPaths": [
+    [
+      "//form[contains(@class,'ashby-application-form-container')]"
+    ]
+  ],
+  "pathsExcluded": [],
+  "containerPath": [],
+  "containerRequired": false,
+  "defaultMethod": "react",
+  "submitButtonPaths": [
+    "//button[contains(@class,'ashby-application-form-submit-button')]",
+    "//button[@type='submit']"
+  ],
+  "submittedSuccessPaths": [
+    "//*[contains(@class,'ashby-application-form-success-container')]"
+  ],
+  "trackedInputSelectors": [],
+  "inputSelectors": [
+    [
+      "full_name",
+      [
+        ".//input[@id='_systemfield_name']"
+      ]
+    ],
+    [
+      "email",
+      [
+        ".//input[@id='_systemfield_email']"
+      ]
+    ],
+    [
+      "education",
+      [
+        {
+          "inputSelectors": [
+            [
+              "start_month_text",
+              [
+                ".//*[@id='_systemfield_education_history-startDate']/div[1]//select"
+              ]
+            ],
+            [
+              "end_month_text",
+              [
+                ".//*[@id='_systemfield_education_history-endDate']/div[1]//select"
+              ]
+            ],
+            [
+              "start_year",
+              [
+                ".//*[@id='_systemfield_education_history-startDate']/div[2]//select"
+              ]
+            ],
+            [
+              "end_year",
+              [
+                ".//*[@id='_systemfield_education_history-endDate']/div[2]//select"
+              ]
+            ],
+            [
+              "currently_studying",
+              [
+                ".//input[@type='checkbox'][@id='_systemfield_education_history-isCurrent']"
+              ]
+            ]
+          ],
+          "containerPath": ".//div[contains(@class,'_repeatableEducationEntry')]"
+        }
+      ]
+    ],
+    [
+      "veteran",
+      [
+        ".//div[contains(@class,'ashby-application-form-field-entry')][.//*[contains(@class,'ashby-application-form-question-title')][contains(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'veteran')]]//div[contains(@class,'option')][label[normalize-space(.)='%VALUE%']]//input"
+      ]
+    ],
+    [
+      "ethnicity",
+      [
+        ".//div[contains(@class,'ashby-application-form-field-entry')][.//*[contains(@class,'ashby-application-form-question-title')][contains(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'race') or contains(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'ethnic')]]//div[contains(@class,'checkbox-group-option')][label[normalize-space(.)='%VALUE%']]//input[@type='checkbox']"
+      ]
+    ],
+    [
+      "gender",
+      [
+        ".//div[contains(@class,'ashby-application-form-field-entry')][.//*[contains(@class,'ashby-application-form-question-title')][contains(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'gender')]]//div[contains(@class,'option')][label[normalize-space(.)='%VALUE%']]//input"
+      ]
+    ]
+  ]
+}

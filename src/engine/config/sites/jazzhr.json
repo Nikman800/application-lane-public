@@ -1,0 +1,34 @@
+{
+  "ats": "JazzHR",
+  "urls": ["*://*.applytojob.com/apply/*"],
+  "urlsExcluded": [],
+  "embeddedPaths": [],
+  "pathsExcluded": [],
+  "containerPath": [],
+  "containerRequired": false,
+  "defaultMethod": "default",
+  "submitButtonPaths": [],
+  "submittedSuccessPaths": [],
+  "trackedInputSelectors": [
+    {
+      "kind": "file",
+      "fieldPath": "//input[@type='file'][@id='resumator-resume-value']",
+      "labelPath": "//label[@id='resumator-resume-label']",
+      "requiredPath": "ancestor::*[@id='resumator-resume']//i[contains(@class,'asterisk')]",
+      "fillActions": [
+        { "path": "//a[@id='resumator-choose-upload']", "method": "click", "allowFailure": true },
+        { "method": "uploadFile" }
+      ]
+    }
+  ],
+  "inputSelectors": [
+    ["email", [".//input[@id='resumator-email-value']"]],
+    ["resume", [{
+      "path": [".//input[@type='file'][@id='resumator-resume-value']"],
+      "actions": [
+        { "path": "//a[@id='resumator-choose-upload']", "method": "click", "allowFailure": true },
+        { "method": "uploadResume" }
+      ]
+    }]]
+  ]
+}

@@ -1,0 +1,71 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - name: Type check
+        run: npm run check
+      - name: Unit tests
+        run: node --import tsx --test tests/*.test.ts
+      - name: Build
+        run: npm run build
+      - name: Chrome Web Store build
+        run: npm run build -- --store
+      - name: Package
+        run: npm run package
+      # Only the private repository has the exporter; the public one skips this.
+      - name: Public export dry run
+        run: |
+          if [ -f scripts/export-public.mjs ]; then
+            npm run export:public -- "$RUNNER_TEMP/export"
+            for p in eval scripts/fixer.ts docs/private; do
+              test ! -e "$RUNNER_TEMP/export/$p"
+            done
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release
+          path: release/
+          if-no-files-found: ignore
+
+  browser:
+    # The browser suite takes a while; run it by hand from the Actions tab.
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run build
+      # The suite launches Chromium headless (new headless mode loads extensions),
+      # so no virtual display is needed.
+      - name: Browser suite
+        run: npx playwright test --grep-invert "throughput benchmark"
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: |
+            playwright-report/
+            test-results/
+          if-no-files-found: ignore

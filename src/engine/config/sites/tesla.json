@@ -1,0 +1,78 @@
+{
+  "ats": "Tesla",
+  "urls": [
+    "*://www.tesla.com/careers/search/job/apply/*",
+    "*://www.tesla.com/*/careers/search/job/apply/*"
+  ],
+  "urlsExcluded": [],
+  "embeddedPaths": [],
+  "pathsExcluded": [],
+  "containerPath": [],
+  "containerRequired": false,
+  "defaultMethod": "default",
+  "submitButtonPaths": [
+    "//form//button[@type='submit']"
+  ],
+  "submittedSuccessPaths": [],
+  "trackedInputSelectors": [],
+  "inputSelectors": [
+    [
+      "sponsorship",
+      [
+        {
+          "method": "default",
+          "valuePathMap": {
+            "Yes": "//input[@type='radio'][@name='legal.legalImmigrationSponsorship'][contains(@id,'_yes')]",
+            "No": "//input[@type='radio'][@name='legal.legalImmigrationSponsorship'][contains(@id,'_no')]"
+          }
+        }
+      ]
+    ],
+    [
+      "full_name",
+      [
+        "//input[@name='legal.legalAcknowledgmentName']",
+        "//input[@name='eeo.eeoDisabilityStatusName']"
+      ]
+    ],
+    [
+      "gender",
+      [
+        "//select[@name='eeo.eeoGender']"
+      ]
+    ],
+    [
+      "veteran",
+      [
+        "//select[@name='eeo.eeoVeteranStatus']"
+      ]
+    ],
+    [
+      "ethnicity",
+      [
+        "//select[@name='eeo.eeoRaceEthnicity']"
+      ]
+    ],
+    [
+      "current_date_d",
+      [
+        {
+          "path": [
+            "//input[@name='job.jobAvailabilityToStartInternship']"
+          ],
+          "actions": [
+            {
+              "path": "//input[@name='job.jobAvailabilityToStartInternship']/following-sibling::div//button[@type='button']",
+              "method": "click"
+            },
+            {
+              "path": "//*[@aria-label='Use arrow keys to increment the date']//button[normalize-space(.)=\"%VALUE%\"]",
+              "method": "click",
+              "time": 3000
+            }
+          ]
+        }
+      ]
+    ]
+  ]
+}
