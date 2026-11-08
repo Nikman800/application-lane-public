@@ -4,7 +4,7 @@ import { canonicalAnswer, type ChoiceField } from "../shared/answers";
 import { schoolNames } from "../shared/schools";
 import { degreeAliases, graduated, highestRow, studying } from "../shared/education";
 import { askedCountry, authorizationAnswer, jobCountry } from "../shared/authorization";
-import { priorEmploymentAnswer } from "../shared/standing";
+import { priorEmploymentAnswer, questionTopic } from "../shared/standing";
 import { formatSalary } from "../shared/salary";
 import { localDate, formatDate, profileDateFormat } from "../shared/dates";
 import { dialCountry, splitPhone } from "../shared/phone";
@@ -336,11 +336,12 @@ export function canonicalValues(
   if (choice) return unique([profileChoice(choice.field, profile)]);
   // A phone's type in the wordings lists use, the applicant's own first:
   // NGC's Workday lists "Business Mobile" and "Personal Mobile", and a
-  // plain "Mobile" picked neither (report cfbf90ad, 2026-11-02).
+  // plain "Mobile" picked neither (report cfbf90ad, 2026-11-02). NVIDIA's
+  // lists "Home" and "Home Cellular", its word for a mobile (2026-11-04).
   if (/^phone_(device_)?type$/.test(key) && values[key]) {
     const type = values[key]!.trim();
     const wordings: Record<string, string[]> = {
-      mobile: ["Personal Mobile", "Mobile Phone", "Cell", "Cell Phone", "Cellular"],
+      mobile: ["Personal Mobile", "Mobile Phone", "Cell", "Cell Phone", "Cellular", "Home Cellular", "Personal Cellular", "Cellular Phone", "Personal Cell"],
       home: ["Personal Phone", "Home Phone", "Landline"],
       work: ["Business Phone", "Work Phone", "Office"],
     };
@@ -409,6 +410,10 @@ function degreeValues(
   ];
 }
 
+function neverServed(profile: Profile): boolean {
+  return profile.answers.some((answer) => questionTopic(answer.question) === "military" && /^\s*no\b/i.test(answer.answer));
+}
+
 // Candidates for an answer-bank key: the site's own phrases for the answer
 // first, then common wordings and the plain answer. Country/state aliases
 // are never applied ("No" is also Norway's country code).
@@ -447,9 +452,12 @@ const declineWording = [
   "decline to state",
 ];
 const standardPhrases: Partial<Record<ChoiceField, Record<string, string[]>>> = {
+  // "Authorized" / "Not Authorized" for Yes and No (Axiom Space, 2026-11-04).
+  workAuthorization: { Yes: ["authorized"], No: ["not authorized"] },
   veteranStatus: {
     Yes: ["i identify as one or more of the classifications of protected veteran", "identify as one or more of the classifications of protected veteran", "i am a protected veteran"],
-    No: ["i am not a protected veteran", "not a protected veteran"],
+    // "Not Protected Veteran (OFCCP)" (L3Harris, 2026-11-07).
+    No: ["i am not a protected veteran", "not a protected veteran", "not protected veteran"],
     Decline: [...declineWording, ...declineWording.map((phrase) => `i ${phrase}`)],
   },
   disabilityStatus: {
@@ -580,7 +588,13 @@ export function selectorValues(
       selector.values && typeof selector.values !== "string"
         ? (selector.values as Record<string, JsonValue>)
         : undefined;
-    return choiceValues(choiceKey, raw, mapping);
+    const choices = choiceValues(choiceKey, raw, mapping);
+    // "I am not a veteran" (Sonos's list, with no "protected" option,
+    // 2026-11-04) is true only of someone who never served: one who did may
+    // still not be a protected veteran. The saved military answer says.
+    if (choiceKeys[choiceKey].field === "veteranStatus" && canonicalAnswer("veteranStatus", raw) === "No" && neverServed(profile))
+      return unique([...choices.filter((choice) => choice !== "No"), "i am not a veteran", "not a veteran", "No"]);
+    return choices;
   }
   let values =
     selector.value === undefined
@@ -729,9 +743,18 @@ export function matchOption(
       const degreeCode = /^(bs|bsc|ba|ms|msc|ma|phd|mba|as|aa|meng|beng|mfa|bfa|bba)$/.test(code);
       return !degreeCode || values.some((candidate) => compact(candidate) === code);
     },
+    // A list's own wording with a note after it: "Not Protected Veteran
+    // (OFCCP)" is "not protected veteran" (L3Harris, 2026-11-07).
+    (option, value) => {
+      const bare = option.label.replace(/\s*\([^()]*\)\s*$/, "");
+      return bare !== option.label && Boolean(normalize(value)) && normalize(bare) === normalize(value);
+    },
     // A binary answer may be worded as one sentence. Generic word
     // containment cannot establish a school, degree, country or status.
+    // A list's empty choice is no sentence: "No Selection" begins with "No"
+    // and was taken for it (L3Harris's Veteran Status, 2026-11-07).
     (option, value) => /^(yes|no)$/i.test(value.trim()) &&
+      !/^(no selection|none selected|no answer)$/i.test(normalize(option.label)) &&
       new RegExp(`^${value.trim()}\\b`, "i").test(option.label.trim()),
   ];
   const ordered = [...values, ...aliases];

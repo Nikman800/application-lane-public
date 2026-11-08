@@ -19,7 +19,10 @@ const maxClear = 16;
 
 // Deliberately small: no Enter, no Tab, no modifier, nothing a form could read
 // as "submit". Characters outside this set are refused rather than guessed at.
-const typable = /^[\p{L}\p{N} .,'/-]{1,200}$/u;
+// Skill names need a few more: "C#", "C++", "R&D", "Large Language Models
+// (LLM)" fell back to synthetic keys, which NVIDIA's search ignores
+// (2026-11-04).
+const typable = /^[\p{L}\p{N} .,'/#+&()-]{1,200}$/u;
 // A widget that reads event.keyCode must see the code the real key carries.
 const punctuation: Record<string, { code: string; keyCode: number }> = {
   " ": { code: "Space", keyCode: 32 },
@@ -28,6 +31,11 @@ const punctuation: Record<string, { code: string; keyCode: number }> = {
   "-": { code: "Minus", keyCode: 189 },
   ".": { code: "Period", keyCode: 190 },
   "/": { code: "Slash", keyCode: 191 },
+  "#": { code: "Digit3", keyCode: 51 },
+  "+": { code: "Equal", keyCode: 187 },
+  "&": { code: "Digit7", keyCode: 55 },
+  "(": { code: "Digit9", keyCode: 57 },
+  ")": { code: "Digit0", keyCode: 48 },
 };
 
 const keyCode = (character: string) =>
@@ -64,10 +72,35 @@ export async function typeTrusted(
   text: string,
   clear = 0,
   enter = false,
+  // Picked from the menu the typing opens: once it has come, Down to its
+  // first entry, then Enter. SmartRecruiters' Title, Company and School keep
+  // only a value chosen there (2026-11-04).
+  // How many entries down the one to choose is (true: the first).
+  choose: boolean | number = false,
+  // Down only, with no Enter: the caller reads which entry is highlighted
+  // before taking it.
+  hold = false,
+  // A real click at this point of the page (CSS pixels from the top-left of
+  // the tab's view), for an entry the menu's own keys will not reach:
+  // SmartRecruiters' menus let every Down pass now and then, and ignore a
+  // script's click (Intuitive, 2026-11-07).
+  click?: { x: number; y: number },
 ): Promise<void> {
   if (!trustedTypingAvailable())
     throw new Error("Real keystrokes need the debugger permission.");
-  if (!typable.test(text))
+  if (click) {
+    if (![click.x, click.y].every((value) => Number.isFinite(value) && value >= 0 && value < 20_000))
+      throw new Error("Refused an unexpected click position.");
+    if (!holdsDebugger(tabId, "input")) await claimDebugger(tabId, "input");
+    const mouse = (type: string) =>
+      chrome.debugger.sendCommand({ tabId }, "Input.dispatchMouseEvent", { type, x: click.x, y: click.y, button: "left", clickCount: 1 });
+    await chrome.debugger.sendCommand({ tabId }, "Input.dispatchMouseEvent", { type: "mouseMoved", x: click.x, y: click.y });
+    await mouse("mousePressed");
+    await mouse("mouseReleased");
+    return;
+  }
+  // Choosing from a menu already open types nothing more.
+  if (!((choose || enter) && text === "") && !typable.test(text))
     throw new Error("Refused to type an unexpected value.");
   if (!Number.isInteger(clear) || clear < 0 || clear > maxClear)
     throw new Error("Refused an unexpected number of deletions.");
@@ -106,7 +139,22 @@ export async function typeTrusted(
   }
   // A search box that runs its search on Enter (Workday's field of study at
   // KLA ignores a synthetic Enter, and a blurred box ignores any).
-  if (enter)
+  const downs = choose === true ? 1 : typeof choose === "number" ? choose : 0;
+  // A negative count is that many entries up.
+  if (!Number.isInteger(downs) || downs < -30 || downs > 30) throw new Error("Refused an unexpected menu position.");
+  if (downs) {
+    // Typed just now: the menu is given time to come. Asked once it is
+    // open (a position counted in it), at once.
+    if (text) await new Promise((resolve) => setTimeout(resolve, 1_500));
+    for (let step = 0; step < Math.abs(downs); step++) {
+      await press(downs > 0
+        ? { key: "ArrowDown", code: "ArrowDown", windowsVirtualKeyCode: 40, nativeVirtualKeyCode: 40 }
+        : { key: "ArrowUp", code: "ArrowUp", windowsVirtualKeyCode: 38, nativeVirtualKeyCode: 38 });
+      await new Promise((resolve) => setTimeout(resolve, 60));
+    }
+    await new Promise((resolve) => setTimeout(resolve, 120));
+  }
+  if ((enter || downs) && !hold)
     await press({
       key: "Enter",
       code: "Enter",

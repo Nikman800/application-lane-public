@@ -1,4 +1,4 @@
-import { askedPart, citizenWordings, standingAnswer } from "./standing";
+import { askedPart, citizenWordings, questionTopic, standingAnswer } from "./standing";
 import {
   canonicalAnswer,
   choiceSynonyms,
@@ -14,6 +14,7 @@ import {
   type Profile,
   type Proposal,
 } from "./model";
+import { legalQuestion } from "./questions";
 import { degreeAliases, degreeLevel, graduated, highestRow, latestRow, levelRank, studying, thisMonth as currentMonth } from "./education";
 import { localDate, writtenDate } from "./dates";
 import { schoolNames } from "./schools";
@@ -22,7 +23,7 @@ import { dialCodes, dialCountry, splitPhone } from "./phone";
 import { isFluent, levelChoices, profileLanguages } from "./languages";
 import globals from "../engine/config/globals.json" with { type: "json" };
 import { countriesNamed, countryCode, countryNamesOf, findRegion, placeCountry, type Geography } from "./geography";
-import { askedCountry, authorizationAnswer, citizenOf, citizenshipsOf, jobCountry, usCitizen, workAuthorizations } from "./authorization";
+import { askedCountry, authorizationAnswer, authorizationEntry, citizenOf, citizenshipsOf, jobCountry, usCitizen, workAuthorizations } from "./authorization";
 
 const geography = globals as Geography;
 
@@ -268,7 +269,9 @@ export function deterministicAnswer(
   const legal = [profile.firstName, profile.middleName, profile.lastName].filter(Boolean).join(" ").trim();
   if (
     /^(full legal|legal full|legal) name$/.test(label) ||
-    /^(please )?((state|enter|provide|type|write|print|confirm|list) )?(your )?(full legal|legal full|legal) name$/.test(label)
+    /^(please )?((state|enter|provide|type|write|print|confirm|list) )?(your )?(full legal|legal full|legal) name$/.test(label) ||
+    // As a question: "What is your Legal Name?" (Rubrik, 2026-11-07).
+    /^what is your (full legal|legal full|legal) name$/.test(label)
   )
     return legal;
   if (/^middle (initial|name initial)$/.test(label))
@@ -435,6 +438,9 @@ function rowAtLevel(profile: Profile, asked: "undergraduate" | "graduate" | "hig
   return matching.length === 1 ? matching[0] : undefined;
 }
 
+const plainAnswer = (text: string | undefined): "Yes" | "No" | undefined =>
+  /^\s*yes\b/i.test(text || "") ? "Yes" : /^\s*no\b/i.test(text || "") ? "No" : undefined;
+
 export function profileAnswer(
   field: Field,
   profile: Profile,
@@ -449,6 +455,22 @@ export function profileAnswer(
     if (!qualified || !/^(yes|no)$/.test(answer) ||
         !saved.every((a) => normalize(a.answer) === answer) ||
         normalize(authorizationAnswer(profile, field.label, qualified) || "") !== answer) return;
+  }
+  // A citizen or permanent resident of the job's country holds no temporary
+  // authorization there: "Do you have temporary authorization (e.g., OPT,
+  // CPT…)?" is No, and "If you are currently in OPT, are you eligible for a
+  // STEM extension?" is not theirs to answer, so N/A where the list has it
+  // (Philips' Workday, 2026-11-04). Anyone else is left to answer them.
+  const temporaryAsked = normalize(askedPart(field.label));
+  if (/\b(opt|cpt|optional practical training|curricular practical training|temporary (work )?authori[sz]ation)\b/.test(temporaryAsked)) {
+    const entry = authorizationEntry(profile, askedPart(field.label));
+    if (entry && (entry.status === "citizen" || entry.status === "permanent-resident")) {
+      if (/^if you are\b|\b(extension|stem)\b/.test(temporaryAsked)) {
+        const notApplicable = field.options.find((option) => /^\s*(n\/?a|not applicable)\b/i.test(option));
+        return notApplicable ? { value: notApplicable } : undefined;
+      }
+      if (/^(do|are|have|will|is)\b/.test(temporaryAsked)) return { value: "No" };
+    }
   }
   // Generic authorization does not establish use of CPT or OPT.
   if (/^does your work authorization\b.*\binvolve (cpt|opt)\b/.test(normalize(askedPart(field.label)))) return;
@@ -599,7 +621,12 @@ export function profileAnswer(
   // degree?" asks the same (L3Harris, report 17ac6723, 2026-10-15).
   // Amazon's: "In what month and year did you (or do you expect to) graduate
   // from your highest degree?"
-  if (/\b(anticipated|expected|projected)\b.*\bgraduat|\bgraduation (date|month|year)\b|\bwill you (receive|earn|complete|be awarded) (your|the|a) degree\b|\bexpect to graduate\b/.test(label)) {
+  // Leidos asks it as "Expected degree completion date" (Month, Day, Year),
+  // and also names "your most recent graduation date" in the preamble of a
+  // question that asks the highest degree received, which is not this
+  // (report, 2026-11-08).
+  if ((/\b(anticipated|expected|projected)\b.*\bgraduat|\bgraduation (date|month|year)\b|\bwill you (receive|earn|complete|be awarded) (your|the|a) degree\b|\bexpect to graduate\b|\b(anticipated|expected|projected) (degree )?completion date\b/.test(label)) &&
+      !/\bwhat is (the |your )?highest (level of )?(education|degree|diploma)\b/.test(label)) {
     // Only a date still ahead is an anticipated graduation; a finished
     // degree's end date is not.
     const thisMonth = currentMonth();
@@ -625,6 +652,12 @@ export function profileAnswer(
     if (part === "month") return { value: month, choices: [month.slice(0, 3), monthNumber, String(Number(monthNumber))] };
     // A day the profile does not hold is the 1st where the question says so.
     if (part === "day") return day ? { value: String(Number(day)), choices: [day] } : /\bfirst of the month\b/i.test(field.label) ? { value: "1", choices: ["01"] } : undefined;
+    // A question for the month alone ("Please select your Graduation
+    // Month", its year asked apart), or a list of only months, takes the
+    // month: "December 2027" matched none of LinkedIn's twelve (2026-11-04).
+    const monthsOnly = field.options.length >= 12 && field.options.every((option) => months.some((name) => normalize(option) === normalize(name) || normalize(option) === normalize(name.slice(0, 3))));
+    if (monthsOnly || (field.options.length > 0 && /\bmonth\b/.test(label) && !/\byear\b/.test(label) && !/\bdate\b/.test(label)))
+      return { value: month, choices: [month.slice(0, 3), monthNumber, String(Number(monthNumber))] };
     const span = monthSpan(field.options, year, Number(monthNumber));
     if (span) return { value: span };
     // A date picker takes a whole date, whatever its label asks: "2027" in
@@ -789,10 +822,32 @@ export function profileAnswer(
   // "Earned" alone counts only a degree already finished.
   // Also as a sentence: "What is the highest level of education you have
   // completed?" (SuccessFactors, report 5beb4b34).
-  const highest = label.match(/^(?:what is )?(?:the |your )?highest (?:level of )?(?:degree|education)(?: (?:that )?you have)?((?: (?:earned|obtained|completed|attained|received|pursuing|in progress))*)$/);
+  // Or as the last question after a preamble: "If hired by Leidos, we will
+  // verify your most recent graduation date and the highest degree or
+  // diploma received. What is the highest level of education you've
+  // received?" (2026-11-08).
+  const lastAsk = normalize(field.label.match(/([^.?!]*\?)\s*$/)?.[1] || "");
+  const highestPattern = /^(?:what is )?(?:the |your )?highest (?:level of )?(?:degree|education)(?: (?:that )?you (?:have|ve))?((?: (?:earned|obtained|completed|attained|received|pursuing|in progress))*)$/;
+  const highest = label.match(highestPattern) || (lastAsk ? lastAsk.match(highestPattern) : null);
   if (highest) {
     const row = rowAtLevel(profile, "highest", !highest[1] || /pursuing|in progress/.test(highest[1]));
     return row ? { value: row.title, choices: degreeAliases(row.title) } : undefined;
+  }
+  // "Please select your degree type" (BA/BS, Masters, PhD, N/A) beside a
+  // graduation month and year is the degree being finished, the highest
+  // held or under way (LinkedIn's SmartRecruiters screening, 2026-11-05).
+  if (/^(?:please )?(?:select |choose |enter )?(?:your )?(?:degree type|type of degree|degree level|level of degree)$/.test(label)) {
+    const row = rowAtLevel(profile, "highest");
+    if (!row) return;
+    if (!field.options.length) return { value: row.title, choices: degreeAliases(row.title) };
+    const level = degreeLevel(row.title);
+    const listed = field.options.filter((option) => degreeLevel(option) === level);
+    return listed.length === 1 ? { value: listed[0] } : undefined;
+  }
+  // "Today's Date" beside the applicant's typed name: the day it is filled.
+  if (/^(?:today s date|todays date|current date|today)$/.test(label) && !field.options.length) {
+    const written = writtenDate(localDate(), field, profile);
+    return written ? { value: written } : undefined;
   }
   const completion = label.match(/^(?:completion|graduation) date (?:of|for) (?:your )?highest degree( mm yyyy)?$/);
   if (completion && !field.options.length) {
@@ -898,6 +953,56 @@ export function profileAnswer(
       choices: count === 0 ? ["None", "Zero", "0"] : undefined,
     };
   }
+  // "How many years of work experience do you have?" (Rubrik, 2026-11-07):
+  // the months the profile's jobs cover, each month once however many jobs
+  // share it, up to this month. A question about one role or skill ("as a
+  // Data Analyst", "with Python") is another question.
+  // "Did you obtain this degree in the last 24 months?" after a question for
+  // the highest degree received (Leidos, 2026-11-08): that degree, finished,
+  // and when.
+  const recent = label.match(/\b(?:did you )?(?:obtain|receive|earn|complete|get)\w* (?:this|that|the|your) degree (?:in|within) the (?:last|past) (\d+) (month|year)s?\b/);
+  if (recent) {
+    const thisMonth = currentMonth();
+    const finished = profile.education
+      .filter((row) => /^\d{4}-\d{2}/.test(row.endDate) && row.endDate.slice(0, 7) <= thisMonth && !row.current)
+      .sort((a, b) => levelRank[degreeLevel(b.title)] - levelRank[degreeLevel(a.title)] || b.endDate.localeCompare(a.endDate))[0];
+    if (finished) {
+      const [year, month] = finished.endDate.split("-").map(Number);
+      const [nowYear, nowMonth] = thisMonth.split("-").map(Number);
+      const since = (nowYear - year) * 12 + (nowMonth - month);
+      const limit = Number(recent[1]) * (recent[2] === "year" ? 12 : 1);
+      return { value: since <= limit ? "Yes" : "No" };
+    }
+  }
+  // Where the applicant would move from, asked as a place: "…please tell us
+  // the city, state, and zip code you'd be moving from" (Applied Materials,
+  // report 297590e2, 2026-11-08) was answered "Yes", as relocation is.
+  if ((field.kind === "text" || field.kind === "textarea") && profile.city &&
+      (/\bcity\b.*\bstate\b.*\b(zip|postal)\b/.test(label) || /\b(moving|relocating) from\b/.test(label))) {
+    const place = [profile.city, [profile.state, profile.postalCode].filter(Boolean).join(" ")].filter(Boolean).join(", ");
+    return { value: place };
+  }
+  // Years with one skill or in one kind of work ("…professional work
+  // experience with the following: C/C++", "…designing HPC…", AMD's iCIMS,
+  // 2026-11-07) are never more than the applicant's years of work in all:
+  // a list's "less than N years" is true when all of it is under N. Any
+  // other choice needs the applicant.
+  if (field.options.length && !/^how many years of (total |overall |professional |work |paid )*(work )?experience do you have$/.test(label) &&
+      /\byears of (professional |work |relevant |hands on )*(work )?experience\b|\bprofessional (work )?experience\b.*\b(following|with|in)\b|\byears (of experience )?(with|in|using|designing|building|working)\b/.test(label)) {
+    const total = totalWorkYears(profile);
+    if (total !== undefined) {
+      const under = field.options.filter((option) => {
+        const bound = option.match(/\b(?:less than|under|fewer than|below)\s*(\d+(?:\.\d+)?)\s*(?:years?|yrs?)\b/i);
+        return bound && total < Number(bound[1]);
+      });
+      if (under.length === 1) return { value: under[0] };
+    }
+  }
+  if (/^how many years of (total |overall |professional |work |paid )*(work )?experience do you have$/.test(label)) {
+    const years = totalWorkYears(profile);
+    if (years !== undefined) return { value: String(years), numeric: years };
+  }
+
   // Demographic answers the profile holds. Each option is read the same way
   // as the profile's answer and chosen only when it states the same thing;
   // "(Not Hispanic or Latino)" is dropped first so "White (Not Hispanic or
@@ -914,7 +1019,13 @@ export function profileAnswer(
         [/\bveterans?\b/, "veteranStatus"],
         [/\bdisabilit/, "disabilityStatus"],
       ] as const
-    ).find(([pattern]) => pattern.test(label))?.[1] ||
+    )
+      // The topic named first: LinkedIn's "Race/Ethnicity" defines its race
+      // categories after its name, "Hispanic or Latino" first among them,
+      // and was read as the Hispanic question and left (2026-11-05).
+      .map(([pattern, topic]) => ({ topic, at: label.search(pattern) }))
+      .filter((found) => found.at >= 0)
+      .sort((a, b) => a.at - b.at)[0]?.topic ||
     (["Yes", "No"].every((answer) =>
       disabilityOptions.some((option) => readOption("disabilityStatus", option) === answer),
     )
@@ -931,8 +1042,15 @@ export function profileAnswer(
   // questions. Another country's (the UK's Equality Act, Canada's
   // employment equity, a caste or an Indigenous identity) defines its groups
   // and terms differently, and is left to the applicant.
+  // The U.S. form's own race definitions ("A person having origins in any
+  // of the original peoples of the Far East … China, India, Japan") name
+  // places that are no other country's question: LinkedIn's Race/Ethnicity
+  // label carried them and was left (2026-11-05).
+  const definedAway = `${field.question || ""} ${field.label}`.replace(/\b(a person|all persons) (of|having origins in|who identify)\b[^.]*?(?=\b(hispanic|white|black|native hawaiian|asian|american indian|two or more)\b|$)/gis, " ")
+    // Nor do its own category names ("American Indian" is not India's).
+    .replace(/\b(american indian|alaska(n)? native|native hawaiian|pacific islander)\b/gi, " ");
   if (demographic && (
-    countriesNamed(geography, `${field.question || ""} ${field.label}`).some((country) => country !== "US") ||
+    countriesNamed(geography, definedAway).some((country) => country !== "US") ||
     /\b(equality act|employment equity|visible minorit\w*|aboriginal|torres strait|first nations|indigenous|metis|inuit|caste|scheduled (caste|tribe)|socio ?economic|religio\w*)\b/.test(normalize(`${field.question || ""} ${field.label}`))
   )) return;
   // Workday lists each answer as its own checkbox ("No, I do not have a
@@ -982,6 +1100,23 @@ export function profileAnswer(
           /\basian\b/i.test(groupName(option)) &&
           !/\b(east|south|southeast|central|west)\b/i.test(groupName(option)),
       );
+    // "Not a protected veteran" is true of someone who never served and of
+    // a veteran outside the protected groups, and a list may word the two
+    // apart: Philips' offered "I am a veteran but do not fall under the
+    // protected classifications" and "I have no military experience", and
+    // the first was chosen for someone who never served (report 2d320e91,
+    // 2026-11-04). The saved military answer decides; without it, only a
+    // wording that says neither is taken.
+    if (demographic === "veteranStatus" && answer === "No") {
+      const neverServed = (option: string) => /\b(no (prior )?military|never served|not a veteran|have not served|no service)\b/i.test(option);
+      const served = (option: string) => /\bi (am|identify as) an? (\w+ )?veteran\b/i.test(option);
+      const military = plainAnswer(profile.answers.find((saved) => questionTopic(saved.question) === "military")?.answer);
+      if (military === "No") {
+        const never = choices.filter(neverServed);
+        choices = never.length ? never : choices.filter((option) => !served(option));
+      } else if (military === "Yes") choices = choices.filter((option) => !neverServed(option));
+      else choices = choices.filter((option) => !served(option) && !neverServed(option));
+    }
     // Only options that read as a plain decline; the generic decline match
     // would also take one that states a group.
     if (answer === "Decline")
@@ -1054,7 +1189,14 @@ export function profileAnswer(
         .replace(/\b(in )?the country or jurisdiction (where|in which) the (position|role|job) (to which|for which) you are applying is located\b/, "")
         // "…to legally work in the location associated with this job posting"
         // (Epic Games' form, 2026-10-14) names none either.
-        .replace(/\b(in )?the (location|region|geographic region|country)( associated with| of| specified for| for) (this|the) (job|role|position|posting|job posting|internship)\b/, ""),
+        .replace(/\b(in )?the (location|region|geographic region|country)( associated with| of| specified for| for) (this|the) (job|role|position|posting|job posting|internship)\b/, "")
+        // "…in the country/region you are applying for?" (Microsoft's
+        // careers site, report ae0e9ee8, 2026-11-04).
+        .replace(/\b(in )?the country (or )?region (you are|you re|that you are) applying (for|to)\b/, "")
+        // "…to work in that country? e.g. (work permit)" follows "…in the
+        // country where this position is located?" (NVIDIA's Workday,
+        // report 8ca807c1, 2026-11-04): the job's country again.
+        .replace(/\b(in )?that country\b/, ""),
     );
   if (screening && (field.options.length || remoteBinary)) {
     const answer = authorizationAnswer(profile, askedPart(field.label), screening.field);
@@ -1099,8 +1241,15 @@ export function profileAnswer(
         if (!supported) return;
       }
     }
+    // A list that words it "Authorized" / "Not Authorized" (Axiom Space's
+    // Workday, report 0197354d, 2026-11-04) is the same Yes and No.
+    const said = screening.invert ? (answer === "Yes" ? "No" : "Yes") : answer;
+    if (screening.field === "workAuthorization" && !screening.invert) {
+      const worded = field.options.find((option) => said === "Yes" ? /^\s*authori[sz]ed\s*$/i.test(option) : /^\s*not authori[sz]ed\s*$/i.test(option));
+      if (worded) return { value: worded };
+    }
     return {
-      value: screening.invert ? (answer === "Yes" ? "No" : "Yes") : answer,
+      value: said,
       choices: screening.field === "sponsorship" && !screening.invert && answer === "No" && aboutUS
         ? ["I do not and will not require sponsorship at any point in the future in order to work in the US"] : undefined,
     };
@@ -1268,13 +1417,22 @@ function ownProposals(fields: Field[], profile: Profile): Proposal[] {
     // beside a list holding the school, it reads as two answers (Expand
     // Energy, 2026-10-29).
     if (/^if other\b/.test(normalize(field.label))) return [];
+    // One box of a "select all that apply" list is a choice, not a
+    // question of its own: Databricks' sanctions list had "Ordinarily a
+    // resident of Russia or Belarus and not willing to relocate…" ticked as a
+    // relocation question, and its follow-up's "U.S. citizen" as one of
+    // citizenship (2026-11-08). Such lists are read as what they are (see
+    // listChoice); other legal lists, and those depending on an earlier
+    // answer, are the applicant's.
+    const choice = listChoice(field, profile);
+    if (choice === "leave") return [];
     if (
       field.protected ||
       (field.value && !field.siteValue) ||
       /file|password|hidden/.test(field.kind)
     )
       return [];
-    const special = profileAnswer(field, profile);
+    const special = choice || profileAnswer(field, profile);
     let answer: Answer | undefined =
       special ||
       (() => {
@@ -1285,12 +1443,16 @@ function ownProposals(fields: Field[], profile: Profile): Proposal[] {
       // A second line the site kept belongs to the address it kept, not to
       // the profile's, which has none: under the profile's street it is
       // wrong, so it is emptied.
-      if (
-        !field.siteValue ||
-        !profile.address ||
-        !secondAddressLine.test(normalize(field.label))
-      )
-        return [];
+      const keptSecondLine = Boolean(profile.address) && secondAddressLine.test(normalize(field.label));
+      // A job the profile says was remote has no place: a city the site's
+      // parser gave it is another job's ("Hyderabad" under a remote job,
+      // AMD's iCIMS, report d9900f7d, 2026-11-07), so it is emptied.
+      const section = normalize(field.section || "");
+      const remotePlace = !/education/.test(section) && /experience|employment|work|job/.test(section) &&
+        /^\s*remote\s*$/i.test(profile.work[field.index || 0]?.location || "") &&
+        /^(city|(street )?address( line)?( 1| one)?|state|province|county|(zip|postal)( code)?( zip)?)$/.test(normalize(field.label)) &&
+        field.kind !== "select" && field.kind !== "combobox";
+      if (!field.siteValue || !(keptSecondLine || remotePlace)) return [];
       answer = { value: "" };
     }
     if (
@@ -1393,6 +1555,11 @@ export function postingGuess(raw: string): string | undefined {
   try {
     const url = new URL(raw);
     if (!/^https?:$/.test(url.protocol)) return;
+    // A careers site that applies at /careers/apply?pid=<id> shows the job
+    // at /careers/job/<id> (Microsoft's, report bce03da9, 2026-11-04).
+    const pid = url.searchParams.get("pid");
+    if (/\/careers\/apply\/?$/i.test(url.pathname) && pid && /^\d{6,}$/.test(pid))
+      return `${url.origin}${url.pathname.replace(/\/apply\/?$/i, "")}/job/${pid}`;
     const path = url.pathname.replace(/\/(apply|application)\/?$/i, "");
     if (path === url.pathname || path.replace(/\//g, "").length < 2) return;
     url.pathname = path;
@@ -1441,4 +1608,68 @@ export function canonicalURL(raw: string): string {
     if (/^(utm_|ref$|source$|gh_src$)/i.test(key)) url.searchParams.delete(key);
   url.searchParams.sort();
   return url.href;
+}
+
+// The applicant's years of work: the months the profile's jobs cover, each
+// month once however many jobs share it, up to this month.
+function totalWorkYears(profile: Profile): number | undefined {
+  const now = currentMonth();
+  const months = new Set<string>();
+  for (const row of profile.work) {
+    const start = /^\d{4}-\d{2}/.test(row.startDate || "") ? row.startDate.slice(0, 7) : "";
+    const end = /^\d{4}-\d{2}/.test(row.endDate || "") ? row.endDate.slice(0, 7) : row.current || !row.endDate ? now : "";
+    if (!start || !end) continue;
+    let [year, month] = start.split("-").map(Number);
+    for (let guard = 0; guard < 720; guard++) {
+      const key = `${year}-${String(month).padStart(2, "0")}`;
+      if (key > end || key > now) break;
+      months.add(key);
+      month++;
+      if (month > 12) (month = 1), year++;
+    }
+  }
+  return months.size ? Math.round((months.size / 12) * 10) / 10 : undefined;
+}
+
+// Places under U.S. sanctions that such lists name.
+const sanctionedPlaces = /\b(cuba|iran|north korea|syria|russia|belarus|crimea|donetsk|luhansk|zaporizhzhia|kherson|venezuela)\b/;
+const sanctionedCodes = new Set(["CU", "IR", "KP", "SY", "RU", "BY", "VE"]);
+// Whether the applicant is tied to a sanctioned place by citizenship or
+// residence; undefined when the profile does not say where they live and
+// what they are a citizen of.
+function sanctionedTie(profile: Profile): boolean | undefined {
+  const citizenships = (profile.citizenships || []).map((code) => String(code).toUpperCase());
+  const places = [profile.country || "", ...(profile.workAuthorization || []).map((entry) => (typeof entry === "string" ? entry : entry.country || ""))];
+  if (!profile.country || !citizenships.length) return undefined;
+  if (citizenships.some((code) => sanctionedCodes.has(code) || sanctionedPlaces.test(normalize(code)))) return true;
+  return places.some((place) => sanctionedCodes.has(place.toUpperCase()) || sanctionedPlaces.test(normalize(place)));
+}
+
+// One box of a "select all that apply" list about sanctions or export
+// control: for an applicant with no tie to a sanctioned place, only "None
+// of the above" is theirs, and in the follow-up asked only of those who
+// chose something else, only its "Not applicable". "leave" for a box that
+// is not the fill's to tick or clear; undefined for a box of any other list.
+// Whether the fill answers this box's list itself (see listChoice).
+export function listAnswered(field: Field, profile: Profile): boolean {
+  const choice = listChoice(field, profile);
+  return Boolean(choice && choice !== "leave");
+}
+function listChoice(field: Field, profile: Profile): Answer | "leave" | undefined {
+  if (field.kind !== "checkbox" || !field.question) return undefined;
+  const asked = normalize(field.question);
+  const option = normalize(field.label.startsWith(field.question) ? field.label.slice(field.question.length) : field.label);
+  const sanctions = /\b(sanction\w*|export control\w*|embargo\w*)\b/.test(asked);
+  const afterNone = /\bother than\b.{0,12}\bnone of the above\b/.test(asked);
+  if (sanctions || afterNone) {
+    if (sanctionedTie(profile) !== false) return "leave";
+    const none = afterNone
+      ? /\bnot applicable\b|\bselected none of the above\b/.test(option)
+      : /^none of (the above|these)\b/.test(option);
+    // Every other box unticked: one an earlier fill ticked by mistake, or
+    // the site parsed, is cleared (an applicant's own tick is locked).
+    return { value: none ? "Yes" : "No" };
+  }
+  if (legalQuestion(field.question) || /\b(prior|previous|above) question\b|\bif you (selected|answered|chose|checked)\b/.test(asked)) return "leave";
+  return undefined;
 }

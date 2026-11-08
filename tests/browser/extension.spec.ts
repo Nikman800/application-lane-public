@@ -77,6 +77,7 @@ const avatureOrigin = "https://acme.avature.net";
 const breezyOrigin = "https://acme.breezy.hr";
 const ripplingOrigin = "https://ats.rippling.com";
 const teslaOrigin = "https://www.tesla.com";
+const smartRecruitersOrigin = "https://jobs.smartrecruiters.com";
 // Pages the fixture server itself serves, for tabs the extension opens: a
 // Playwright route does not reach those.
 const fixturePages = new Map<string, string>();
@@ -249,7 +250,7 @@ test.beforeEach(async () => {
   // A disposable installation pre-grants only our intercepted ATS fixture
   // origins, equivalent to accepting the production extension's access prompt.
   const extensionPath = await scratch("lane-extension-");
-  await cp(resolve("dist/extension"), extensionPath, { recursive: true });
+  await cp(resolve(process.env.LANE_EXTENSION_DIR || "dist/extension"), extensionPath, { recursive: true });
   const manifest = JSON.parse(
     await readFile(join(extensionPath, "manifest.json"), "utf8"),
   );
@@ -268,7 +269,7 @@ test.beforeEach(async () => {
       backendOrigin,
     ),
   );
-  manifest.host_permissions.push(...[...atsOrigins, oracleOrigin, workableOrigin, sapsfOrigin, adpOrigin, talNetOrigin, amazonOrigin, paylocityOrigin, jazzOrigin, avatureOrigin, breezyOrigin, ripplingOrigin, teslaOrigin, "https://smartapply.indeed.com", "https://www.linkedin.com"].map((origin) => `${origin}/*`));
+  manifest.host_permissions.push(...[...atsOrigins, oracleOrigin, workableOrigin, sapsfOrigin, adpOrigin, talNetOrigin, amazonOrigin, paylocityOrigin, jazzOrigin, avatureOrigin, breezyOrigin, ripplingOrigin, teslaOrigin, smartRecruitersOrigin, "https://smartapply.indeed.com", "https://www.linkedin.com"].map((origin) => `${origin}/*`));
   await writeFile(
     join(extensionPath, "manifest.json"),
     JSON.stringify(manifest),
@@ -532,6 +533,36 @@ for (const transport of ["missing receiver", "removed frame"] as const) {
     expect(await page.frameLocator("iframe").locator("body").evaluate(() => (window as any).submissions)).toBe(0);
   });
 }
+
+test("an empty embedded frame the page removed is no failed upload", async () => {
+  // Microsoft's careers page embeds a near-empty export frame for its profile
+  // and removes it; the site rule's uploads sent there failed with "Receiving
+  // end does not exist", reported as a résumé and cover letter that did not
+  // upload, while the résumé was in (2026-11-07).
+  const markup = '<form><label>First name<input name="firstName" required></label><label>Email<input name="email" required></label><label>Resume<input type="file" name="resume"></label><button type="submit">Submit application</button></form><iframe src="/profile-export-frame"></iframe><script>window.submissions=0;document.querySelector("form").addEventListener("submit",e=>{e.preventDefault();window.submissions++})</script>';
+  await context.route(`${origin}/export-frame-shell`, route => route.fulfill({ contentType: "text/html", body: markup }));
+  await context.route(`${origin}/profile-export-frame`, route => route.fulfill({ contentType: "text/html", body: "<html><head></head><body></body></html>" }));
+  const page = await context.newPage();
+  await page.goto(`${origin}/export-frame-shell`);
+  const tabId = await panel.evaluate(async url => (await chrome.tabs.query({})).find(tab => tab.url === url)!.id!, page.url());
+  await worker.evaluate((tabId) => {
+    const original = chrome.tabs.sendMessage.bind(chrome.tabs);
+    (globalThis as any).__frameUploads = 0;
+    chrome.tabs.sendMessage = (async (...args: any[]) => {
+      if (args[0] === tabId && args[1]?.type === "CONFIG_FILL" && args[1]?.uploads && args[2]?.frameId !== 0) {
+        (globalThis as any).__frameUploads++;
+        throw Error("Could not establish connection. Receiving end does not exist.");
+      }
+      return original(...args as Parameters<typeof chrome.tabs.sendMessage>);
+    }) as typeof chrome.tabs.sendMessage;
+  }, tabId);
+  await enqueue([page]);
+  await expect.poll(async () => (await state()).applications[0]?.status, { timeout: 45000 }).toMatch(/^(awaiting-user|ready)$/);
+  await expect(page.locator("[name=firstName]")).toHaveValue(profile.firstName);
+  expect(await worker.evaluate(() => (globalThis as any).__frameUploads)).toBe(0);
+  expect((await state()).applications[0].missing.join(" ")).not.toMatch(/upload did not finish/i);
+  expect(await page.evaluate(() => (window as any).submissions)).toBe(0);
+});
 
 for (const replacement of ["different URL", "ambiguous exact URLs"] as const) {
   test(`inspection recovery refuses a replacement with ${replacement}`, async () => {
@@ -1758,6 +1789,192 @@ test("a Workday field of study that searches only on a real Enter in the focused
   await expect(page.locator('[data-automation-id="selectedItem"]')).toHaveText(["Data Science"]);
 });
 
+// Sonos's Workday (report 2664c069, 2026-11-04): each skill was typed and
+// its search never ran (real keys, then the box blurred before Enter), so
+// each waited five seconds for nothing, and the Websites after them were
+// never reached before the applicant gave up.
+test("Workday skills searched only on a real Enter in the focused box are each picked", async () => {
+  test.setTimeout(120_000);
+  const workdayOrigin = atsOrigins[0];
+  await ui({ type: "API", path: "/v1/profile", method: "PUT", body: { ...profile, skills: ["Python", "SQL", "PyTorch", "C++", "NumPy", "C#", "Dart"] } });
+  await context.route(`${workdayOrigin}/**`, (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: `<!doctype html><main data-automation-id="applyFlowMyExpPage" id="mainContent">
+        <div role="group" aria-labelledby="Skills-section"><h4 id="Skills-section">Skills</h4>
+          <div data-automation-id="formField-skills"><label for="skills--skills">Type to Add Skills</label>
+            <div data-automation-id="multiSelectContainer" data-uxi-widget-type="multiselect"><div data-automation-id="multiselectInputContainer">
+              <input id="skills--skills" placeholder="Search" data-uxi-widget-type="selectinput"></div></div></div></div>
+      </main><script>
+        // NVIDIA's lists "numpy" in lower case, and "C++" is typed as real keys
+          // like the rest (2026-11-04).
+          // Axiom Space's library names "C#" and "SQL" its own way (2026-11-04).
+          const known = ["Python", "Python (Programming Language)", "Structured Query Language (SQL)", "SQL Design", "PyTorch", "Pytorch Lightning", "C++", "numpy", "Python Numpy", "C Sharp (Programming Language)", "Unity C#", "Dart"];
+          const searchFor = { "c#": "c sharp" };
+        const input = document.getElementById('skills--skills');
+        const container = input.closest('[data-automation-id="multiSelectContainer"]');
+        // A press on the page closes the results, as Workday's does.
+        document.getElementById('mainContent').addEventListener('mousedown', (event) => {
+          if (!event.target.closest('[data-automation-id="multiSelectContainer"]')) document.querySelector('[data-automation-activepopup="true"]')?.remove();
+        });
+        input.addEventListener('keydown', (event) => {
+          if (event.key !== 'Enter' || !event.isTrusted || document.activeElement !== input) return;
+          event.preventDefault();
+          const typed = input.value.toLowerCase();
+          // Sonos's search answers after a second or more, the last search's
+          // results showing until then in the list the box names.
+          setTimeout(() => {
+            document.querySelector('[data-automation-activepopup="true"]')?.remove();
+            const box = document.createElement('div');
+            box.setAttribute('data-automation-activepopup', 'true');
+            input.setAttribute('aria-expanded', 'true');
+            input.setAttribute('aria-controls', 'skill-results');
+            box.innerHTML = '<div id="skill-results" role="listbox" data-automation-id="activeListContainer" tabindex="-1">' + known.filter((name) => name.toLowerCase().includes(typed) || name.toLowerCase().includes(searchFor[typed] || typed)).map((name, n) => '<div id="menuItem-' + n + '" role="option" aria-label="' + name + ' not checked"><div data-automation-id="promptLeafNode"><input type="radio" tabindex="-1"><div data-automation-id="promptOption">' + name + '</div></div></div>').join('') + '</div>';
+            document.body.append(box);
+            box.querySelector('[role="listbox"]').focus();
+            // Axiom Space's: one match is added at once, and a click on an
+            // entry already added takes it off again.
+            const toggle = (name) => {
+              const existing = [...container.querySelectorAll('[data-automation-id="selectedItem"]')].find((item) => item.textContent === name);
+              if (existing) return existing.remove();
+              const selected = document.createElement('div');
+              selected.setAttribute('data-automation-id', 'selectedItem');
+              selected.textContent = name;
+              container.insertBefore(selected, container.firstChild);
+            };
+            const leaves = box.querySelectorAll('[data-automation-id="promptLeafNode"]');
+            if (leaves.length === 1) toggle(leaves[0].textContent);
+            for (const leaf of leaves)
+              leaf.addEventListener('click', () => setTimeout(() => toggle(leaf.textContent), 150));
+          }, 1600);
+        });
+      </script>`,
+    }),
+  );
+  const page = await context.newPage();
+  await page.goto(`${workdayOrigin}/en-US/acme/job/skills-search`);
+  await panel.bringToFront();
+  await background(page);
+  const started = Date.now();
+  await enqueue([page]);
+  await expect(page.locator('[data-automation-id="selectedItem"]')).toHaveCount(7, { timeout: 60_000 });
+  expect((await page.locator('[data-automation-id="selectedItem"]').allTextContents()).sort()).toEqual(["C Sharp (Programming Language)", "C++", "Dart", "PyTorch", "Python", "Structured Query Language (SQL)", "numpy"]);
+  // Nor is the last search's list left open over the form (Axiom Space, its
+  // last skill picked by the search itself, 2026-11-04).
+  await expect(page.locator('[data-automation-activepopup="true"]')).toHaveCount(0);
+  expect(Date.now() - started).toBeLessThan(40_000);
+});
+
+// NVIDIA's Workday (report 7aa68732, 2026-11-04): its search for "Computer
+// Science" answered five fields, but the list drew only the two rows in view,
+// and "Computer Science", third, was never on the page: the closest field
+// drawn was picked instead.
+test("a Workday field of study further down a list that draws only the rows in view is still picked", async () => {
+  const workdayOrigin = atsOrigins[0];
+  await ui({ type: "API", path: "/v1/profile", method: "PUT", body: { ...profile, education: [{ organization: "Virginia Tech", title: "Bachelors of Science", fieldOfStudy: "Computer Science", startDate: "2020-09", endDate: "2024-06", location: "Blacksburg, VA", details: "" }] } });
+  await context.route(`${workdayOrigin}/**`, (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: `<!doctype html><main data-automation-id="applyFlowMyExpPage">
+        <div data-automation-id="education-1" role="group"><div data-automation-id="formField-fieldOfStudy">
+          <label for="education-1--fieldOfStudy">Field of Study</label>
+          <div data-automation-id="multiSelectContainer" data-uxi-widget-type="multiselect"><div data-automation-id="multiselectInputContainer">
+            <input id="education-1--fieldOfStudy" placeholder="Search" data-uxi-widget-type="selectinput"></div></div></div></div>
+      </main><script>
+        const results = ["Computational Science & Engineering", "Computer & Info Science", "Computer Science", "Computer Science & Engin.", "Electrical Engineering and Computer Science"];
+        const input = document.getElementById('education-1--fieldOfStudy');
+        const container = input.closest('[data-automation-id="multiSelectContainer"]');
+        input.addEventListener('keydown', (event) => {
+          if (event.key !== 'Enter' || !event.isTrusted) return;
+          event.preventDefault();
+          setTimeout(() => {
+            document.querySelector('[data-automation-activepopup="true"]')?.remove();
+            const box = document.createElement('div');
+            box.setAttribute('data-automation-activepopup', 'true');
+            // Two rows of 32px in view, drawn again as the list scrolls.
+            box.innerHTML = '<div role="listbox" data-automation-id="activeListContainer" class="ReactVirtualized__Grid ReactVirtualized__List" style="height: 64px; overflow: auto; position: relative"><div class="inner" style="height: ' + results.length * 32 + 'px; position: relative"></div></div>';
+            document.body.append(box);
+            const grid = box.firstElementChild;
+            const inner = grid.firstElementChild;
+            const draw = () => {
+              const first = Math.floor(grid.scrollTop / 32);
+              inner.innerHTML = results.slice(first, first + 2).map((name, n) => '<div role="option" style="position: absolute; top: ' + (first + n) * 32 + 'px; height: 32px" aria-label="' + name + ' not checked"><div data-automation-id="promptLeafNode"><div data-automation-id="promptOption">' + name + '</div></div></div>').join('');
+              for (const leaf of inner.querySelectorAll('[data-automation-id="promptLeafNode"]'))
+                leaf.addEventListener('click', () => {
+                  const selected = document.createElement('div');
+                  selected.setAttribute('data-automation-id', 'selectedItem');
+                  selected.textContent = leaf.textContent;
+                  container.insertBefore(selected, container.firstChild);
+                  input.value = '';
+                  box.remove();
+                });
+            };
+            grid.addEventListener('scroll', draw);
+            draw();
+          }, 300);
+        });
+      </script>`,
+    }),
+  );
+  const page = await context.newPage();
+  await page.goto(`${workdayOrigin}/en-US/acme/job/field-of-study-virtual-list`);
+  await panel.bringToFront();
+  await background(page);
+  await enqueue([page]);
+  await expect(page.locator('[data-automation-id="selectedItem"]')).toHaveText(["Computer Science"], { timeout: 60_000 });
+});
+
+// Axiom Space's Workday (2026-11-04): the school was typed, the box lost
+// focus before its Enter, and the search never ran; every wording waited out
+// its five seconds and the school was left unpicked.
+test("a Workday school searched only on a real Enter in the focused box is picked", async () => {
+  const workdayOrigin = atsOrigins[0];
+  await ui({ type: "API", path: "/v1/profile", method: "PUT", body: { ...profile, education: [{ organization: "Michigan State University", title: "Masters of Science", fieldOfStudy: "Data Science", startDate: "2025-08", endDate: "2027-05", location: "East Lansing, MI", details: "" }] } });
+  await context.route(`${workdayOrigin}/**`, (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: `<!doctype html><main data-automation-id="applyFlowMyExpPage">
+        <div data-automation-id="education-1" role="group"><div data-automation-id="formField-school">
+          <label for="education-1--school">School or University</label>
+          <div data-automation-id="multiSelectContainer" data-uxi-widget-type="multiselect"><div data-automation-id="multiselectInputContainer">
+            <input id="education-1--school" placeholder="Search" data-uxi-widget-type="selectinput"></div></div></div></div>
+      </main><script>
+        const schools = ["Michigan State University", "Michigan State University College of Law", "Michigan Technological University"];
+        const input = document.getElementById('education-1--school');
+        const container = input.closest('[data-automation-id="multiSelectContainer"]');
+        input.addEventListener('keydown', (event) => {
+          if (event.key !== 'Enter' || !event.isTrusted || document.activeElement !== input) return;
+          event.preventDefault();
+          const typed = input.value.toLowerCase();
+          setTimeout(() => {
+            document.querySelector('[data-automation-activepopup="true"]')?.remove();
+            const box = document.createElement('div');
+            box.setAttribute('data-automation-activepopup', 'true');
+            box.innerHTML = '<div role="listbox" data-automation-id="activeListContainer" tabindex="-1">' + schools.filter((name) => name.toLowerCase().includes(typed)).map((name) => '<div role="option" aria-label="' + name + ' not checked"><div data-automation-id="promptLeafNode"><div data-automation-id="promptOption">' + name + '</div></div></div>').join('') + '</div>';
+            document.body.append(box);
+            box.querySelector('[role="listbox"]').focus();
+            for (const leaf of box.querySelectorAll('[data-automation-id="promptLeafNode"]'))
+              leaf.addEventListener('click', () => setTimeout(() => {
+                const selected = document.createElement('div');
+                selected.setAttribute('data-automation-id', 'selectedItem');
+                selected.textContent = leaf.textContent;
+                container.insertBefore(selected, container.firstChild);
+                input.value = '';
+                box.remove();
+              }, 150));
+          }, 400);
+        });
+      </script>`,
+    }),
+  );
+  const page = await context.newPage();
+  await page.goto(`${workdayOrigin}/en-US/acme/job/school-search`);
+  await panel.bringToFront();
+  await background(page);
+  await enqueue([page]);
+  await expect(page.locator('[data-automation-id="selectedItem"]')).toHaveText(["Michigan State University"], { timeout: 60_000 });
+});
+
 test("a Workday field of study the site's own list lacks goes straight to the closest field it lists", async () => {
   test.setTimeout(150_000);
   const workdayOrigin = atsOrigins[0];
@@ -2236,8 +2453,14 @@ test("Workday questionnaire dropdowns answer standard questions by their wording
   await expect(page.locator("#q-auth")).toHaveText("Yes");
   await expect(page.locator("#q-spons")).toHaveText("No");
   await expect(page.locator("#q-employed")).toHaveText("No");
-  // Employer-specific questions stay with the applicant.
+  // Employer-specific questions stay with the applicant, listed as required:
+  // the legend's asterisk and the button's "Required" say so (KLA's OPT
+  // questions were listed as optional, 2026-11-04).
   await expect(page.locator("#q-relatives")).toHaveText("Select One");
+  await expect.poll(async () => (await state()).applications.at(-1)?.status, { timeout: 30_000 }).toMatch(/ready|awaiting-user/);
+  const missing = (await state()).applications.at(-1)!.missing;
+  expect(missing.some((item) => /^Required: Do you have any relatives/.test(item))).toBe(true);
+  expect(missing.filter((item) => /^Optional unanswered:/.test(item))).toEqual([]);
 });
 
 test("captured Workday questions fill only confirmed standard answers", async () => {
@@ -2713,6 +2936,38 @@ test("Workday shared resume uploader attaches the cover letter its instructions 
   const cover = (await content(page, { type: "INSPECT" })).data.fields.find((field: { documentKind?: string }) => field.documentKind === "cover");
   expect(cover).toMatchObject({ protected: false, value: expect.stringMatching(/\.pdf$/), attachmentId: expect.any(String) });
   expect((await state()).applications[0].missing).not.toContain("Verify upload: Cover letter");
+});
+
+// Leidos's Workday (report 7dd8aa83, 2026-11-07): the group asks for "any
+// additional documents (e.g. cover letter, …)". The résumé's upload left
+// focus on the "Select files" button, the cover letter's slot, and the
+// cover letter was refused as a field in use.
+test("Workday's shared uploader takes the cover letter after the résumé's upload leaves focus on its button", async () => {
+  await context.route(`${atsOrigins[0]}/**`, (route) => route.fulfill({
+    contentType: "text/html",
+    body: `<!doctype html><main data-automation-id="applicationPage">
+      <div role="group" aria-labelledby="Resume-/-CV-/-Cover-Letter-/-Other-Attachments-section"><h4 id="Resume-/-CV-/-Cover-Letter-/-Other-Attachments-section">Resume / CV / Cover Letter / Other Attachments</h4><div><div data-automation-id="instructionalText"><ul><li><span>Upload resume/CV or any additional documents (e.g. cover letter, certifications, etc.) </span></li></ul></div></div><div data-automation-id="instructional-spacer"></div><div data-fkit-id="resumeAttachments--null"><p><div data-automation-id="formField-" data-fkit-id="resumeAttachments--attachments"><label id="label110">Upload a file (5MB max)</label><div><div><div data-automation-id="attachments-FileUpload" aria-labelledby="label110"><div><div data-automation-id="file-upload-drop-zone"><div>Drop files here</div><div><div>or</div><button type="button" data-automation-id="select-files" id="resumeAttachments--attachments"><span>Select files</span></button></div></div><input data-automation-id="file-upload-input-ref" type="file" multiple=""></div><div id="files"></div></div></div></div></div></p></div></div></main><script>
+      document.querySelector('input').onchange = event => {
+        for (const file of event.target.files) {
+          const item = document.createElement('div'); item.dataset.automationId = 'file-upload-item';
+          const name = document.createElement('div'); name.dataset.automationId = 'file-upload-item-name'; name.textContent = file.name;
+          item.append(name); document.querySelector('#files').append(item);
+        }
+        event.target.value = '';
+        // As Workday does once a file is taken: focus returns to its button.
+        document.getElementById('resumeAttachments--attachments').focus();
+      };
+      </script>`,
+  }));
+  const page = await context.newPage();
+  await page.goto(`${atsOrigins[0]}/en-US/acme/job/leidos-documents`);
+  await panel.bringToFront();
+  await background(page);
+  await enqueue([page]);
+  await expect.poll(async () => (await state()).applications[0]?.status, { timeout: 40_000 }).toMatch(/ready|awaiting-user/);
+  await expect(page.locator('#files')).toContainText(/resume/i);
+  await expect(page.locator('#files')).toContainText(/cover/i);
+  expect((await state()).applications[0].missing.join(" ")).not.toContain("Stale or mismatched");
 });
 
 // RTX's Workday (report fa24093e, 2026-11-02): the same uploader under
@@ -3963,6 +4218,65 @@ test("legacy opaque edit locks protect cleared fields after improved label detec
   await expect(page.locator("textarea")).toHaveValue("");
 });
 
+// LinkedIn's SmartRecruiters screening page (2026-11-04): an answer planned
+// before its list was read ("No") failed, and the one planned after it ("Not
+// Applicable") was skipped as "already failed in this fill".
+test("a field that failed one answer still takes another in the same fill", async () => {
+  const page = await context.newPage();
+  await page.goto(`${origin}/retried-answer`);
+  await page.evaluate(() => {
+    document.querySelector("form")!.innerHTML =
+      '<label>Have you previously worked at Acme?<select name="past"><option value="">Select…</option><option>Not Applicable</option><option>I previously worked at Acme</option></select></label>';
+  });
+  await panel.bringToFront();
+  const tabId = await panel.evaluate(async (url) => (await chrome.tabs.query({})).find((t) => t.url === url)!.id!, page.url());
+  await worker.evaluate(async (tabId) => chrome.scripting.executeScript({ target: { tabId }, files: ["content.js"] }), tabId);
+  const applicationId = crypto.randomUUID();
+  const bound = await content(page, { type: "BIND", applicationId, operation: 1, locks: [] });
+  const field = bound.data.fields.find((candidate: { label: string }) => /previously worked/.test(candidate.label));
+  const apply = (value: string) => content(page, {
+    type: "APPLY",
+    applicationId,
+    operation: 1,
+    documentId: bound.data.documentId,
+    proposals: [{ fieldId: field.id, revision: field.revision, expectedValue: "", value, source: "fixture" }],
+  });
+  expect((await apply("No")).data.results[0].ok).toBe(false);
+  // The same answer again is still skipped.
+  expect((await apply("No")).data.results[0].reason).toContain("already failed in this fill");
+  expect((await apply("Not Applicable")).data.results[0].ok).toBe(true);
+  await expect(page.locator("select")).toHaveValue("Not Applicable");
+});
+
+// SmartRecruiters' <label>s hold only whitespace around a slot: every field
+// read ":0:" under its older label, and one lock saved under it left a whole
+// screening step unfilled (LinkedIn, 2026-11-05).
+test("a lock with no label holds no field", async () => {
+  const page = await context.newPage();
+  await page.goto(`${origin}/labelless-lock`);
+  await page.evaluate(() => {
+    document.querySelector("form")!.innerHTML =
+      '<spl-input id="name-field"><span slot="label-content">Your Name</span></spl-input>';
+    const host = document.getElementById("name-field")!;
+    host.attachShadow({ mode: "open" }).innerHTML = '<label for="name"> <slot name="label-content"></slot> </label><input id="name" type="text">';
+  });
+  await panel.bringToFront();
+  const tabId = await panel.evaluate(async (url) => (await chrome.tabs.query({})).find((t) => t.url === url)!.id!, page.url());
+  await worker.evaluate(async (tabId) => chrome.scripting.executeScript({ target: { tabId }, files: ["content.js"] }), tabId);
+  const applicationId = crypto.randomUUID();
+  const bound = await content(page, { type: "BIND", applicationId, operation: 1, locks: [":0:"] });
+  const field = bound.data.fields.find((candidate: { label: string }) => candidate.label === "Your Name");
+  expect(field).toMatchObject({ protected: false });
+  const result = await content(page, {
+    type: "APPLY",
+    applicationId,
+    operation: 1,
+    documentId: bound.data.documentId,
+    proposals: [{ fieldId: field.id, revision: field.revision, expectedValue: "", value: "Alex Rivera", source: "fixture" }],
+  });
+  expect(result.data.results[0].ok).toBe(true);
+});
+
 test("a lock saved without a section does not hold every row of a section", async () => {
   const page = await context.newPage();
   await page.goto(`${origin}/sectioned-lock`);
@@ -4106,6 +4420,10 @@ test("an answer given by hand on two applications is offered to save", async () 
         <label>First name<input name="firstName" required></label>
         <label>How did you hear about us?<input id="hear" name="hear"></label>
         <label>Preferred work shift<input id="shift" name="shift"></label>
+        <label>Internship length<select id="months" name="months"><option value="">Select</option><option value="3_to_6_months">3 to 6 months</option><option value="7_months_or_more">7 months or more</option></select></label>
+        <fieldset><legend>Office</legend>
+          <label><input type="radio" name="office" value="65f5e6fd-0ec6-423a-bc28-401ef04b6d76">Foster City</label>
+          <label><input type="radio" name="office" value="0b1c2d3e-0ec6-423a-bc28-401ef04b6d76">Boston</label></fieldset>
         <button type="submit">Submit application</button></form></main>`,
     }),
   );
@@ -4125,7 +4443,24 @@ test("an answer given by hand on two applications is offered to save", async () 
   await pages[0].fill("#shift", "Day");
   await pages[1].fill("#hear", "LinkedIn");
   await pages[1].fill("#shift", "Day");
-  await expect.poll(async () => (await ui({ type: "RECURRING_ANSWERS" })).map((item: { question: string }) => item.question).sort(), { timeout: 15_000 }).toEqual(["How did you hear about us?", "Preferred work shift"]);
+  // A list and a radio group are kept by the text picked, not their hidden
+  // values ("7_months_or_more", an office's id).
+  for (const page of pages) {
+    // Real keys: selectOption's events are not trusted, so not the applicant's.
+    await page.focus("#months");
+    await page.keyboard.press("ArrowDown");
+    await page.keyboard.press("ArrowDown");
+    await expect(page.locator("#months")).toHaveValue("7_months_or_more");
+    await page.getByLabel("Foster City").check();
+  }
+  await expect.poll(async () => (await ui({ type: "RECURRING_ANSWERS" })).map((item: { question: string; answer: string }) => `${item.question} = ${item.answer}`).sort(), { timeout: 15_000 }).toEqual([
+    "How did you hear about us? = LinkedIn",
+    "Internship length = 7 months or more",
+    "Office = Foster City",
+    "Preferred work shift = Day",
+  ]);
+  for (const question of ["Internship length", "Office"])
+    await ui({ type: "DISMISS_RECURRING_ANSWER", key: (await ui({ type: "RECURRING_ANSWERS" })).find((item: { question: string }) => item.question === question).key });
   // The first name is the profile's, never offered. On the profile page, one
   // is saved and the other dismissed.
   await showDashboard("profile");
@@ -4215,9 +4550,58 @@ test("the command line fills a step and switches to its tab over the live line",
     await expect.poll(() => seen().some((status) => ["inspecting", "preparing", "filling"].includes(status)), { timeout: 10_000 }).toBe(true);
     await expect.poll(() => seen().at(-1), { timeout: 10_000 }).toBe((await state()).applications.find((item) => item.id === app.id)?.status);
     expect(await page.evaluate(() => (window as unknown as { submissions: number }).submissions)).toBe(0);
+    // Refresh puts the current build in its page (lane refresh) without
+    // reloading it, so nothing entered is lost (2026-11-07).
+    await expect.poll(async () => (await state()).applications.find((item) => item.id === app.id)!.status, { timeout: 30_000 }).not.toMatch(/^(inspecting|preparing|filling)$/);
+    await page.evaluate(() => ((window as unknown as { before: boolean }).before = true));
+    await page.locator('input[name="lastName"]').fill("Typed by hand");
+    expect(await send("refresh")).toMatchObject({ ok: true, detail: "Its page now runs the current build." });
+    expect(await page.evaluate(() => (window as unknown as { before?: boolean }).before)).toBe(true);
+    await expect(page.locator('input[name="lastName"]')).toHaveValue("Typed by hand");
     // An application that is not there is said so.
     socket.send(JSON.stringify({ type: "command", id: "missing", action: "fill", applicationId: "nope" }));
     await expect.poll(() => messages.find((message) => message.id === "missing")?.error).toMatch(/No such application/);
+  } finally {
+    socket.close();
+  }
+});
+
+// L3Harris's SuccessFactors page is the answer to a posted form: reloaded,
+// Chrome asked "Confirm Form Resubmission", and saying yes could repeat what
+// was sent; opened again at its one-time address, it showed only an error
+// (2026-11-07). The fixer's refresh does neither.
+test("lane refresh leaves a page a form posted to as it is, sending nothing again", async () => {
+  const { default: WebSocket } = await import("ws");
+  const methods: string[] = [];
+  await context.route(`${origin}/posted`, (route) => {
+    methods.push(route.request().method());
+    return route.fulfill({ contentType: "text/html", body: html("/posted") });
+  });
+  const page = await context.newPage();
+  await page.goto(`${origin}/posted`);
+  await page.evaluate((target) => {
+    const form = document.createElement("form");
+    form.method = "post";
+    form.action = target;
+    document.body.append(form);
+    form.submit();
+  }, `${origin}/posted`);
+  await expect.poll(() => methods).toEqual(["GET", "POST"]);
+  await panel.bringToFront();
+  const tabId = (await panel.evaluate(async () => chrome.tabs.query({}))).find((tab) => tab.url === `${origin}/posted`)!.id!;
+  await ui({ type: "TRACK_ITEMS", items: [{ url: `${origin}/posted`, tabId }] });
+  const app = (await state()).applications.find((item) => item.tabId === tabId)!;
+  const socket = new WebSocket(`ws://127.0.0.1:${(backend.address() as { port: number }).port}/v1/live`);
+  const messages: any[] = [];
+  socket.on("message", (data) => messages.push(JSON.parse(String(data))));
+  await new Promise<void>((resolve) => socket.on("open", () => (socket.send(JSON.stringify({ type: "auth", token })), resolve())));
+  try {
+    await expect.poll(() => messages.some((message) => message.type === "queue"), { timeout: 15_000 }).toBe(true);
+    socket.send(JSON.stringify({ type: "command", id: "refresh-posted", action: "refresh", applicationId: app.id }));
+    await expect.poll(() => messages.find((message) => message.id === "refresh-posted"), { timeout: 30_000 }).toMatchObject({ ok: true });
+    // Not reloaded and not opened again: L3Harris's address was a one-time
+    // one, and opening it again showed only an error (2026-11-07).
+    expect(methods).toEqual(["GET", "POST"]);
   } finally {
     socket.close();
   }
@@ -5966,6 +6350,8 @@ test("an Ashby checkbox question keeps its boxes together: each carries the ques
   expect(missing.filter((item) => /LinkedIn|Referral|New York|San Francisco|relocating/.test(item))).toEqual([]);
   // And the card marks each question left as required or optional.
   const card = panel.getByRole("article").first();
+  // The problems are folded until opened.
+  await card.getByLabel("Problems to resolve").locator("summary").click();
   await expect(card.getByLabel("Problems to resolve").getByRole("listitem").filter({ hasText: "How did you hear" }).locator(".question-mark")).toHaveText("Required");
   await expect(card.locator(".app-notes li").filter({ hasText: "communities do you belong to" }).locator(".question-mark")).toHaveText("Optional");
   const tabId = await panel.evaluate(async (url) => (await chrome.tabs.query({})).find((tab) => tab.url === url)!.id!, page.url());
@@ -7277,6 +7663,27 @@ test("recorded value changes caused by a click or typing are not marked direct",
   expect(recording.summary.directChanges).toBe(0);
 });
 
+// A tab brought to the front is named at once (2026-11-07): its read took
+// seconds while a fill ran, and the card meanwhile showed the tab left
+// behind, its buttons acting on that application.
+test("the current-tab card names a newly active tab while it is still being read", async () => {
+  const first = await context.newPage();
+  await first.goto(`${origin}/first-tab`);
+  await first.bringToFront();
+  await panel.getByRole("button", { name: "Scan current tab" }).click();
+  const card = panel.getByRole("region", { name: "Current browser tab" });
+  await expect(card).toContainText("Frontend Engineer /first-tab");
+  const second = await context.newPage();
+  await second.goto(`${origin}/second-tab`);
+  // The page is busy, so reading it takes seconds.
+  await second.evaluate(() => { setTimeout(() => { const until = Date.now() + 2500; while (Date.now() < until); }, 50); });
+  await second.bringToFront();
+  await expect(card).toContainText("Frontend Engineer /second-tab", { timeout: 1000 });
+  await expect(card).not.toContainText("/first-tab");
+  await second.close();
+  await first.close();
+});
+
 test("the current-tab card records and stops through its buttons", async () => {
   const page = await context.newPage();
   await page.goto(`${origin}/record-buttons`);
@@ -8565,6 +8972,40 @@ test("a SuccessFactors page fills ordinary names, keeps its signature manual and
   await ui({ type: "FILL_STEP", id: (await state()).applications[0].id });
   await expect.poll(async () => (await state()).applications[0].explicitFill, { timeout: 30000 }).toBe(false);
   await expect(page.locator('[name="custSign"]')).toHaveValue("Manually signed name");
+});
+
+// L3Harris's SuccessFactors application (report fcabe714, 2026-11-04): its
+// sections open folded behind their title bars, the form read as one
+// Language field, and nothing was filled.
+test("a SuccessFactors application's folded sections are opened and filled", async () => {
+  await context.route(`${sapsfOrigin}/**`, (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: `<!doctype html><title>Career Opportunities: Apply for Software Engineering Intern (46504)</title><main>
+        <label for="1:_lang">Language</label><select id="1:_lang"><option selected>English US</option></select>
+        <div id="147:section" class="rcmFormSection row">
+          <h2 class="sectionTitle rcmFormSectionTitle"><button id="147:topBar" class="topBar rcmFormSectionTopBar" aria-expanded="false"><span>Profile Information</span></button></h2>
+          <div class="rcmSectionComponent" hidden>
+            <label for="60:_txtFld">* First Name</label><input data-testid="sfTextField" name="firstName" id="60:_txtFld" type="text" aria-required="true">
+            <label for="68:_txtFld">* Last Name</label><input data-testid="sfTextField" name="lastName" id="68:_txtFld" type="text" aria-required="true">
+          </div>
+        </div>
+      </main><script>
+        for (const bar of document.querySelectorAll(".rcmFormSectionTopBar"))
+          bar.addEventListener("click", () => {
+            const open = bar.getAttribute("aria-expanded") === "true";
+            bar.setAttribute("aria-expanded", String(!open));
+            // The section's fields are drawn a moment after it opens.
+            setTimeout(() => { bar.closest(".rcmFormSection").querySelector(".rcmSectionComponent").hidden = open; }, 200);
+          });
+      </script>`,
+    }),
+  );
+  const page = await context.newPage();
+  await page.goto(`${sapsfOrigin}/portalcareer?_s.crb=folded`);
+  await enqueue([page]);
+  await expect(page.locator('[name="firstName"]')).toHaveValue(profile.firstName, { timeout: 30000 });
+  await expect(page.locator('[name="lastName"]')).toHaveValue(profile.lastName);
 });
 
 test("a race option named by its question, escaped markup and a definition is chosen by its group", async () => {
@@ -10134,12 +10575,17 @@ test("a SuccessFactors profile answers each job's Present Employer and each scho
         document.querySelectorAll('.level').forEach((input) => input.addEventListener('input', () => window.levelTyped.push(input.value)));
         document.querySelectorAll('.level').forEach((input) => picklist(input, ['No Selection', 'Advanced Technical Degree', "Bachelor's Degree", 'Basic Education (Primary)', "Doctor's Degree", "Master's Degree", 'Middle School Education (Secondary)', 'Specialized Technical Degree', 'University Degree']));
         window.uploaded = [];
+        // L3Harris's newer chooser (2026-11-07): "Upload from Device" over a
+        // file input named "fileData1", no Upload button; choosing a file
+        // uploads it.
         document.getElementById('53:_attachIcon').addEventListener('click', () => setTimeout(() => {
           const panel = document.createElement('div');
           panel.className = 'sfPanelComponent';
-          panel.innerHTML = '<span class="panelHeaderTitle" title="Upload Cover Letter">Upload Cover Letter</span><input type="file" name="fileData"><button type="button" title="Upload">Upload</button>';
+          panel.setAttribute('role', 'dialog');
+          panel.setAttribute('aria-label', 'Select a source for your file upload');
+          panel.innerHTML = '<span class="attachmentLabel"><span>Upload from Device</span><br><input tabindex="0" type="file" class="fileUpload" name="fileData1"></span>';
           document.body.append(panel);
-          panel.querySelector('button').addEventListener('click', () => {
+          panel.querySelector('input').addEventListener('change', () => {
             window.uploaded.push(panel.querySelector('input').files[0]?.name || '');
             panel.remove();
             const done = document.createElement('span');
@@ -10184,15 +10630,17 @@ test("a SuccessFactors profile answers each job's Present Employer and each scho
 // list chooses only from that list.
 test("a SuccessFactors picklist chooses only from its own list, never one another field left open", async () => {
   await ui({ type: "API", path: "/v1/profile", method: "PUT", body: { ...profile, gender: "Male", veteranStatus: "No" } });
-  const picklist = (label: string, id: string, delay: number) =>
-    `<div class="RCMFormField rcmFormElement"><label class="rcmFormFieldLabel"><span class="requiredField">*</span>&nbsp;${label}</label><div class="fieldComponentInput"><span class="sfCascadingPicklist"><input type="text" role="combobox" aria-label="${label}" aria-expanded="false" aria-owns="${id}:_listSelect" data-delay="${delay}" placeholder="No Selection" class="rcmpaginatedselectinput"><button type="button" class="rcmpaginatedselectbutton" aria-label="${label}"></button></span></div></div>`;
+  // Gender's says it is open with no list drawn, as one on L3Harris's form
+  // did after a refresh (report 726eafd7, 2026-11-07): it is opened all the same.
+  const picklist = (label: string, id: string, delay: number, staleOpen = false) =>
+    `<div class="RCMFormField rcmFormElement"><label class="rcmFormFieldLabel"><span class="requiredField">*</span>&nbsp;${label}</label><div class="fieldComponentInput"><span class="sfCascadingPicklist"><input type="text" role="combobox" aria-label="${label}" aria-expanded="${staleOpen}" aria-owns="${id}:_listSelect" data-delay="${delay}" placeholder="No Selection" class="rcmpaginatedselectinput"><button type="button" class="rcmpaginatedselectbutton" aria-label="${label}"></button></span></div></div>`;
   await context.route(`${sapsfOrigin}/**`, (route) =>
     route.fulfill({
       contentType: "text/html",
       body: `<!doctype html><title>Apply</title><main id="rmkContent">
         <label>First name <input name="first"></label>
         <div class="rcmFormSection row"><h2 class="sectionTitle"><button class="topBar rcmFormSectionTopBar"><span>Job-Specific Information</span></button></h2>
-          ${picklist("Gender", "1175", 1500)}${picklist("Veteran Status", "1200", 600000)}</div>
+          ${picklist("Gender", "1175", 1500, true)}${picklist("Veteran Status", "1200", 600000)}</div>
       </main>
       <div class="globalMenu sf-combo-listselect" id="637:"><ul id="637:_listSelect" role="listbox" class="sf-list-select">
         <li role="option" id="637:item0"><a role="menuitem" title="No Selection">No Selection</a></li>
@@ -10462,6 +10910,11 @@ for (const dated of ["older", "today"] as const)
       await page.waitForTimeout(3000);
       expect(await page.evaluate(() => [(window as any).deleted, (window as any).uploaded])).toEqual([0, []]);
       await expect(page.locator('[role="dialog"]')).toHaveCount(0);
+      // Kept, it is no failed upload: the slot offers no add button then, and
+      // looking for one reported "Cover letter upload did not finish"
+      // (L3Harris, 2026-11-07).
+      await expect.poll(async () => JSON.stringify((await state()).applications.at(-1)), { timeout: 30000 }).toMatch(/"status":"(awaiting-user|ready)"/);
+      expect(JSON.stringify((await state()).applications.at(-1))).not.toMatch(/upload did not finish/i);
     }
   });
 
@@ -10622,6 +11075,31 @@ test("a web component's slotted question and its choices' label attributes name 
   expect(labels.join(" ")).not.toMatch(/spl-form-element|Unlabelled field/);
 });
 
+// SmartRecruiters (report a8c856cd, 2026-11-05): an education entry left
+// open has a Major and a Degree that name no school; the general fill wrote
+// one school's into another's. The site rule fills its entries; the general
+// fill leaves them.
+test("a SmartRecruiters entry editor's fields are left to its site rule", async () => {
+  await context.route(`${origin}/entry-editor`, (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: `<!doctype html><title>Application</title><form onsubmit="return false">
+        <label for="email">Email</label><input id="email" type="email">
+        <oc-education-entry data-test="experience-entry"><div data-test="education-edit-form">
+          <label for="major">Major</label><input id="major">
+          <label for="degree">Degree</label><input id="degree">
+        </div></oc-education-entry></form>`,
+    }),
+  );
+  const page = await context.newPage();
+  await page.goto(`${origin}/entry-editor`);
+  await panel.bringToFront();
+  const tabId = await panel.evaluate(async (url) => (await chrome.tabs.query({})).find((tab) => tab.url === url)!.id!, page.url());
+  const fields = (await ui({ type: "SCAN_TAB", tabId })).observation.fields as { label: string; protected: boolean }[];
+  expect(fields.find((field) => field.label === "Email")?.protected).toBe(false);
+  expect(fields.filter((field) => /^(Major|Degree)$/.test(field.label)).map((field) => field.protected)).toEqual([true, true]);
+});
+
 // Tesla's legal step (report 64249b85, 2026-11-02): its Yes/No questions
 // share one fieldset, each <label for="<id>"> over radios "<id>_yes" and
 // "<id>_no". Every radio read as the fieldset's first label, and one answer
@@ -10763,6 +11241,57 @@ test("a Workday questionnaire date is typed, and Other is picked where the quest
   });
   expect(result.data.results?.[0]?.ok ?? result.data[0]?.ok).toBe(true);
   await expect(page.locator("#school")).toHaveText("Other");
+});
+
+// Leidos's Workday (2026-11-08): typing a date's Month moves focus to its
+// Day, as Workday does, and the Day was then refused as a field in use; the
+// date was left half typed and Workday made its year 2005. A Backspace
+// empties a whole part, and a second one, in the emptied part, sent focus
+// back to the Day before the year was typed.
+test("a Workday date whose Month moves focus to its Day gets all three parts", async () => {
+  await context.route(`${atsOrigins[0]}/**`, (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: `<!doctype html><title>Application Questions</title><div data-automation-id="mainContent"><main>
+        <div data-automation-id="formField-completion"><fieldset><legend><div data-automation-id="richText"><p><span>5a. Expected degree completion date.</span></p></div></legend>
+          <div role="group" data-automation-id="dateInputWrapper">${["Month", "Day", "Year"].map((part) => `<div><input role="spinbutton" aria-label="${part}" data-automation-id="dateSection${part}-input"></div>`).join("/")}</div></fieldset></div>
+      </main></div><script>{
+        const parts = [...document.querySelectorAll('[role="spinbutton"]')];
+        // As the live form held it: a year Workday filled in by itself.
+        parts[2].value = "2005";
+        parts.forEach((input, index) => {
+          let typed = false;
+          input.addEventListener("keydown", (event) => {
+            typed = event.isTrusted;
+            // A Backspace empties the whole part; in an empty part it moves
+            // focus back to the one before.
+            if (event.key === "Backspace") {
+              event.preventDefault();
+              if (input.value) input.value = "";
+              else if (index > 0) parts[index - 1].focus();
+            }
+          });
+          input.addEventListener("input", () => {
+            if (!typed) { input.value = ""; return; }
+            typed = false;
+            // A full Month or Day moves on to the next part.
+            if (index < 2 && input.value.length >= 2) parts[index + 1].focus();
+          });
+        });
+      }</script>`,
+    }),
+  );
+  await ui({ type: "API", path: "/v1/profile", method: "PUT", body: { ...profile, education: [{ organization: "Michigan State University", title: "Master of Science", fieldOfStudy: "Data Science", startDate: "2025-08", endDate: "2099-05-10", location: "East Lansing, Michigan" }] } });
+  const page = await context.newPage();
+  await page.goto(`${atsOrigins[0]}/en-US/acme/job/Remote/Engineer_JR2/apply/applyManually`);
+  await enqueue([page]);
+  await expect(page.locator('[aria-label="Year"]')).toHaveValue("2099", { timeout: 60000 });
+  await expect(page.locator('[aria-label="Month"]')).toHaveValue(/^0?5$/);
+  await expect(page.locator('[aria-label="Day"]')).toHaveValue("10");
+  // Each part typed is the fill's own, none locked as the applicant's edit.
+  await page.waitForTimeout(1500);
+  const parts = (await content(page, { type: "INSPECT" })).data.fields.filter((field: { label: string }) => /completion date/.test(field.label));
+  expect(parts.map((field: { protected: boolean }) => field.protected)).toEqual([false, false, false]);
 });
 
 // Tesla's (report d207d4aa, 2026-11-02): "When are you available to start
@@ -11358,6 +11887,55 @@ test("a form's transcript field gets the applicant's transcript, and the resume 
   expect(await withIt.chosen("resume-file")).not.toBe("Unofficial_Transcript.pdf");
 });
 
+// Databricks' Greenhouse form (2026-11-08): one transcript for each degree.
+// With only the newest file, the graduate transcript went into the box for
+// the undergraduate one. Each school now has its own.
+test("each degree's transcript field gets that school's transcript, and none of another degree's", async () => {
+  const group = (id: string, question: string) =>
+    `<div class="field-wrapper"><div role="group" aria-labelledby="upload-label-${id}" class="file-upload"><div id="upload-label-${id}" class="label upload-label">${question}</div><div class="file-upload__wrapper"><div class="file-upload__buttons"><button type="button" class="btn btn--pill">Attach</button><input id="${id}" class="visually-hidden" type="file" accept=".pdf,.doc,.docx,.txt,.rtf"></div></div></div></div>`;
+  await context.route(`${origin}/two-transcripts/**`, (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: `<!doctype html><title>Apply</title><form><label>First name<input name="first"></label><div class="application--questions">
+        ${group("question_1", 'Please provide a recent transcript of your undergraduate studies.<span class="required">*</span>')}
+        ${group("question_2", "Please provide a recent transcript of your graduate studies (if applicable)")}
+      </div></form>`,
+    }),
+  );
+  appConfig.transcriptsDir = await scratch("lane-transcripts-");
+  await writeFile(join(appConfig.transcriptsDir, "Graduate_Transcript.pdf"), "%PDF-1.4\n% graduate\n");
+  const education = [
+    { organization: "Michigan State University", title: "Master of Science", fieldOfStudy: "Data Science", startDate: "2025-08", endDate: "2099-05", location: "", details: "" },
+    { organization: "Penn State", title: "Bachelor of Science", fieldOfStudy: "Computer Science", startDate: "2020-09", endDate: "2024-06", location: "", details: "" },
+  ];
+  const fill = async (path: string) => {
+    const page = await context.newPage();
+    await page.goto(`${origin}/two-transcripts/${path}`);
+    await enqueue([page]);
+    await expect
+      .poll(async () => (await state()).applications.find((a: { url: string }) => a.url.endsWith(path))?.status, { timeout: 30000 })
+      .toMatch(/ready|awaiting-user/);
+    const chosen = (id: string) => page.locator(`#${id}`).evaluate((input: HTMLInputElement) => input.files?.[0]?.name || "");
+    return { chosen, app: (await state()).applications.find((a: { url: string }) => a.url.endsWith(path))! };
+  };
+  // Only the newest file, no school's own: never into the undergraduate box.
+  const saveEducation = async (rows: unknown[]) => {
+    const current = await ui({ type: "API", path: "/v1/profile" });
+    await ui({ type: "API", path: "/v1/profile", method: "PUT", body: { ...current, confirmed: true, education: rows } });
+  };
+  await saveEducation(education);
+  const before = await fill("first");
+  await expect.poll(() => before.chosen("question_2"), { timeout: 30000 }).toBe("Graduate_Transcript.pdf");
+  expect(await before.chosen("question_1")).toBe("");
+  expect(before.app.missing.join(" ")).toContain("Upload your undergraduate transcript yourself");
+  // Each school's own: each box gets its degree's.
+  await writeFile(join(appConfig.transcriptsDir, "Undergraduate_Transcript.pdf"), "%PDF-1.4\n% undergraduate\n");
+  await saveEducation([{ ...education[0], transcript: "Graduate_Transcript.pdf" }, { ...education[1], transcript: "Undergraduate_Transcript.pdf" }]);
+  const after = await fill("second");
+  await expect.poll(() => after.chosen("question_1"), { timeout: 30000 }).toBe("Undergraduate_Transcript.pdf");
+  await expect.poll(() => after.chosen("question_2"), { timeout: 30000 }).toBe("Graduate_Transcript.pdf");
+});
+
 test("when the posting cannot be read, the applicant pastes it on the card and the next fill uses it", async () => {
   // The site's posting is not found (no ATS endpoint, a page that is only
   // its form), as on Georgia Tech's PageUp application.
@@ -11853,6 +12431,504 @@ test("a Workday language picked from the listbox its button controls", async () 
   await expect(page.locator("#lang")).toHaveText("English", { timeout: 45000 });
 });
 
+// KLA's Workday form filled slowly (report 6d839e90, 2026-11-04): every
+// dropdown is a bare listbox its button names in aria-controls, which the
+// rules looked for only inside an active-popup wrapper, so each pick waited
+// its full four seconds before another way found it, and a level scale that
+// lists none of the profile's wordings waited as long again.
+test("Workday dropdowns drawn as bare listboxes are answered without waiting out each pick", async () => {
+  test.setTimeout(120_000);
+  await ui({ type: "API", path: "/v1/profile", method: "PUT", body: { ...profile, languages: ["English: Native"], workAuthorization: "Yes", sponsorship: "No" } });
+  const dropdown = (id: string, name: string) => `<button type="button" id="${id}" name="${name}" aria-haspopup="listbox" aria-expanded="false" class="pick">Select One</button>`;
+  await context.route(`${atsOrigins[0]}/**`, (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: `<!doctype html><title>My Experience</title><main>
+        <div role="group" aria-labelledby="Languages-section"><h4 id="Languages-section">Languages</h4>
+          <div data-automation-id="language-1">
+            <div data-automation-id="formField-language"><label for="lang">Language</label>${dropdown("lang", "language")}</div>
+            <div data-automation-id="formField-native"><input type="checkbox" id="native" name="native"><label for="native">I am fluent in this language.</label></div>
+            ${["Listening", "Reading", "Speaking", "Writing"].map((level) => `<div data-automation-id="formField-${level.toLowerCase()}"><label for="lv-${level}">${level}</label>${dropdown(`lv-${level}`, level.toLowerCase())}</div>`).join("")}
+          </div>
+        </div>
+        <div data-automation-id="formField-auth"><fieldset><legend><p>Are you legally authorized to work in the United States?<abbr title="required">*</abbr></p></legend>${dropdown("q-auth", "auth")}</fieldset></div>
+        <div data-automation-id="formField-spons"><fieldset><legend><p>Will you now, or in the future, require sponsorship to legally work in the US?<abbr title="required">*</abbr></p></legend>${dropdown("q-spons", "spons")}</fieldset></div>
+      </main><script>
+        const choices = { lang: ["Dutch", "English", "French"], auth: ["Yes", "No"], spons: ["Yes", "No"] };
+        let lists = 0;
+        for (const button of document.querySelectorAll("button.pick")) {
+          button.addEventListener("click", () => {
+            document.querySelector('[role="listbox"]')?.remove();
+            for (const other of document.querySelectorAll("button.pick")) { other.setAttribute("aria-expanded", "false"); other.removeAttribute("aria-controls"); }
+            const list = document.createElement("ul");
+            list.id = "list-" + ++lists;
+            list.setAttribute("role", "listbox");
+            button.setAttribute("aria-expanded", "true");
+            button.setAttribute("aria-controls", list.id);
+            const names = choices[button.id.replace(/^q-/, "")] || ["1 - Low", "2 - Medium", "3 - High"];
+            list.innerHTML = '<li role="option"><div>Select One</div></li>';
+            for (const name of names) {
+              const option = document.createElement("li");
+              option.setAttribute("role", "option");
+              option.innerHTML = "<div>" + name + "</div>";
+              option.addEventListener("click", () => { button.textContent = name; button.setAttribute("aria-expanded", "false"); button.removeAttribute("aria-controls"); list.remove(); });
+              list.append(option);
+            }
+            document.body.append(list);
+          });
+        }
+      </script>`,
+    }),
+  );
+  const page = await context.newPage();
+  await page.goto(`${atsOrigins[0]}/en-US/acme/job/Remote/Engineer_JR1/apply/applyManually`);
+  const started = Date.now();
+  await enqueue([page]);
+  await expect(page.locator("#q-spons")).toHaveText("No", { timeout: 60_000 });
+  await expect(page.locator("#lang")).toHaveText("English");
+  for (const level of ["Listening", "Reading", "Speaking", "Writing"]) await expect(page.locator(`#lv-${level}`)).toHaveText("3 - High");
+  await expect(page.locator("#q-auth")).toHaveText("Yes");
+  // Seven picks: a few seconds, not four seconds each.
+  expect(Date.now() - started).toBeLessThan(15_000);
+});
+
+// NVIDIA's Workday (2026-11-04): Phone Device Type lists only "Home" and
+// "Home Cellular". "Mobile" matched neither, the list was left open over the
+// form, and the required field was left for the applicant.
+test("a Workday phone type listed as Home Cellular is picked for a mobile, and the list is not left open", async () => {
+  await ui({ type: "API", path: "/v1/profile", method: "PUT", body: { ...profile, phoneDeviceType: "Mobile" } });
+  await context.route(`${atsOrigins[0]}/**`, (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: `<!doctype html><title>My Information</title><main data-automation-id="mainContent">
+        <div role="group" aria-labelledby="Phone-section"><h4 id="Phone-section">Phone</h4>
+          <div data-automation-id="formField-phoneType"><label for="phoneNumber--phoneType"><span>Phone Device Type<abbr>*</abbr></span></label>
+            <button aria-haspopup="listbox" type="button" aria-label="Phone Device Type Select One Required" name="phoneType" id="phoneNumber--phoneType" aria-expanded="false">Select One</button></div>
+        </div>
+      </main><script>
+        const button = document.getElementById("phoneNumber--phoneType");
+        const close = () => { document.getElementById("types")?.remove(); button.setAttribute("aria-expanded", "false"); button.removeAttribute("aria-controls"); };
+        button.addEventListener("keydown", (event) => { if (event.key === "Escape") close(); });
+        button.addEventListener("click", () => {
+          if (document.getElementById("types")) return close();
+          const list = document.createElement("ul");
+          list.id = "types";
+          list.setAttribute("role", "listbox");
+          list.innerHTML = '<li role="option"><div>Select One</div></li>';
+          for (const name of ["Home", "Home Cellular"]) {
+            const option = document.createElement("li");
+            option.setAttribute("role", "option");
+            option.innerHTML = "<div>" + name + "</div>";
+            option.addEventListener("click", () => { button.textContent = name; close(); });
+            list.append(option);
+          }
+          document.body.append(list);
+          button.setAttribute("aria-expanded", "true");
+          button.setAttribute("aria-controls", "types");
+        });
+      </script>`,
+    }),
+  );
+  const page = await context.newPage();
+  await page.goto(`${atsOrigins[0]}/en-US/acme/job/Remote/Engineer_JR2/apply/applyManually`);
+  await enqueue([page]);
+  await expect(page.locator("#phoneNumber--phoneType")).toHaveText("Home Cellular", { timeout: 45_000 });
+  await expect(page.locator('[role="listbox"]')).toHaveCount(0);
+});
+
+// A Workday question whose answers show only once its list is opened
+// (2026-11-04): nothing could answer "…at this location?" without its
+// options. The page's questionnaire lists them, and without one the list is
+// opened, read and closed with nothing chosen, before answers are decided.
+for (const source of ["questionnaire", "opened list"] as const)
+  test(`a Workday question is answered from its real options, read from the ${source}`, async () => {
+    const workdayOrigin = atsOrigins[0];
+    await ui({ type: "API", path: "/v1/profile", method: "PUT", body: { ...profile, workAuthorization: "Yes", sponsorship: "No" } });
+    const questionId = "2f2764b3a829100642af26ec534f0000";
+    await context.route(`${workdayOrigin}/**`, (route) => {
+      if (route.request().url().includes("/questionnaire/"))
+        return route.fulfill({
+          contentType: "application/json",
+          body: JSON.stringify({ id: "2f2764b3a82910064296831695150000", questions: [{ id: questionId, body: "<p>Will you require visa support to work at this location?</p>", order: "a", required: true,
+            possibleAnswers: [{ id: "a1", answerText: "Yes", order: "a" }, { id: "a2", answerText: "No", order: "b" }] }] }),
+        });
+      return route.fulfill({
+        contentType: "text/html",
+        body: `<!doctype html><main data-automation-id="mainContent"><div data-automation-id="applyFlowPrimaryQuestionsPage">
+          <div data-automation-id="formField-${questionId}"><fieldset><legend><p>Will you require visa support to work at this location?<abbr title="required">*</abbr></p></legend>
+            <button aria-haspopup="listbox" type="button" aria-label=" Select One Required" name="${questionId}" id="primaryQuestionnaire--${questionId}" aria-expanded="false">Select One</button></fieldset></div>
+        </div></main><script>
+          ${source === "questionnaire" ? `fetch("/wday/cxs/common/acme/questionnaire/2f2764b3a82910064296831695150000");` : ""}
+          window.opened = 0;
+          const button = document.getElementById("primaryQuestionnaire--${questionId}");
+          const close = () => { document.getElementById("answers")?.remove(); button.setAttribute("aria-expanded", "false"); button.removeAttribute("aria-controls"); };
+          button.addEventListener("keydown", (event) => { if (event.key === "Escape") close(); });
+          button.addEventListener("click", () => {
+            if (document.getElementById("answers")) return close();
+            window.opened++;
+            const list = document.createElement("ul");
+            list.id = "answers";
+            list.setAttribute("role", "listbox");
+            list.innerHTML = '<li role="option"><div>Select One</div></li>';
+            document.body.append(list);
+            button.setAttribute("aria-expanded", "true");
+            button.setAttribute("aria-controls", "answers");
+            // Its answers come a moment after it opens; with the
+            // questionnaire, so late that only the questionnaire can have
+            // told what they are before the pick.
+            setTimeout(() => {
+              for (const name of ["Yes", "No"]) {
+                const option = document.createElement("li");
+                option.setAttribute("role", "option");
+                option.innerHTML = "<div>" + name + "</div>";
+                option.addEventListener("click", () => { button.textContent = name; close(); });
+                list.append(option);
+              }
+            }, ${source === "questionnaire" ? 2500 : 200});
+          });
+        </script>`,
+      });
+    });
+    const page = await context.newPage();
+    await page.goto(`${workdayOrigin}/en-US/acme/job/Remote/Engineer_JR3/apply/applyManually`);
+    await enqueue([page]);
+    await expect(page.locator(`#primaryQuestionnaire--${questionId}`)).toHaveText("No", { timeout: 45_000 });
+    await expect(page.locator('[role="listbox"]')).toHaveCount(0);
+  });
+
+// Microsoft's careers form (report cb45d0c9, 2026-11-04): its dropdowns open
+// on a whole click, not on a press or on focus, so the list never showed and
+// work authorization was left unanswered.
+test("a combobox that opens only on a whole click is opened and answered", async () => {
+  await ui({ type: "API", path: "/v1/profile", method: "PUT", body: { ...profile, workAuthorization: "Yes", sponsorship: "No" } });
+  const page = await context.newPage();
+  await page.goto(`${origin}/click-only-combobox`);
+  await page.evaluate(() => {
+    document.body.innerHTML = `<form><label id="auth-label" for="input-43">Are you legally authorized to work in the country/region you are applying for?</label>
+      <div class="wrap"><input id="input-43" role="combobox" aria-controls="list-41" aria-expanded="false" aria-labelledby="auth-label" aria-required="true" placeholder="Select" type="text">
+      <button aria-hidden="true" tabindex="-1" type="button" class="icon-button"></button></div><ul id="list-41" role="listbox" hidden></ul>
+      <label for="email">Email</label><input id="email" name="email" type="email"></form>`;
+    const input = document.getElementById("input-43") as HTMLInputElement;
+    const list = document.getElementById("list-41")!;
+    input.addEventListener("click", () => {
+      input.setAttribute("aria-expanded", "true");
+      list.hidden = false;
+      list.innerHTML = "";
+      for (const name of ["Yes", "No"]) {
+        const option = document.createElement("li");
+        option.setAttribute("role", "option");
+        option.textContent = name;
+        option.addEventListener("click", () => { input.value = name; input.setAttribute("aria-expanded", "false"); list.hidden = true; });
+        list.append(option);
+      }
+    });
+  });
+  await panel.bringToFront();
+  await enqueue([page]);
+  await expect(page.locator("#input-43")).toHaveValue("Yes", { timeout: 45_000 });
+});
+
+// Microsoft's acknowledgments (report bce03da9, 2026-11-04): three lone boxes
+// each named only "Yes", their questions in legends the group names by
+// aria-labelledby. As one label repeated, all three were left alone.
+test("lone Yes boxes take their group's question and are each answered", async () => {
+  await ui({ type: "API", path: "/v1/profile", method: "PUT", body: { ...profile, acknowledgeTerms: true } });
+  const page = await context.newPage();
+  await page.goto(`${origin}/acknowledgments`);
+  await page.evaluate(() => {
+    const box = (id: string, question: string) => `<legend id="${id}_legend"><span>${question}</span></legend>
+      <div id="${id}" aria-labelledby="${id}_legend"><div><input aria-label="Yes" id="${id}-0" name="${id}" type="checkbox" aria-required="true"><label for="${id}-0"><span>Yes</span></label></div></div>`;
+    document.body.innerHTML = `<form><fieldset><legend>Acknowledgment</legend>
+      ${box("ack_qualifications", "By selecting yes, you agree that you answered these questions accurately.")}
+      ${box("ack_privacy", "By checking this you agree to the Data Privacy Notice.")}
+      ${box("ack_conduct", "By checking this, you agree to the candidate code of conduct.")}
+      </fieldset><label for="email">Email</label><input id="email" name="email" type="email"></form>`;
+  });
+  await panel.bringToFront();
+  await enqueue([page]);
+  for (const id of ["ack_qualifications", "ack_privacy", "ack_conduct"]) await expect(page.locator(`#${id}-0`)).toBeChecked({ timeout: 45_000 });
+});
+
+// SmartRecruiters (2026-11-04): a typed box's menu lists "Fill manually"
+// first and the site's own entries after it, and Down and Enter took the
+// manual one even when the site listed the city.
+for (const mode of ["keys", "deaf"] as const)
+test(`a SmartRecruiters box picks the site's own entry over its fill-manually one${mode === "deaf" ? ", by a real click when Down does nothing" : ""}`, async () => {
+  await context.route(`${smartRecruitersOrigin}/**`, (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: `<!doctype html><main><oc-personal-information><label>Email</label><input id="email" type="email"></oc-personal-information></main><script>{
+        const shadowed = (tag, inner) => { const host = document.createElement(tag); host.attachShadow({ mode: "open" }).innerHTML = inner; return host; };
+        const box = shadowed("spl-autocomplete", "<div><label>City</label><div class='slot'></div></div>");
+        box.setAttribute("label", "City");
+        box.setAttribute("data-test", "location-autocomplete");
+        // As the site's: the box names its menu, and each entry draws its
+        // role="option" in its own shadow root around the label slotted in.
+        customElements.define("spl-select-option", class extends HTMLElement { constructor() { super(); this.attachShadow({ mode: "open" }).innerHTML = '<div role="option" tabindex="-1"><slot></slot></div>'; } });
+        const field = shadowed("spl-input", '<input type="text" role="combobox" aria-label="City" aria-controls="city-menu" aria-autocomplete="list">');
+        box.shadowRoot.querySelector(".slot").append(field);
+        document.querySelector("oc-personal-information").append(box);
+        const input = field.shadowRoot.querySelector("input");
+        // The first Down after its menu shows is let pass, as the site's
+        // was once (LinkedIn, 2026-11-05), and an Enter in the box clears it.
+        let passed = false;
+        input.addEventListener("input", () => {
+          clearTimeout(input.offer);
+          input.offer = setTimeout(() => {
+            box.shadowRoot.querySelector('[role="listbox"]')?.remove();
+            const menu = document.createElement("div");
+            menu.setAttribute("role", "listbox");
+            menu.id = "city-menu";
+            for (const name of ["Fill manually", input.value + ", AZ, United States"]) {
+              const option = document.createElement("spl-select-option");
+              option.textContent = name;
+              option.addEventListener("click", (event) => { if (event.isTrusted) box.setAttribute("value", name); });
+              menu.append(option);
+            }
+            input.position = undefined;
+            passed = false;
+            box.shadowRoot.append(menu);
+          }, 300);
+        });
+        // Down moves through the entries and Enter takes the highlighted
+        // one, as the site's does; the entries ignore a script's click, as
+        // the site's did (the applicant's account, 2026-11-04).
+        // Down moves focus into the menu, onto its next entry, and the Enter
+        // lands on that entry, as the site's does.
+        const step = (event) => {
+          const options = [...box.shadowRoot.querySelectorAll("spl-select-option")];
+          // ?deaf: every Down is let pass, as Intuitive's Company menu did
+          // (2026-11-07); only a real click on its entry takes it.
+          if (event.key === "ArrowDown" && (!passed || location.search.includes("deaf"))) { passed = true; return; }
+          if (event.key === "Enter" && event.composedPath()[0] === input) { input.value = ""; return; }
+          if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+            event.preventDefault();
+            input.position = event.key === "ArrowDown" ? Math.min((input.position ?? -1) + 1, options.length - 1) : Math.max((input.position ?? 0) - 1, 0);
+            options[input.position].shadowRoot.querySelector('[role="option"]').focus();
+          }
+          if (event.key === "Enter" && input.position !== undefined && event.composedPath().includes(options[input.position])) box.setAttribute("value", options[input.position].textContent);
+        };
+        input.addEventListener("keydown", step);
+        box.shadowRoot.addEventListener("keydown", (event) => { if (!event.composedPath().includes(input)) step(event); });
+      }</script>`,
+    }),
+  );
+  const page = await context.newPage();
+  await page.goto(`${smartRecruitersOrigin}/oneclick-ui/company/Acme/publication/1${mode === "deaf" ? "?deaf" : ""}`);
+  await panel.bringToFront();
+  await background(page);
+  await enqueue([page]);
+  await expect.poll(() => page.evaluate(() => document.querySelector("spl-autocomplete")!.getAttribute("value")), { timeout: 45_000 }).toBe(`${profile.city}, AZ, United States`);
+});
+
+// Microsoft's careers form (2026-11-07): a list draws its options only once
+// opened, from its arrow, and its sponsorship question, read with none, went
+// unanswered; a multiselect shows its picks as pills beside a read-only box,
+// and a chosen location was reported as missing.
+test("Microsoft's lists are read before answering, and a multiselect's pills are its value", async () => {
+  await ui({ type: "API", path: "/v1/profile", method: "PUT", body: { ...profile, workAuthorization: "Yes", sponsorship: "No" } });
+  const select = (id: string, label: string, list: string) => `
+    <div class="field"><label id="${id}_label" for="${id}">${label}</label>
+      <div class="select-module_select-wrapper__x" id="${id}">
+        <div class="select-module_select-input-group__x"><input aria-controls="${list}" aria-expanded="false" aria-labelledby="${id}_label" aria-required="true" role="combobox" class="select-module_select-input__bO0s9" readonly type="text">
+        <div class="input-module_action-wrapper__x"><button aria-hidden="true" tabindex="-1" type="button" class="arrow"></button></div></div>
+      </div></div>`;
+  await context.route(`${origin}/microsoft-lists`, (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: `<!doctype html><title>Submit application</title><main><form onsubmit="return false">
+        <div class="field"><label id="loc_label" for="loc">Where would you like to apply for Research Intern</label>
+          <div class="select-module_select-wrapper__x select-module_select-wrapper-multiple__x" id="loc">
+            <div class="select-module_multi-select-pills__x"><div class="pills-module_tag-pills__x select-module_multi-select-pill__x"><span class="pills-module_label__x">United States, Washington, Redmond</span></div></div>
+            <div class="select-module_select-input-group__x"><input aria-controls="list-9" aria-expanded="false" aria-labelledby="loc_label" aria-required="true" role="combobox" class="select-module_select-input__bO0s9" readonly type="text">
+            <div class="input-module_action-wrapper__x"><button aria-hidden="true" tabindex="-1" type="button" class="arrow"></button></div></div>
+          </div></div>
+        ${select("sponsor", "In order to obtain or maintain employment eligibility, will you now or in the future require the company's sponsorship for an immigration-related employment benefit (i.e., a work visa, work permit, etc.)?", "list-44")}
+      </form></main><script>
+        // Only its arrow opens it, and its options are drawn then.
+        const input = document.querySelector('#sponsor input');
+        const open = () => {
+          if (input.getAttribute('aria-expanded') === 'true') return;
+          const list = document.createElement('ul');
+          list.id = 'list-44';
+          list.setAttribute('role', 'listbox');
+          list.innerHTML = ['Yes', 'No'].map((name, i) => '<li><button type="button" role="option" id="list-44-option-' + i + '" title="' + name + '">' + name + '</button></li>').join('');
+          // A click on an option only lights it, as the site's did; Down
+          // and Up move the light, and Enter keeps the lit one.
+          list.querySelectorAll('button').forEach((button) => button.addEventListener('click', (event) => {
+            input.setAttribute('aria-activedescendant', button.id);
+            if (event.isTrusted) { input.value = button.title; close(); }
+          }));
+          document.body.append(list);
+          input.setAttribute('aria-expanded', 'true');
+        };
+        input.addEventListener('keydown', (event) => {
+          const buttons = [...document.querySelectorAll('#list-44 button')];
+          if (!buttons.length) return;
+          const at = buttons.findIndex((button) => button.id === input.getAttribute('aria-activedescendant'));
+          // As on the live site: its arrows light nothing (2026-11-07); a real
+          // click on an option keeps it.
+          if (event.key === 'ArrowDown' || event.key === 'ArrowUp') event.preventDefault();
+          if (event.key === 'Enter' && at >= 0) { input.value = buttons[at].title; close(); }
+        });
+        // Closing hands focus back to the box, as the site's does.
+        const close = () => { document.getElementById('list-44')?.remove(); input.setAttribute('aria-expanded', 'false'); setTimeout(() => input.focus(), 50); };
+        document.querySelector('#sponsor .arrow').addEventListener('click', open);
+        input.addEventListener('keydown', (event) => { if (event.key === 'Escape') close(); });
+        document.addEventListener('mousedown', (event) => { if (!event.target.closest('#sponsor, #list-44')) close(); });
+      </script>`,
+    }),
+  );
+  const page = await context.newPage();
+  await page.goto(`${origin}/microsoft-lists`);
+  await panel.bringToFront();
+  const tabId = await panel.evaluate(async (url) => (await chrome.tabs.query({})).find((tab) => tab.url === url)!.id!, page.url());
+  const fields = (await ui({ type: "SCAN_TAB", tabId })).observation.fields as { label: string; value: string }[];
+  expect(fields.find((field) => /Where would you like/.test(field.label))?.value).toBe("United States, Washington, Redmond");
+  expect((fields as unknown as { label: string; kind: string }[]).find((field) => /sponsorship/.test(field.label))?.kind).toBe("combobox");
+  await enqueue([page]);
+  await expect(page.locator("#sponsor input")).toHaveValue("No", { timeout: 45_000 });
+  // Kept, and its list closed.
+  await expect(page.locator("#list-44")).toHaveCount(0);
+});
+
+// SmartRecruiters' screening questions (LinkedIn's, 2026-11-04): each list
+// is an spl-autocomplete whose menu sits in its shadow root, one root above
+// the box, and whose options draw role="option" in their own shadow roots;
+// a script's click on one is ignored, and only Down and Enter choose it. Its
+// Yes and No are spl-radio choices slotted into a group drawn in a shadow
+// root. Every list waited 5 seconds for options it never saw, and each Yes
+// and No was refused as "another field has the same label".
+test("SmartRecruiters' screening lists and slotted Yes/No choices are answered", async () => {
+  await ui({
+    type: "API",
+    path: "/v1/profile",
+    method: "PUT",
+    body: { ...profile, veteranStatus: "No", neverWorkedForApplyingCompanies: true, education: [{ organization: "Penn State", title: "Masters of Science", startDate: "2025-08-21", endDate: "2099-12-13" }] },
+  });
+  const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+  await context.route(`${smartRecruitersOrigin}/**`, (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: `<!doctype html><title>Screening</title><main><form onsubmit="return false">
+        <spl-radio-group id="spl-form-element_105" required><span slot="label-content">Have you ever worked for Acme or any of its affiliates?</span>
+          <spl-radio id="spl-form-element_106" label="Yes" role="radio" aria-checked="false" value="1" tabindex="0"></spl-radio>
+          <spl-radio id="spl-form-element_107" label="No" role="radio" aria-checked="false" value="0" tabindex="-1"></spl-radio>
+        </spl-radio-group>
+        <div id="month-slot"></div><div id="veteran-slot"></div><div id="past-slot"></div>
+      </form></main><script>{
+        customElements.define("spl-radio-group", class extends HTMLElement { constructor() { super(); this.attachShadow({ mode: "open" }).innerHTML =
+          '<label id="group-label"><span><slot name="label-content"></slot><span aria-hidden="true">*</span></span></label><fieldset role="radiogroup" aria-labelledby="group-label" aria-required="true"><slot></slot></fieldset>'; } });
+        customElements.define("spl-radio", class extends HTMLElement { constructor() { super(); this.attachShadow({ mode: "open" }).innerHTML = '<label><span>' + this.getAttribute("label") + '</span></label>';
+          this.addEventListener("click", () => { for (const radio of this.parentElement.querySelectorAll("spl-radio")) radio.setAttribute("aria-checked", String(radio === this)); }); } });
+        // Its option is drawn only once its list first opens, as the site's are.
+        customElements.define("spl-select-option", class extends HTMLElement { constructor() { super(); this.attachShadow({ mode: "open" }); }
+          draw() { if (!this.shadowRoot.innerHTML) this.shadowRoot.innerHTML = '<div role="option" tabindex="-1" aria-selected="false"><slot></slot></div>'; } });
+        const list = (slot, id, label, names, multi = false) => {
+          const box = document.createElement(multi ? "spl-multiselect-autocomplete" : "spl-autocomplete");
+          box.id = id;
+          const root = box.attachShadow({ mode: "open" });
+          // Its options are made only when it first opens, as the site's are.
+          root.innerHTML = '<label for="' + id + '">' + label + '</label><div class="trigger"></div><div id="menu-' + id + '" role="listbox" hidden></div>';
+          const field = document.createElement("spl-input");
+          field.attachShadow({ mode: "open" }).innerHTML = '<input id="' + id + '" type="text" role="combobox" aria-label="' + label + '" aria-controls="menu-' + id + '" aria-autocomplete="list" aria-haspopup="listbox" aria-expanded="false" aria-required="true">';
+          root.querySelector(".trigger").append(field);
+          document.getElementById(slot).append(box);
+          const input = field.shadowRoot.querySelector("input");
+          const menu = root.querySelector('[role="listbox"]');
+          let position = -1;
+          // Whether a key has moved the list's place since it opened.
+          let moved = false;
+          const options = () => [...menu.querySelectorAll("spl-select-option")];
+          const light = () => options().forEach((option, index) => option.shadowRoot.querySelector('[role="option"]').classList.toggle("active", index === position));
+          // It opens with its first entry lit, as the site's does; Down
+          // moves the light on from there.
+          const open = () => { if (!menu.hidden) return;
+            if (!menu.children.length) menu.innerHTML = names.map((name, index) => '<spl-select-option value="id-' + index + '"><span>' + name + '</span></spl-select-option>').join("");
+            options().forEach((option) => option.draw()); menu.hidden = false; input.setAttribute("aria-expanded", "true"); position = 0; moved = false; light(); };
+          input.addEventListener("mousedown", open);
+          input.addEventListener("click", open);
+          // A press elsewhere closes it.
+          document.addEventListener("mousedown", (event) => { if (!event.composedPath().includes(box)) { menu.hidden = true; input.setAttribute("aria-expanded", "false"); position = -1; } });
+          const step = (event) => {
+            // Down and Up move the list's own place, and focus with it; an
+            // entry focused any other way leaves the place where it was.
+            if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+              event.preventDefault();
+              if (menu.hidden) open();
+              else position = event.key === "ArrowDown" ? Math.min(position + 1, options().length - 1) : Math.max(position - 1, 0);
+              moved = true;
+              light();
+              options()[position].shadowRoot.querySelector('[role="option"]').focus();
+            }
+            // Only a real Enter on the focused option takes it.
+            // A multiselect takes only an Enter on the entry itself: one in
+            // the box closes it with nothing taken, as LinkedIn's does.
+            if (multi && event.key === "Enter" && event.isTrusted && (!moved || !event.composedPath().includes(options()[position]))) {
+              menu.hidden = true; input.setAttribute("aria-expanded", "false"); position = -1;
+              return;
+            }
+            if (event.key === "Enter" && event.isTrusted && position >= 0 && !menu.hidden) {
+              // A multiselect keeps its box empty and shows each pick as a
+              // tag named by its label attribute.
+              if (multi) {
+                // Its picks are its value, the ids of the entries chosen, and
+                // a tag each, named only in the tag's own shadow root; Enter on
+                // a chosen entry takes it away again, as the site's does.
+                const id = options()[position].getAttribute("value");
+                const chosen = (box.getAttribute("value") || "").split(",").filter(Boolean);
+                box.setAttribute("value", (chosen.includes(id) ? chosen.filter((other) => other !== id) : [...chosen, id]).join(","));
+                let tags = root.querySelector("spl-tags-list");
+                if (!tags) { tags = document.createElement("spl-tags-list"); tags.attachShadow({ mode: "open" }); root.append(tags); }
+                tags.shadowRoot.innerHTML = "";
+                for (const kept of box.getAttribute("value").split(",").filter(Boolean)) {
+                  const tag = document.createElement("spl-tag");
+                  tag.attachShadow({ mode: "open" }).textContent = options().find((option) => option.getAttribute("value") === kept).textContent.trim();
+                  tags.shadowRoot.append(tag);
+                }
+              }
+              else input.value = options()[position].textContent.trim();
+              menu.hidden = true;
+              input.setAttribute("aria-expanded", "false");
+              position = -1;
+            }
+          };
+          input.addEventListener("keydown", step);
+          menu.addEventListener("keydown", step);
+        };
+        list("month-slot", "question_month", "Please select your Graduation Month", ${JSON.stringify(months)});
+        list("veteran-slot", "question_veteran", "If you believe you belong to any of the categories of protected veterans listed above, please indicate by checking the appropriate box below.", ["I identify as one or more of the classifications of protected veteran listed above", "I am not a protected veteran", "I prefer not to specify"]);
+        list("past-slot", "question_past", "Do you currently or have you previously worked at Acme in any capacity? (Select all that apply)", ["Not Applicable", "I currently work at Acme", "I previously worked at Acme"], true);
+      }</script>`,
+    }),
+  );
+  const page = await context.newPage();
+  await page.goto(`${smartRecruitersOrigin}/oneclick-ui/company/Acme/publication/1/screening`);
+  await panel.bringToFront();
+  await background(page);
+  await enqueue([page]);
+  const value = (id: string) => page.evaluate((id) => document.getElementById(id)!.shadowRoot!.querySelector("spl-input")!.shadowRoot!.querySelector("input")!.value, id);
+  await expect.poll(() => value("question_month"), { timeout: 45_000 }).toBe("December");
+  await expect.poll(() => value("question_veteran"), { timeout: 45_000 }).toBe("I am not a protected veteran");
+  const tags = (id: string) => page.evaluate((id) => [...(document.getElementById(id)!.shadowRoot!.querySelector("spl-tags-list")?.shadowRoot?.querySelectorAll("spl-tag") || [])].map((tag) => tag.shadowRoot!.textContent), id);
+  await expect.poll(() => tags("question_past"), { timeout: 45_000 }).toEqual(["Not Applicable"]);
+  // The pick is seen as made: no "did not confirm" left on it.
+  const app = (await state()).applications.find((candidate: { url: string }) => candidate.url === page.url())!;
+  await expect.poll(async () => JSON.stringify((await state()).applications.find((candidate: { id: string }) => candidate.id === app.id)), { timeout: 20_000 }).not.toContain("did not confirm");
+  await expect(page.locator("#spl-form-element_107")).toHaveAttribute("aria-checked", "true", { timeout: 45_000 });
+  await expect(page.locator("#spl-form-element_106")).toHaveAttribute("aria-checked", "false");
+  // No list is left open.
+  expect(await page.evaluate(() => [...document.querySelectorAll("spl-autocomplete,spl-multiselect-autocomplete")].filter((box) => box.shadowRoot!.querySelector('[role="listbox"]:not([hidden])')).length)).toBe(0);
+  // Filled again, the list already holding its answer keeps it: picked a
+  // second time, it was taken away (LinkedIn, 2026-11-05).
+  const current = async () => (await state()).applications.find((candidate: { id: string }) => candidate.id === app.id)! as unknown as { status: string; operation: number };
+  await expect.poll(async () => (await current()).status, { timeout: 45_000 }).toMatch(/^(awaiting-user|ready)$/);
+  const first = (await current()).operation;
+  await ui({ type: "FILL_STEP", id: app.id });
+  await expect.poll(async () => { const now = await current(); return now.operation > first && /^(awaiting-user|ready)$/.test(now.status); }, { timeout: 45_000 }).toBe(true);
+  expect(await tags("question_past")).toEqual(["Not Applicable"]);
+});
+
 // Carrier's Workday form (report f59d9efd, 2026-10-26): a language row asks
 // for an overall level named "All" beside Reading; Reading was filled and All
 // was left.
@@ -12309,6 +13385,127 @@ test("a placeholder the site wrote is replaced even when site values are kept", 
 
 // Workday announces a finished upload in an alert (Jabil, report f062d50f,
 // 2026-10-15): "…Resume.pdf successfully uploaded" was reported as a failure.
+// AMD's iCIMS (2026-11-07): every list is drawn as an <a role="combobox">
+// with no address, and each job's Country was refused as able to navigate.
+test("a list drawn as a link with no address is chosen from", async () => {
+  await context.route(`${origin}/link-list`, (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: `<!doctype html><title>Apply</title><form onsubmit="return false">
+        <label id="country-label">Country</label>
+        <a id="1_WorkCountry_icimsDropdown" class="dropdown-select" role="combobox" tabindex="0" aria-expanded="false" aria-labelledby="country-label"><span class="dropdown-text"></span></a>
+        <div id="1_WorkCountry_icimsDropdown_ctnr" class="dropdown-container"><ul id="1_WorkCountry_dropdown-results" role="listbox" hidden></ul></div>
+      </form><script>
+        // As iCIMS draws them: the link names no list; the list is in the
+        // "_ctnr" box beside it.
+        const box = document.getElementById('1_WorkCountry_icimsDropdown');
+        const list = document.getElementById('1_WorkCountry_dropdown-results');
+        // It opens on a mousedown; a click alone does nothing, as on iCIMS.
+        box.addEventListener('mousedown', () => {
+          list.innerHTML = ['— Make a Selection —', 'Canada', 'United States', 'Mexico'].map((name) => '<li role="option">' + name + '</li>').join('');
+          list.querySelectorAll('[role="option"]').forEach((option) => option.addEventListener('click', () => {
+            box.querySelector('.dropdown-text').textContent = option.textContent;
+            list.hidden = true;
+            box.setAttribute('aria-expanded', 'false');
+          }));
+          list.hidden = false;
+          box.setAttribute('aria-expanded', 'true');
+        });
+      </script>`,
+    }),
+  );
+  const page = await context.newPage();
+  await page.goto(`${origin}/link-list`);
+  await panel.bringToFront();
+  await enqueue([page]);
+  await expect(page.locator('[id="1_WorkCountry_icimsDropdown"] .dropdown-text')).toHaveText("United States", { timeout: 45_000 });
+});
+
+// AMD's iCIMS screening page (report 4933eec7, 2026-11-07): native lists
+// marked role="combobox", naming a listbox that is never drawn. Waited on
+// as custom lists, every one ended "Dropdown options were not available".
+test("a native list given the combobox role is set as a select", async () => {
+  await ui({ type: "API", path: "/v1/profile", method: "PUT", body: { ...profile, workAuthorization: "Yes" } });
+  await context.route(`${origin}/native-combobox`, (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: `<!doctype html><title>Questions</title><form onsubmit="return false">
+        <div class="iCIMS_TableRow"><div id="Q62_questionText" class="iCIMS_InfoField iCIMS_InfoField_Questions iCIMS_TableCell"><label class="iCIMS_LabelText" for="Q62">
+Are you legally authorized to work in the United States?<span class="Field_Required"><span class="Field_RequiredStar">*</span></span>
+</label></div>
+<div class="iCIMS_InfoData iCIMS_InfoData_Questions iCIMS_TableCell"><select id="Q62" name="Q62" data-label="Q62" class=" iCIMS_Forms_Global customFieldContainer iCIMS_Forms_DropDown iCIMS_Forms_Qnull iCIMS_Forms_RequiredField form-control" icimsdropdown-enabled="0" icimsdropdown-ajax="1" icimsdropdown-search="0" icimsdropdown-selected="" aria-labelledby="label_Q62" aria-required="true" i_required="true" aria-describedby="Q62_error" role="combobox" aria-expanded="false" aria-controls="Q62_listbox" aria-activedescendant=""><option legacy="true" value="" selected="">— Make a Selection —</option><option title="Yes" value="Yes" dataid="Yes" sourceid="Yes">Yes</option><option title="No" value="No" dataid="No" sourceid="No">No</option></select></div></div>
+      </form>`,
+    }),
+  );
+  const page = await context.newPage();
+  await page.goto(`${origin}/native-combobox`);
+  await enqueue([page]);
+  await expect(page.locator("#Q62")).toHaveValue("Yes", { timeout: 40000 });
+  expect((await state()).applications[0].missing.join(" ")).not.toContain("Dropdown options were not available");
+});
+
+// AMD's iCIMS EEO form (report c1e21ba3, 2026-11-07): radios with no
+// labels, each in a span of its own, the option as text after it, and the
+// question as the text before them. Read as "icims_f_Veteran", it was left.
+test("radios named only by the text beside them answer the veteran question", async () => {
+  await ui({ type: "API", path: "/v1/profile", method: "PUT", body: { ...profile, veteranStatus: "I am not a protected veteran" } });
+  await context.route(`${origin}/eeo-veteran`, (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: `<!doctype html><title>Form</title><form onsubmit="return false"><table><tr><td><span style="font-size: 13px; font-family: arial,helvetica,sans-serif;"><br>2. If you believe you belong to any of the categories of protected veterans listed above, please indicate by checking the appropriate box below. As a Government contractor subject to VEVRAA, we request this information in order to measure the effectiveness of the outreach and positive recruitment efforts we undertake pursuant to VEVRAA.<br><br><span class="iCIMS_Forms_Global customFieldContainer iCIMS_Forms_RadioGroup iCIMS_Forms_QVeteran iCIMS_Forms_RequiredField form-control"><input type="radio" id="icims_f_Veteran_ProtectedVeteran" name="icims_f_Veteran" aria-required="true" i_required="true"></span> I IDENTIFY AS ONE OR MORE OF THE CLASSIFICATIONS OF PROTECTED VETERAN LISTED ABOVE<br><br><span class="iCIMS_Forms_Global customFieldContainer iCIMS_Forms_RadioGroup iCIMS_Forms_QVeteran iCIMS_Forms_RequiredField form-control"><input type="radio" id="icims_f_Veteran_NotProtectedVeteran" name="icims_f_Veteran" aria-required="true" i_required="true"></span> I AM NOT A PROTECTED VETERAN<br><br><span class="iCIMS_Forms_Global customFieldContainer iCIMS_Forms_RadioGroup iCIMS_Forms_QVeteran iCIMS_Forms_RequiredField form-control"><input type="radio" id="icims_f_Veteran_optout" name="icims_f_Veteran" aria-required="true" i_required="true"></span> I DON'T WISH TO ANSWER<br><br></span></td></tr></table></form>`,
+    }),
+  );
+  const page = await context.newPage();
+  await page.goto(`${origin}/eeo-veteran`);
+  await enqueue([page]);
+  await expect(page.locator("#icims_f_Veteran_NotProtectedVeteran")).toBeChecked({ timeout: 40000 });
+  await expect(page.locator("#icims_f_Veteran_ProtectedVeteran")).not.toBeChecked();
+});
+
+// Databricks' Greenhouse form (report b3cb8c2b, 2026-11-08): a sanctions
+// list and its follow-up. Read as what they ask, "None of the above" and
+// "Not applicable" are ticked, and boxes ticked before are cleared; the
+// page's own state put "U.S. citizen" back when the next box was ticked,
+// and the box is set again.
+test("a sanctions list and its follow-up get None and Not applicable, and stay so", async () => {
+  await ui({ type: "API", path: "/v1/profile", method: "PUT", body: { ...profile, country: "United States", citizenships: ["US"], willingToRelocate: "Yes" } });
+  const list = (id: string, question: string, options: string[], ticked: string[]) =>
+    `<fieldset class="checkbox"><legend class="label checkbox__description">${question}</legend>` +
+    options.map((option, n) => `<div class="checkbox__wrapper"><div class="checkbox__input"><input type="checkbox" id="${id}[]_${n}" name="${id}[]"${ticked.includes(option) ? " checked" : ""}></div><label for="${id}[]_${n}">${option}</label></div>`).join("") + `</fieldset>`;
+  const sanctions = "Please confirm whether any of the below applies to you. Select all that apply. Note: This information will only be used to ensure compliance with U.S. sanctions and export controls.";
+  const followUp = "If you selected a response to the prior question other than “none of the above,” please confirm whether any of the following also applies to you. Select all that apply.";
+  await context.route(`${origin}/sanctions-list`, (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: `<!doctype html><title>Apply</title><form onsubmit="return false"><label>First name<input name="first"></label>
+        ${list("q1", sanctions, ["Citizen or permanent resident of Cuba, Iran, North Korea, or Syria", "Ordinarily a resident of Russia or Belarus and not willing to relocate for a Databricks role", "None of the above"], ["Ordinarily a resident of Russia or Belarus and not willing to relocate for a Databricks role"])}
+        ${list("q2", followUp, ["U.S. citizen", "U.S. permanent resident (Green Card holder)", "Not applicable (i.e., I selected “none of the above” for the prior question)"], ["U.S. citizen"])}
+      </form><script>{
+        // The page keeps its own state and draws the boxes from it after
+        // each click; it misses the first change of "U.S. citizen".
+        const state = new Map([...document.querySelectorAll('input[type="checkbox"]')].map((box) => [box.id, box.checked]));
+        let missed = false;
+        document.addEventListener("click", (event) => {
+          const box = event.target.closest('input[type="checkbox"]');
+          if (!box) return;
+          if (box.id === "q2[]_0" && !missed) missed = true;
+          else state.set(box.id, box.checked);
+          setTimeout(() => { for (const [id, checked] of state) document.getElementById(id).checked = checked; }, 50);
+        });
+      }</script>`,
+    }),
+  );
+  const page = await context.newPage();
+  await page.goto(`${origin}/sanctions-list`);
+  await enqueue([page]);
+  await expect.poll(async () => (await state()).applications[0]?.status, { timeout: 40000 }).toMatch(/awaiting-user|ready/);
+  await page.waitForTimeout(1000);
+  const ticked = await page.locator('input[type="checkbox"]').evaluateAll((boxes) => boxes.map((box) => `${box.id}:${(box as HTMLInputElement).checked}`));
+  expect(ticked).toEqual(["q1[]_0:false", "q1[]_1:false", "q1[]_2:true", "q2[]_0:false", "q2[]_1:false", "q2[]_2:true"]);
+  // Answered, so not listed as left for the applicant.
+  expect((await state()).applications[0].missing.join(" ")).not.toContain("Legal or eligibility question left for you");
+});
+
 test("an upload the site announces as successful is not reported as failed", async () => {
   await context.route(`${origin}/announcing-uploader`, (route) =>
     route.fulfill({
@@ -12391,14 +13588,16 @@ async function icimsProfileFill(options: { schoolListed?: boolean }) {
   // Found by searching the shorter name; not "Engineering" from the
   // unfiltered first page.
   await expect(text(0, "Major")).toHaveText("Data Science");
-  await expect(row(0).locator("select[id$='IsGraduated']")).toHaveValue("No");
+  // "In Progress", the first of the rule's two answers for an unfinished
+  // degree, over the parser's "Received" (AMD, 2026-11-07).
+  await expect(row(0).locator("select[id$='IsGraduated']")).toHaveValue("28595");
   await expect(row(0).locator("select[name$='EducationStartDate_Month']")).toHaveValue("08");
   await expect(row(0).locator("select[name$='EducationStartDate_Date']")).toHaveValue("19");
   await expect(row(0).locator("input[name$='EducationStartDate_Year']")).toHaveValue("2025");
   await expect(row(0).locator("input[name$='OtherSchool']")).toHaveValue("");
   await expect(text(1, "Degree")).toHaveText("Bachelors Degree");
   await expect(text(1, "Major")).toHaveText("Computer Science");
-  await expect(row(1).locator("select[id$='IsGraduated']")).toHaveValue("Yes");
+  await expect(row(1).locator("select[id$='IsGraduated']")).toHaveValue("28598");
   await expect(row(1).locator("input[name$='EducationStartDate_Year']")).toHaveValue("2020");
   await expect(row(1).locator("select[name$='EducationStartDate_Month']")).toHaveValue("09");
   await expect(row(1).locator("select[name$='EducationStartDate_Date']")).toHaveValue("1");
@@ -12408,6 +13607,9 @@ async function icimsProfileFill(options: { schoolListed?: boolean }) {
   // The parser's extra row is gone, and the review says so.
   await expect(page.locator(".iCIMS_CollectionContainer")).toHaveCount(2);
   expect((await state()).applications[0].missing.join(" ")).toContain("so it was removed");
+  // A parsed answer the rule found already right is not one to check (AMD,
+  // 2026-11-07).
+  expect((await state()).applications[0].missing.join(" ")).not.toContain("Did You Graduate?");
   expect(await page.evaluate(() => (window as any).uploads)).toBe(1);
   return { text, row };
 }
@@ -12418,6 +13620,49 @@ test("an iCIMS profile rebuilt from the resume is corrected in profile order, an
   // The right campus, found by searching a shorter name; not Penn State Harrisburg.
   await expect(text(1, "School")).toHaveText("Pennsylvania State University-University Park");
   await expect(row(1).locator("input[name$='OtherSchool']")).toHaveValue("");
+  // Filled again, the rows are already right and skipped whole: what the
+  // site holds is still read as the profile's, its list by its text and a
+  // date's day as a day (AMD, 2026-11-07).
+  const before = (await state()).applications[0].attempts.length;
+  await ui({ type: "FILL_STEP", id: (await state()).applications[0].id });
+  await expect.poll(async () => (await state()).applications[0].attempts.length, { timeout: 60000 }).toBeGreaterThan(before);
+  await expect.poll(async () => (await state()).applications[0].status, { timeout: 60000 }).toMatch(/^(awaiting-user|ready)$/);
+  const review = (await state()).applications[0].missing.join(" ");
+  expect(review).not.toContain("Did You Graduate?");
+  expect(review).not.toMatch(/Start Date (Day|Month|Year)/);
+});
+
+// AMD's iCIMS (2026-11-07): the site showed both schools exactly, the other
+// way round from the profile. Paired by position, each took the other's
+// graduation and "not listed" box; each row now keeps its own school.
+test("iCIMS rows showing both schools in the other order keep their own schools", async () => {
+  test.setTimeout(150000);
+  const current = await ui({ type: "API", path: "/v1/profile" });
+  await ui({
+    type: "API", path: "/v1/profile", method: "PUT",
+    body: {
+      ...current, confirmed: true, country: "United States of America", state: "Arizona",
+      education: [
+        { organization: "Michigan State University", title: "Master of Science", fieldOfStudy: "Data Science", startDate: "2025-08-19", endDate: "2099-05", location: "", details: "" },
+        { organization: "Pennsylvania State University, University Park", title: "Bachelor of Science", fieldOfStudy: "Computer Science", startDate: "2020-09", endDate: "2024-06", location: "", details: "" },
+      ],
+    },
+  });
+  const site = "https://careers-acme.icims.com";
+  await context.route(`${site}/jobs/2/intern/candidate**`, (route) =>
+    route.fulfill({ contentType: "text/html", body: icimsCandidatePage({ swapped: true }) }),
+  );
+  const page = await context.newPage();
+  await page.goto(`${site}/jobs/2/intern/candidate?from=login`);
+  await enqueue([page]);
+  const row = (n: number) => page.locator(".iCIMS_CollectionContainer").nth(n);
+  await expect.poll(async () => (await state()).applications[0].status, { timeout: 120000 }).toMatch(/awaiting-user|ready/);
+  await expect(row(0).locator('a[id$="_CandProfileFields.School_icimsDropdown"]')).toHaveText("Pennsylvania State University-University Park");
+  await expect(row(0).locator("select[id$='IsGraduated']")).toHaveValue("28598");
+  await expect(row(0).locator("select[name$='EducationStartDate_Year'], input[name$='EducationStartDate_Year']")).toHaveValue("2020");
+  await expect(row(1).locator('a[id$="_CandProfileFields.School_icimsDropdown"]')).toHaveText("Michigan State University");
+  await expect(row(1).locator("select[id$='IsGraduated']")).toHaveValue("28595");
+  await expect(row(1).locator("input[name$='EducationStartDate_Year']")).toHaveValue("2025");
 });
 
 test("an iCIMS school missing from the list gets the list's Not Found entry and Other School", async () => {
@@ -12666,6 +13911,51 @@ test("a resume uploader that rewrites the form gets the resume first, once", asy
     .poll(async () => (await state()).applications[0].status, { timeout: 25000 })
     .toMatch(/awaiting-user|ready/);
   expect(await page.evaluate(() => (window as any).uploads)).toBe(1);
+});
+
+// Microsoft's careers form (2026-11-07): an uploaded résumé is taken into
+// its own résumé list, named in that list's box, and the file input is
+// emptied. Every upload re-applies its parse, which empties Address and Zip.
+// The résumé was sent again on each fill, after the address was typed, and
+// the address was left blank.
+test("a résumé named in the site's own list is not sent again over a typed address", async () => {
+  await ui({ type: "API", path: "/v1/profile", method: "PUT", body: { ...profile, address: "100 Test Way", postalCode: "85001" } });
+  await context.route(`${origin}/resume-list`, (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: `<!doctype html><title>Apply</title><form onsubmit="return false">
+        <label for="input-3">Upload your resume</label>
+        <input id="input-3" role="combobox" aria-haspopup="listbox" readonly value="">
+        <label>Resume<input type="file" name="resume" accept=".pdf,.docx"></label>
+        <label>First name<input name="firstName"></label>
+        <label for="address">Address</label><input id="address" name="address" aria-required="true">
+        <label for="zip">Postal Code/Zip</label><input id="zip" name="zip" aria-required="true">
+      </form>
+      <script>
+        window.uploads = 0;
+        document.querySelector('[name="resume"]').addEventListener("change", (event) => {
+          const name = event.target.files[0].name;
+          window.uploads++;
+          setTimeout(() => {
+            document.getElementById("input-3").value = name;
+            event.target.value = "";
+            document.getElementById("address").value = "";
+            document.getElementById("zip").value = "";
+          }, 300);
+        });
+      </script>`,
+    }),
+  );
+  const page = await context.newPage();
+  await page.goto(`${origin}/resume-list`);
+  await enqueue([page]);
+  await expect.poll(async () => (await state()).applications[0].status, { timeout: 40000 }).toMatch(/awaiting-user|ready/);
+  await ui({ type: "FILL_STEP", id: (await state()).applications[0].id });
+  await expect.poll(async () => (await state()).applications[0].status, { timeout: 40000 }).toMatch(/awaiting-user|ready/);
+  await page.waitForTimeout(1500);
+  expect(await page.evaluate(() => (window as any).uploads)).toBe(1);
+  await expect(page.locator("#address")).toHaveValue("100 Test Way");
+  await expect(page.locator("#zip")).toHaveValue("85001");
 });
 
 test("manual workspace tracks related tabs, fills only on request, and saves a redacted issue snapshot", async () => {
@@ -14215,6 +15505,9 @@ test("with AI filling automatically, trying it again is offered only when someth
 });
 
 test("structured AI fallback lists unresolved fields before an explicit reviewed fill", async () => {
+  // "Degree Level Sought": the profile answers a plain "Degree Level" (the
+  // degree under way, 2026-11-05), so the list AI must suggest for asks
+  // something the profile does not hold.
   let calls = 0;
   const providerServer = createServer(async (req, res) => {
     calls++;
@@ -14278,7 +15571,7 @@ test("structured AI fallback lists unresolved fields before an explicit reviewed
       contentType: "text/html",
       body: `<!doctype html><title>Education fallback</title><main><h1>Education Information</h1><form><fieldset><legend>Education Information 1</legend>
         <label for="school">School Attended</label><input id="school" required>
-        <label for="degree">Degree Level</label><select id="degree" required><option value="">Choose</option><option>High school</option><option>Bachelor's degree</option><option>Master's degree</option></select>
+        <label for="degree">Degree Level Sought</label><select id="degree" required><option value="">Choose</option><option>High school</option><option>Bachelor's degree</option><option>Master's degree</option></select>
         <label for="years">Years Completed</label><input id="years" required>
         </fieldset><label for="essay">Describe a project</label><textarea id="essay"></textarea>
         <label><input id="certify" type="checkbox"> I certify this information is true</label>
@@ -14304,7 +15597,7 @@ test("structured AI fallback lists unresolved fields before an explicit reviewed
   });
   await expect(review).toBeVisible();
   await expect(review.getByText("School Attended", { exact: true })).toBeVisible();
-  await expect(review.getByText("Degree Level", { exact: true })).toBeVisible();
+  await expect(review.getByText("Degree Level Sought", { exact: true })).toBeVisible();
   await expect(review.getByText("Years Completed", { exact: true })).toBeVisible();
   await expect(review.getByText("Describe a project", { exact: true })).toHaveCount(0);
   await expect(review.getByText(/Normal fill could not match this field/)).toHaveCount(3);
@@ -14329,7 +15622,7 @@ test("structured AI fallback lists unresolved fields before an explicit reviewed
   await school.fill("MSU");
   await expect(
     review.getByRole("combobox", {
-      name: "Suggested value: Degree Level",
+      name: "Suggested value: Degree Level Sought",
       exact: true,
     }),
   ).toHaveValue("Bachelor's degree");

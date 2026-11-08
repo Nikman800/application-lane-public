@@ -92,12 +92,15 @@ export async function requestTrustedType(
   signal?: AbortSignal,
   valid: () => boolean = () => true,
   enter = false,
+  choose: boolean | number = false,
+  hold = false,
+  click?: { x: number; y: number },
 ): Promise<MainWorldResult> {
   return claimed(element, guard, signal, valid, async (token) => {
     const response = await chrome.runtime.sendMessage({
       type: "TRUSTED_TYPE",
       ...guard,
-      request: { clear, text, token, ...(enter ? { enter: true } : {}) },
+      request: { clear, text, token, ...(enter ? { enter: true } : {}), ...(choose ? { choose } : {}), ...(hold ? { hold: true } : {}), ...(click ? { click } : {}) },
     });
     if (!response?.ok)
       throw new Error(response?.error || "Trusted typing failed.");

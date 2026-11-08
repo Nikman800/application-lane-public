@@ -49,7 +49,10 @@ const devTools = process.env.LANE_DEV_TOOLS === "1" || (process.env.LANE_DEV_TOO
 const targets = store
   ? [["dist/extension-store", "store"]]
   : [
-      ["dist/extension", "extension"],
+      // LANE_EXTENSION_DIR: a build for the browser tests, apart from the
+      // dist/extension the applicant's Chrome loads, so testing never
+      // changes the extension under a fill in progress.
+      [process.env.LANE_EXTENSION_DIR || "dist/extension", "extension"],
       ["dist/extension-baseline", "baseline"],
     ];
 for (const [outdir, target] of targets) {

@@ -4,7 +4,8 @@
     "*://*.sapsf.eu/*",
     "*://*.sapsf.com/*",
     "*://*.successfactors.com/*",
-    "*://*.successfactors.eu/*"
+    "*://*.successfactors.eu/*",
+    "*://*.ns2cloud.com/*"
   ],
   "urlsExcluded": [],
   "embeddedPaths": [],
@@ -39,17 +40,21 @@
             {
               "path": "%INPUTPATH%//span[contains(@class,'addAttachments')]",
               "method": "click",
-              "time": 3000
+              "time": 3000,
+              "condition": "%INPUTPATH%[not(.//span[contains(@class,'attachmentLastModified')][number(concat(substring(normalize-space(.),8,4),substring(normalize-space(.),2,2),substring(normalize-space(.),5,2))) >= %TODAY%])]"
             },
             {
-              "path": "//input[@type='file'][@name='fileData']",
+              "path": "//input[@type='file'][starts-with(@name,'fileData')]",
               "method": "uploadResume",
-              "time": 5000
+              "time": 5000,
+              "condition": "%INPUTPATH%[not(.//span[contains(@class,'attachmentLastModified')][number(concat(substring(normalize-space(.),8,4),substring(normalize-space(.),2,2),substring(normalize-space(.),5,2))) >= %TODAY%])]"
             },
             {
               "path": "//button[@title='Upload']",
               "method": "click",
-              "time": 3000
+              "time": 3000,
+              "allowFailure": true,
+              "condition": "%INPUTPATH%[not(.//span[contains(@class,'attachmentLastModified')][number(concat(substring(normalize-space(.),8,4),substring(normalize-space(.),2,2),substring(normalize-space(.),5,2))) >= %TODAY%])]"
             }
           ]
         }
@@ -78,17 +83,21 @@
             {
               "path": "%INPUTPATH%//span[contains(@class,'addAttachments')]",
               "method": "click",
-              "time": 3000
+              "time": 3000,
+              "condition": "%INPUTPATH%[not(.//span[contains(@class,'attachmentLastModified')][number(concat(substring(normalize-space(.),8,4),substring(normalize-space(.),2,2),substring(normalize-space(.),5,2))) >= %TODAY%])]"
             },
             {
-              "path": "//input[@type='file'][@name='fileData']",
+              "path": "//input[@type='file'][starts-with(@name,'fileData')]",
               "method": "uploadCoverLetter",
-              "time": 5000
+              "time": 5000,
+              "condition": "%INPUTPATH%[not(.//span[contains(@class,'attachmentLastModified')][number(concat(substring(normalize-space(.),8,4),substring(normalize-space(.),2,2),substring(normalize-space(.),5,2))) >= %TODAY%])]"
             },
             {
               "path": "//button[@title='Upload']",
               "method": "click",
-              "time": 3000
+              "time": 3000,
+              "allowFailure": true,
+              "condition": "%INPUTPATH%[not(.//span[contains(@class,'attachmentLastModified')][number(concat(substring(normalize-space(.),8,4),substring(normalize-space(.),2,2),substring(normalize-space(.),5,2))) >= %TODAY%])]"
             }
           ]
         }
@@ -99,7 +108,7 @@
       [
         {
           "path": [
-            ".//div[contains(@class,'RCMFormField')][label[contains(@class,'rcmFormFieldLabel')][starts-with(translate(normalize-space(translate(.,'*\u00a0','  ')),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'country of residence')]]//input[contains(@class,'rcmpaginatedselectinput')]"
+            ".//div[contains(@class,'RCMFormField')][label[contains(@class,'rcmFormFieldLabel')][starts-with(translate(normalize-space(translate(.,'* ','  ')),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'country of residence')]]//input[contains(@class,'rcmpaginatedselectinput')]"
           ],
           "actions": [
             {
@@ -123,7 +132,7 @@
       [
         {
           "path": [
-            ".//div[contains(@class,'RCMFormField')][label[contains(@class,'rcmFormFieldLabel')][starts-with(translate(normalize-space(translate(.,'*\u00a0','  ')),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'usa state') or starts-with(translate(normalize-space(translate(.,'*\u00a0','  ')),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'state')]]//input[contains(@class,'rcmpaginatedselectinput')]"
+            ".//div[contains(@class,'RCMFormField')][label[contains(@class,'rcmFormFieldLabel')][starts-with(translate(normalize-space(translate(.,'* ','  ')),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'usa state') or starts-with(translate(normalize-space(translate(.,'* ','  ')),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'state')]]//input[contains(@class,'rcmpaginatedselectinput')]"
           ],
           "actions": [
             {
@@ -147,7 +156,7 @@
       [
         {
           "path": [
-            ".//div[contains(@class,'RCMFormField')][label[contains(@class,'rcmFormFieldLabel')][starts-with(translate(normalize-space(translate(.,'*\u00a0','  ')),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'gender')]]//input[contains(@class,'rcmpaginatedselectinput')]"
+            ".//div[contains(@class,'RCMFormField')][label[contains(@class,'rcmFormFieldLabel')][starts-with(translate(normalize-space(translate(.,'* ','  ')),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'gender')]]//input[contains(@class,'rcmpaginatedselectinput')]"
           ],
           "actions": [
             {
@@ -171,7 +180,7 @@
       [
         {
           "path": [
-            ".//div[contains(@class,'RCMFormField')][label[contains(@class,'rcmFormFieldLabel')][starts-with(translate(normalize-space(translate(.,'*\u00a0','  ')),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'veteran')]]//input[contains(@class,'rcmpaginatedselectinput')]"
+            ".//div[contains(@class,'RCMFormField')][label[contains(@class,'rcmFormFieldLabel')][starts-with(translate(normalize-space(translate(.,'* ','  ')),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'veteran')]]//input[contains(@class,'rcmpaginatedselectinput')]"
           ],
           "actions": [
             {
@@ -195,7 +204,7 @@
       [
         {
           "path": [
-            ".//div[contains(@class,'RCMFormField')][label[contains(@class,'rcmFormFieldLabel')][starts-with(translate(normalize-space(translate(.,'*\u00a0','  ')),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'please check one of the boxes') or starts-with(translate(normalize-space(translate(.,'*\u00a0','  ')),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'check one of the boxes') or starts-with(translate(normalize-space(translate(.,'*\u00a0','  ')),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'disability')]]//input[contains(@class,'rcmpaginatedselectinput')]"
+            ".//div[contains(@class,'RCMFormField')][label[contains(@class,'rcmFormFieldLabel')][starts-with(translate(normalize-space(translate(.,'* ','  ')),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'please check one of the boxes') or starts-with(translate(normalize-space(translate(.,'* ','  ')),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'check one of the boxes') or starts-with(translate(normalize-space(translate(.,'* ','  ')),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'disability')]]//input[contains(@class,'rcmpaginatedselectinput')]"
           ],
           "actions": [
             {
@@ -239,13 +248,13 @@
             [
               "company",
               [
-                ".//div[contains(@class,'RCMFormField')][label[contains(@class,'rcmFormFieldLabel')][starts-with(translate(normalize-space(translate(.,'*\u00a0','  ')),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'company')]]//input[not(@type='hidden')][not(contains(@class,'rcmpaginatedselectinput'))]"
+                ".//div[contains(@class,'RCMFormField')][label[contains(@class,'rcmFormFieldLabel')][starts-with(translate(normalize-space(translate(.,'* ','  ')),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'company')]]//input[not(@type='hidden')][not(contains(@class,'rcmpaginatedselectinput'))]"
               ]
             ],
             [
               "title",
               [
-                ".//div[contains(@class,'RCMFormField')][label[contains(@class,'rcmFormFieldLabel')][starts-with(translate(normalize-space(translate(.,'*\u00a0','  ')),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'position') or starts-with(translate(normalize-space(translate(.,'*\u00a0','  ')),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'job title') or starts-with(translate(normalize-space(translate(.,'*\u00a0','  ')),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'title')]]//input[not(@type='hidden')][not(contains(@class,'rcmpaginatedselectinput'))]"
+                ".//div[contains(@class,'RCMFormField')][label[contains(@class,'rcmFormFieldLabel')][starts-with(translate(normalize-space(translate(.,'* ','  ')),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'position') or starts-with(translate(normalize-space(translate(.,'* ','  ')),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'job title') or starts-with(translate(normalize-space(translate(.,'* ','  ')),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'title')]]//input[not(@type='hidden')][not(contains(@class,'rcmpaginatedselectinput'))]"
               ]
             ],
             [
@@ -253,7 +262,7 @@
               [
                 {
                   "path": [
-                    ".//div[contains(@class,'RCMFormField')][label[contains(@class,'rcmFormFieldLabel')][starts-with(translate(normalize-space(translate(.,'*\u00a0','  ')),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'country')]]//input[contains(@class,'rcmpaginatedselectinput')]"
+                    ".//div[contains(@class,'RCMFormField')][label[contains(@class,'rcmFormFieldLabel')][starts-with(translate(normalize-space(translate(.,'* ','  ')),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'country')]]//input[contains(@class,'rcmpaginatedselectinput')]"
                   ],
                   "actions": [
                     {
@@ -277,7 +286,7 @@
               [
                 {
                   "path": [
-                    ".//div[contains(@class,'RCMFormField')][label[contains(@class,'rcmFormFieldLabel')][starts-with(translate(normalize-space(translate(.,'*\u00a0','  ')),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'present employer')]]//input[contains(@class,'rcmpaginatedselectinput')]"
+                    ".//div[contains(@class,'RCMFormField')][label[contains(@class,'rcmFormFieldLabel')][starts-with(translate(normalize-space(translate(.,'* ','  ')),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'present employer')]]//input[contains(@class,'rcmpaginatedselectinput')]"
                   ],
                   "actions": [
                     {
@@ -346,7 +355,7 @@
               [
                 {
                   "path": [
-                    ".//div[contains(@class,'RCMFormField')][label[contains(@class,'rcmFormFieldLabel')][starts-with(translate(normalize-space(translate(.,'*\u00a0','  ')),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'school name') or starts-with(translate(normalize-space(translate(.,'*\u00a0','  ')),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'school') or starts-with(translate(normalize-space(translate(.,'*\u00a0','  ')),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'university') or starts-with(translate(normalize-space(translate(.,'*\u00a0','  ')),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'institution')]]//input[contains(@class,'rcmpaginatedselectinput')]"
+                    ".//div[contains(@class,'RCMFormField')][label[contains(@class,'rcmFormFieldLabel')][starts-with(translate(normalize-space(translate(.,'* ','  ')),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'school name') or starts-with(translate(normalize-space(translate(.,'* ','  ')),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'school') or starts-with(translate(normalize-space(translate(.,'* ','  ')),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'university') or starts-with(translate(normalize-space(translate(.,'* ','  ')),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'institution')]]//input[contains(@class,'rcmpaginatedselectinput')]"
                   ],
                   "actions": [
                     {
@@ -363,7 +372,7 @@
                     }
                   ]
                 },
-                ".//div[contains(@class,'RCMFormField')][label[contains(@class,'rcmFormFieldLabel')][starts-with(translate(normalize-space(translate(.,'*\u00a0','  ')),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'school name') or starts-with(translate(normalize-space(translate(.,'*\u00a0','  ')),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'school') or starts-with(translate(normalize-space(translate(.,'*\u00a0','  ')),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'institution')]]//input[not(@type='hidden')][not(contains(@class,'rcmpaginatedselectinput'))]"
+                ".//div[contains(@class,'RCMFormField')][label[contains(@class,'rcmFormFieldLabel')][starts-with(translate(normalize-space(translate(.,'* ','  ')),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'school name') or starts-with(translate(normalize-space(translate(.,'* ','  ')),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'school') or starts-with(translate(normalize-space(translate(.,'* ','  ')),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'institution')]]//input[not(@type='hidden')][not(contains(@class,'rcmpaginatedselectinput'))]"
               ]
             ],
             [
@@ -371,20 +380,20 @@
               [
                 {
                   "path": [
-                    ".//div[contains(@class,'RCMFormField')][label[contains(@class,'rcmFormFieldLabel')][starts-with(translate(normalize-space(translate(.,'*\u00a0','  ')),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'if other')]]//input[not(@type='hidden')][not(contains(@class,'rcmpaginatedselectinput'))]"
+                    ".//div[contains(@class,'RCMFormField')][label[contains(@class,'rcmFormFieldLabel')][starts-with(translate(normalize-space(translate(.,'* ','  ')),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'if other')]]//input[not(@type='hidden')][not(contains(@class,'rcmpaginatedselectinput'))]"
                   ],
                   "valueKey": "school",
                   "actions": [
                     {
-                      "path": ".//div[contains(@class,'RCMFormField')][label[contains(@class,'rcmFormFieldLabel')][starts-with(translate(normalize-space(translate(.,'*\u00a0','  ')),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'school name') or starts-with(translate(normalize-space(translate(.,'*\u00a0','  ')),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'school')]]//input[contains(@class,'rcmpaginatedselectinput')]",
+                      "path": ".//div[contains(@class,'RCMFormField')][label[contains(@class,'rcmFormFieldLabel')][starts-with(translate(normalize-space(translate(.,'* ','  ')),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'school name') or starts-with(translate(normalize-space(translate(.,'* ','  ')),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'school')]]//input[contains(@class,'rcmpaginatedselectinput')]",
                       "method": "click",
-                      "condition": ".//div[contains(@class,'RCMFormField')][label[contains(@class,'rcmFormFieldLabel')][starts-with(translate(normalize-space(translate(.,'*\u00a0','  ')),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'school name') or starts-with(translate(normalize-space(translate(.,'*\u00a0','  ')),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'school')]]//input[contains(@class,'rcmpaginatedselectinput')][not(starts-with(@title,'Other'))]"
+                      "condition": ".//div[contains(@class,'RCMFormField')][label[contains(@class,'rcmFormFieldLabel')][starts-with(translate(normalize-space(translate(.,'* ','  ')),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'school name') or starts-with(translate(normalize-space(translate(.,'* ','  ')),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'school')]]//input[contains(@class,'rcmpaginatedselectinput')][not(starts-with(@title,'Other'))]"
                     },
                     {
                       "path": "//ul[contains(@class,'sf-list-select')]//li[@role='option']/a[starts-with(@title,'Other')]",
                       "method": "click",
                       "time": 8000,
-                      "condition": ".//div[contains(@class,'RCMFormField')][label[contains(@class,'rcmFormFieldLabel')][starts-with(translate(normalize-space(translate(.,'*\u00a0','  ')),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'school name') or starts-with(translate(normalize-space(translate(.,'*\u00a0','  ')),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'school')]]//input[contains(@class,'rcmpaginatedselectinput')][not(starts-with(@title,'Other'))]"
+                      "condition": ".//div[contains(@class,'RCMFormField')][label[contains(@class,'rcmFormFieldLabel')][starts-with(translate(normalize-space(translate(.,'* ','  ')),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'school name') or starts-with(translate(normalize-space(translate(.,'* ','  ')),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'school')]]//input[contains(@class,'rcmpaginatedselectinput')][not(starts-with(@title,'Other'))]"
                     },
                     {
                       "method": "default"
@@ -398,7 +407,7 @@
               [
                 {
                   "path": [
-                    ".//div[contains(@class,'RCMFormField')][label[contains(@class,'rcmFormFieldLabel')][starts-with(translate(normalize-space(translate(.,'*\u00a0','  ')),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'highest degree') or starts-with(translate(normalize-space(translate(.,'*\u00a0','  ')),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'degree') or starts-with(translate(normalize-space(translate(.,'*\u00a0','  ')),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'level')]]//input[contains(@class,'rcmpaginatedselectinput')]"
+                    ".//div[contains(@class,'RCMFormField')][label[contains(@class,'rcmFormFieldLabel')][starts-with(translate(normalize-space(translate(.,'* ','  ')),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'highest degree') or starts-with(translate(normalize-space(translate(.,'* ','  ')),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'degree') or starts-with(translate(normalize-space(translate(.,'* ','  ')),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'level')]]//input[contains(@class,'rcmpaginatedselectinput')]"
                   ],
                   "actions": [
                     {
@@ -422,7 +431,7 @@
               [
                 {
                   "path": [
-                    ".//div[contains(@class,'RCMFormField')][label[contains(@class,'rcmFormFieldLabel')][starts-with(translate(normalize-space(translate(.,'*\u00a0','  ')),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'country')]]//input[contains(@class,'rcmpaginatedselectinput')]"
+                    ".//div[contains(@class,'RCMFormField')][label[contains(@class,'rcmFormFieldLabel')][starts-with(translate(normalize-space(translate(.,'* ','  ')),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'country')]]//input[contains(@class,'rcmpaginatedselectinput')]"
                   ],
                   "actions": [
                     {
@@ -446,7 +455,7 @@
               [
                 {
                   "path": [
-                    ".//div[contains(@class,'RCMFormField')][label[contains(@class,'rcmFormFieldLabel')][starts-with(translate(normalize-space(translate(.,'*\u00a0','  ')),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'graduation year')]]//input[contains(@class,'rcmpaginatedselectinput')]"
+                    ".//div[contains(@class,'RCMFormField')][label[contains(@class,'rcmFormFieldLabel')][starts-with(translate(normalize-space(translate(.,'* ','  ')),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'graduation year')]]//input[contains(@class,'rcmpaginatedselectinput')]"
                   ],
                   "actions": [
                     {
@@ -470,7 +479,7 @@
               [
                 {
                   "path": [
-                    ".//div[contains(@class,'RCMFormField')][label[contains(@class,'rcmFormFieldLabel')][starts-with(translate(normalize-space(translate(.,'*\u00a0','  ')),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'field of study') or starts-with(translate(normalize-space(translate(.,'*\u00a0','  ')),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'major')]]//input[contains(@class,'rcmpaginatedselectinput')]"
+                    ".//div[contains(@class,'RCMFormField')][label[contains(@class,'rcmFormFieldLabel')][starts-with(translate(normalize-space(translate(.,'* ','  ')),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'field of study') or starts-with(translate(normalize-space(translate(.,'* ','  ')),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'major')]]//input[contains(@class,'rcmpaginatedselectinput')]"
                   ],
                   "actions": [
                     {
@@ -494,7 +503,7 @@
               [
                 {
                   "path": [
-                    ".//div[contains(@class,'RCMFormField')][label[contains(@class,'rcmFormFieldLabel')][starts-with(translate(normalize-space(translate(.,'*\u00a0','  ')),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'education status') or starts-with(translate(normalize-space(translate(.,'*\u00a0','  ')),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'status') or starts-with(translate(normalize-space(translate(.,'*\u00a0','  ')),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'progress')]]//input[contains(@class,'rcmpaginatedselectinput')]"
+                    ".//div[contains(@class,'RCMFormField')][label[contains(@class,'rcmFormFieldLabel')][starts-with(translate(normalize-space(translate(.,'* ','  ')),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'education status') or starts-with(translate(normalize-space(translate(.,'* ','  ')),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'status') or starts-with(translate(normalize-space(translate(.,'* ','  ')),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'progress')]]//input[contains(@class,'rcmpaginatedselectinput')]"
                   ],
                   "actions": [
                     {

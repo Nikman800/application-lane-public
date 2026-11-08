@@ -48,6 +48,9 @@ export const historySchema = z.object({
   // Still studying here (or still working here). An empty end date alone
   // does not say so.
   current: z.boolean().optional(),
+  // An education entry's own transcript: a file's name in the transcripts
+  // folder. A form asking for one level's transcript gets that entry's.
+  transcript: z.string().max(200).optional(),
 });
 // A professional reference the applicant is willing to have contacted. Phone
 // and email are optional because forms differ in which one they require.
@@ -381,6 +384,9 @@ export const fieldSchema = z.object({
   // A date format the control itself shows ("DD/MM/YYYY" as its
   // placeholder, pattern or description), when it shows one.
   format: z.string().max(100).optional(),
+  // A list's chosen option as it reads, where its value is a code ("28595"
+  // for iCIMS's "In Progress"), for the review to read and show.
+  valueText: z.string().max(300).optional(),
 });
 export type Field = z.infer<typeof fieldSchema>;
 export type Observation = {
@@ -396,6 +402,9 @@ export type Observation = {
   // What paused it: the event and the control it landed on.
   pausedBy?: string;
   blockers: string[];
+  // Document slots the page draws without a file box (SuccessFactors'
+  // attachment widgets): "resume", "cover".
+  documentSlots?: string[];
   canAdvance: boolean;
   atReview: boolean;
   // Sections the site config can add rows to when the step shows no fields
@@ -405,7 +414,7 @@ export type Observation = {
   // that keeps the form apart from the posting, usually the posting.
   referrer?: string;
 };
-export const CONTENT_VERSION = "2026-11-03-workday-option-pick";
+export const CONTENT_VERSION = "2026-11-08-lists-handled";
 export type Proposal = {
   fieldId: string;
   value: string;
@@ -519,6 +528,10 @@ export type Artifact = {
   mime: string;
   applicationId: string;
   operation: number;
+  // A transcript attached to an education entry: that entry's index and its
+  // degree's level (see shared/transcripts.ts).
+  education?: number;
+  level?: "undergraduate" | "graduate";
 };
 export type GenerationJob = {
   id: string;
@@ -636,7 +649,8 @@ export type Application = {
   configNotes?: string[];
   // A fingerprint of each document this application uploaded, by kind: a
   // file of the same name in the slot may be an earlier application's.
-  uploadedDocuments?: Partial<Record<"resume" | "cover" | "transcript", string>>;
+  // By kind; an education entry's own transcript as "transcript:<entry>".
+  uploadedDocuments?: Partial<Record<string, string>>;
   // The last fill's own recording, attached to an issue report.
   lastRecordingId?: string;
   // The job posting as the applicant gave it: a link, or the text pasted.

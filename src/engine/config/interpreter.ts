@@ -14,6 +14,8 @@ import {
   type ValueContext,
 } from "../values";
 import { normalize, type Profile } from "../../shared/model";
+import { skillNames } from "../../shared/skill-names";
+import { pickMonth } from "../page/month-picker";
 import { listedNames, type OptionsSource, type SiteOptions } from "./options-source";
 import { nameVariants } from "../../shared/matching";
 import { profileLanguages } from "../../shared/languages";
@@ -62,6 +64,10 @@ export type InterpreterOptions = {
   note?: (data: Record<string, unknown>) => void;
   // A value the site pre-filled (from a parsed resume) that may be replaced.
   isReplaceable?: (element: Element) => boolean;
+  // A site value the rule found already right: checked, so the review does
+  // not ask the applicant to check it (AMD's iCIMS "Did You Graduate?" and
+  // dates, 2026-11-07).
+  onConfirmed?: (element: Element) => void;
   // Reads the site's own list of a field's answers from a rule's
   // optionsSource (fetchSiteOptions); undefined when it cannot.
   listOptions?: (source: OptionsSource, terms: string[]) => Promise<SiteOptions | undefined>;
@@ -297,10 +303,13 @@ async function defaultExecute(request: MethodRequest): Promise<boolean> {
     focusable.blur();
     return true;
   }
+  // A month picked from its flatpickr calendar (month-picker.ts).
+  if (method === "pickMonth")
+    return element instanceof HTMLInputElement && pickMonth(element, values[0] || "");
   // Real keystrokes exist only inside the extension, where the background can
   // drive CDP. Everywhere else (unit tests, the offline eval) trustedType falls
   // back to these synthetic keys, which at least leave the value set.
-  if (method === "keyType" || method === "trustedType" || method === "trustedSearch") {
+  if (method === "keyType" || method === "trustedType" || method === "trustedSearch" || method === "trustedChoose") {
     // Widgets that keep their own state (Workday date sections, search
     // prompts) update from key events, not from an assigned value.
     const field = element as HTMLInputElement;
@@ -334,6 +343,11 @@ async function defaultExecute(request: MethodRequest): Promise<boolean> {
       element.dispatchEvent(new (viewOf(element).KeyboardEvent)("keyup", init));
     }
     field.dispatchEvent(new Event("change", { bubbles: true, composed: true }));
+    if (method === "trustedChoose") {
+      await sleep(1_500);
+      for (const key of [{ key: "ArrowDown", code: "ArrowDown", keyCode: 40, which: 40 }, { key: "Enter", code: "Enter", keyCode: 13, which: 13 }])
+        element.dispatchEvent(new (viewOf(element).KeyboardEvent)("keydown", { bubbles: true, composed: true, ...key }));
+    }
     if (method === "trustedSearch")
       element.dispatchEvent(
         new (viewOf(element).KeyboardEvent)("keydown", {
@@ -473,6 +487,7 @@ async function waitFor(
   removed: boolean,
   options: InterpreterOptions,
   accept: (element: Element) => boolean = () => true,
+  settled?: () => boolean,
 ): Promise<Element | undefined> {
   const deadline = (options.now || Date.now)() + timeout;
   let nudged = (options.now || Date.now)();
@@ -491,6 +506,7 @@ async function waitFor(
           ? (context as Document).documentElement
           : (context as Element))
       );
+    if (settled?.()) return;
     // SuccessFactors lists show a hundred options, alphabetically, and load
     // the next as the list is scrolled to its end; typing does not narrow
     // them. "Pennsylvania State University-University Park" and
@@ -502,6 +518,16 @@ async function waitFor(
       // each box around it that scrolls is taken to its end and told so.
       // One box told once loaded a school list's next page but never Area
       // of Study's (report 8f198b5b).
+      // Workday's search results are a virtual list that draws only the rows
+      // in view: NVIDIA's drew two of five, and "Computer Science", third,
+      // was never on the page to pick (2026-11-04). A screen at a time, back
+      // to the top after the end, as the applicant would scroll it.
+      for (const grid of root.querySelectorAll<HTMLElement>('[data-automation-id="activeListContainer"].ReactVirtualized__Grid, .ReactVirtualized__List[role="listbox"]')) {
+        if (grid.scrollHeight <= grid.clientHeight + 4) continue;
+        const atEnd = grid.scrollTop + grid.clientHeight >= grid.scrollHeight - 4;
+        grid.scrollTop = atEnd ? 0 : grid.scrollTop + Math.max(32, grid.clientHeight - 32);
+        grid.dispatchEvent(new Event("scroll"));
+      }
       for (const list of root.querySelectorAll("ul.sf-list-select")) {
         list.querySelector(":scope > li:last-child")?.scrollIntoView({ block: "end" });
         for (let box: Element | null = list, up = 0; box && up < 5; box = box.parentElement, up++) {
@@ -760,6 +786,18 @@ function remoteSelect2(target: Element) {
   return listed.length <= 1 ? control : undefined;
 }
 
+// A search list the general fill meets outside a site rule's paths (iCIMS'
+// job rows: each job's Country, India not on the unfiltered first page,
+// AMD 2026-11-07): searched and picked as a rule would.
+export function searchListDropdown(
+  target: Element,
+  values: string[],
+  globals: GlobalConfig,
+  options: Pick<InterpreterOptions, "signal" | "isLocked"> = {},
+) {
+  return viaSearchDropdown(target, values, globals, options as InterpreterOptions);
+}
+
 async function viaSearchDropdown(
   target: Element,
   values: string[],
@@ -792,6 +830,18 @@ function dismissPopup(element: Element) {
   // A box that does not say it is open or closed (SuccessFactors' search
   // lists) is closed the same way, unless it says it already is.
   if (!control || control.getAttribute("aria-expanded") === "false") return;
+  // A box that keeps whatever is typed (SmartRecruiters' Title and Company,
+  // components marked allowcustomvalues) takes Escape as "discard": the
+  // typed title was cleared and the entry refused (2026-11-04). Its list is
+  // closed by leaving it instead.
+  let host = (control.getRootNode() as ShadowRoot).host as Element | undefined;
+  for (let depth = 0; host && depth < 3 && !host.hasAttribute("allowcustomvalues"); depth++)
+    host = ((host.getRootNode() as ShadowRoot).host as Element | undefined);
+  if (host?.hasAttribute("allowcustomvalues")) {
+    (control as HTMLElement).blur?.();
+    control.dispatchEvent(new FocusEvent("focusout", { bubbles: true, composed: true }));
+    return;
+  }
   for (const type of ["keydown", "keyup"])
     control.dispatchEvent(
       new KeyboardEvent(type, { key: "Escape", code: "Escape", keyCode: 27, bubbles: true, composed: true }),
@@ -799,6 +849,21 @@ function dismissPopup(element: Element) {
   if (control.getAttribute("aria-expanded") !== "true") return;
   control.dispatchEvent(new FocusEvent("blur"));
   control.dispatchEvent(new FocusEvent("focusout", { bubbles: true, composed: true }));
+}
+
+// A list button whose rule opened its list and found nothing to pick is
+// closed, not left over the form: NVIDIA's Phone Device Type stayed open
+// after "Mobile" matched none of "Home" and "Home Cellular" (2026-11-04).
+// Its own Escape, then a press on the page as Workday's rules make.
+async function closeOpenedList(element: Element, options: InterpreterOptions) {
+  if (!element.matches('button[aria-haspopup="listbox"]') || element.getAttribute("aria-expanded") !== "true") return;
+  element.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", code: "Escape", keyCode: 27, bubbles: true, composed: true }));
+  await sleep(150, options.signal);
+  if (element.getAttribute("aria-expanded") !== "true") return;
+  const page = element.ownerDocument.querySelector<HTMLElement>('[data-automation-id="mainContent"], #mainContent');
+  if (!page) return;
+  for (const type of ["mousedown", "mouseup", "click"]) page.dispatchEvent(new MouseEvent(type, { bubbles: true, cancelable: true }));
+  await sleep(150, options.signal);
 }
 
 // A search list saying it found nothing ("There were no results" in
@@ -1176,13 +1241,32 @@ async function fillFallback(
       dismissPopup(element);
       return false;
     }
-    return execute({
+    const chosen = await execute({
       element: selected,
       globals,
       method: "click",
       signal: options.signal,
       values: [],
     });
+    // SuccessFactors checks a list only as focus leaves it: L3Harris's
+    // Veteran Status, the last list of its section, kept "Veteran Status is
+    // required" beside the pick, and the fill picked it again and again
+    // (2026-11-07).
+    // It checks only with its list closed (its _onBlur), and the list stays
+    // open after a pick: Escape closes it, keeping the pick.
+    if (chosen && element.matches('input.rcmpaginatedselectinput[role="combobox"]')) {
+      await sleep(150, options.signal);
+      if (element.getAttribute("aria-expanded") === "true") {
+        dismissPopup(element);
+        await sleep(150, options.signal);
+      }
+      await run("blur");
+      // In a tab in the background the box may hold no focus to lose, and
+      // no blur came (L3Harris, 2026-11-07): its own blur handler is called
+      // with one.
+      element.dispatchEvent(new FocusEvent("blur"));
+    }
+    return chosen;
   }
   return execute({
     element,
@@ -1419,6 +1503,7 @@ function matchHistoryRows(
     Boolean(wanted) &&
     (value === wanted || value.includes(wanted) || wanted.includes(value));
   const pairs: { row: number; scope: number; score: number }[] = [];
+  const exact: { row: number; scope: number }[] = [];
   rows.forEach((row, rowIndex) =>
     scopes.forEach((scope, scopeIndex) => {
       const organization = plainText(row.organization);
@@ -1437,12 +1522,32 @@ function matchHistoryRows(
         collection === "education" ? /major|discipline|field|study/i : /title|position/i,
         isReplaceable,
       );
+      const shown = names.length
+        ? []
+        : rowValues(
+          scope,
+          collection === "education" ? /school|university|institution|college/i : /company|employer|organization/i,
+          // Not a "school not listed" box: the row's own list names it.
+          (element) => /other/i.test(`${element.id} ${element.getAttribute("name") || ""}`),
+        );
+      if (organization && shown.includes(organization)) exact.push({ row: rowIndex, scope: scopeIndex });
       const score =
         (names.some((value) => matches(value, organization)) ? 2 : 0) +
         (details.some((value) => matches(value, subject)) ? 1 : 0);
       if (score) pairs.push({ row: rowIndex, scope: scopeIndex, score });
     }),
   );
+  // Without any entry of the applicant's, the site's own rows still say
+  // which is which when each profile row's school or employer is shown
+  // exactly, in a row of its own: AMD's iCIMS redrew two schools the other
+  // way round, and paired by position each took the other's graduation and
+  // "school not listed" box (2026-11-07). A parser's partial guesses (one
+  // school shown twice, another nowhere) still give way to profile order.
+  const exactRows = new Set(exact.map((pair) => pair.row));
+  const exactScopes = new Set(exact.map((pair) => pair.scope));
+  if (!pairs.length && rows.length > 1 && exactRows.size === rows.length && exactScopes.size === rows.length &&
+      rows.every((_, row) => exact.filter((pair) => pair.row === row).length === 1))
+    for (const pair of exact) pairs.push({ ...pair, score: 2 });
   const assigned = new Map<number, Element>();
   const taken = new Set<number>();
   for (const pair of pairs.sort((a, b) => b.score - a.score || a.row - b.row))
@@ -1603,6 +1708,49 @@ function ownedElsewhere(target: Element, base: Element): boolean {
   return Boolean(owner && owner !== base && !owner.contains(base) && !base.contains(owner));
 }
 
+// The list a button has open (aria-expanded, aria-controls), loaded and
+// unchanged for a second, holds no option the step is waiting for: the rest
+// of the wait finds nothing more. Each miss cost KLA's Workday form its full
+// four seconds (degree, levels, demographics), so a page took minutes
+// (report 6d839e90, 2026-11-04). The step then fails as it would have.
+function openListSettled(root: Document, options: InterpreterOptions) {
+  let seen = "";
+  let since = 0;
+  return () => {
+    const now = (options.now || Date.now)();
+    const opener = root.querySelector('[aria-expanded="true"][aria-controls]');
+    const list = opener && root.getElementById((opener.getAttribute("aria-controls") || "").split(/\s+/)[0]);
+    const shown = list ? [...list.querySelectorAll('[role="option"]')].map((option) => option.textContent || "").join("\n") : "";
+    if (!list || list.querySelectorAll('[role="option"]').length < 2) {
+      seen = "";
+      return false;
+    }
+    if (shown !== seen) {
+      seen = shown;
+      since = now;
+      return false;
+    }
+    return now - since >= 1_000;
+  };
+}
+
+// Steps that take the site's first entry for a value: a skill's other names
+// (skill-names.ts) are only for when its own finds nothing, and the library's
+// "Python (Programming Language)", listed first, is not passed over for a
+// stray "python" further down (2026-11-04).
+const siteOrdered = new WeakSet<object>();
+
+function heldBy(field: Element, values: string[]) {
+  const plain = (text: string) => text.replace(/\s+/g, " ").trim().toLowerCase();
+  return [...(field.closest('[data-automation-id="multiSelectContainer"]')?.querySelectorAll('[data-automation-id="selectedItem"]') || [])].some((item) => {
+    const shown = plain(item.getAttribute("title") || item.textContent || "");
+    return values.some((value) => {
+      const wanted = plain(value);
+      return Boolean(wanted) && (shown === wanted || shown.startsWith(`${wanted} (`) || shown.endsWith(` (${wanted})`));
+    });
+  });
+}
+
 async function runAction(
   action: FillAction,
   base: Element,
@@ -1649,6 +1797,10 @@ async function runAction(
             Boolean(action.removed),
             options,
             action.removed ? undefined : (element) => !ownedElsewhere(element, base) && !placeholderOption(element, values, base),
+            // Only a list a button opens: a search's list stays as it was
+            // until its answer comes, and Sonos's skills answered after a
+            // second, past this wait (2026-11-04).
+            action.removed || !base.matches('button[aria-haspopup="listbox"]') ? undefined : openListSettled(root, options),
           )
         : actionPaths.flatMap((path) =>
             queryXPathAll(
@@ -1673,7 +1825,7 @@ async function runAction(
     // profile's "…University, University Park", and the list's "…University
     // University Park Dietetic Internship", before it, is not (report
     // 8f198b5b).
-    if (values.length > 1 && !selfOnly) {
+    if (values.length > 1 && !selfOnly && !siteOrdered.has(action)) {
       const plain = (text: string) => text.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
       const rank = (element: Element) =>
         values.findIndex((candidate) => {
@@ -1691,6 +1843,16 @@ async function runAction(
   } else if (action.time) {
     await sleep(action.time, options.signal);
   }
+  // A skill the search's own Enter already added (one match is taken at once:
+  // Axiom Space's "PyTorch") is not clicked again: a second click takes it
+  // back off (2026-11-04). Judged once its option has appeared, when the
+  // site's own pick has been made.
+  // Only the pick itself: the step after it that closes the list (a press on
+  // the page) still runs, or the list stayed open over the form (Axiom
+  // Space, 2026-11-04).
+  if (siteOrdered.has(action) && target !== base &&
+      target.closest('[role="listbox"],[role="option"],[data-automation-id="activeListContainer"],[data-automation-activepopup="true"],[data-automation-id="promptOption"]') &&
+      heldBy(base, values)) return true;
   const mutates = action.method
     ? !nonMutatingMethods.has(action.method)
     : Boolean(action.event);
@@ -2019,7 +2181,7 @@ export async function interpretConfig(
             );
           const knownRow = (row: Element) =>
             !(selector.allowReuse && fresh(row)) && knownRows.some((known) => known === row || known.contains(row) || row.contains(known));
-          const matchedScopes = existingScopes.length
+          let matchedScopes = existingScopes.length
             ? matchHistoryRows(collection, rows, existingScopes, (element) =>
                 Boolean(options.isReplaceable?.(element)),
               )
@@ -2070,6 +2232,19 @@ export async function interpretConfig(
                 : [];
             }),
           );
+          // An entry already saved is no open row's: the rows still open
+          // are matched among the profile's unsaved ones only. An editor a
+          // cut-off pass left open (SmartRecruiters' second school, its fields in
+          // shadow roots no match could read) went by page order to the saved
+          // first school, the second was added again, and the open one was
+          // never saved (report a8c856cd, 2026-11-05).
+          if (saved.size && existingScopes.length) {
+            const unsaved = rows.map((row, index) => ({ row, index })).filter(({ index }) => !saved.has(index));
+            const rematched = matchHistoryRows(collection, unsaved.map(({ row }) => row), existingScopes, (element) =>
+              Boolean(options.isReplaceable?.(element)),
+            );
+            matchedScopes = new Map([...rematched].map(([at, scope]) => [unsaved[at].index, scope]));
+          }
           options.note?.({
             rows: collection,
             profileRows: rows.length,
@@ -2448,7 +2623,11 @@ export async function interpretConfig(
           (value.trim().length >= 6 &&
             current.startsWith(value.trim()) &&
             current.length - value.trim().length <= 2);
-        if (current && values.some(same)) {
+        // Not when the site itself calls it invalid: Microsoft's form showed
+        // the profile's address while its own state held none ("Address
+        // cannot be left blank"), and it was never typed again (2026-11-07).
+        if (current && values.some(same) && element.getAttribute("aria-invalid") !== "true") {
+          options.onConfirmed?.(element);
           results.push({ key, status: "skipped", reason: "The site's value is already right." });
           completed = true;
           break;
@@ -2494,6 +2673,7 @@ export async function interpretConfig(
         // button showing "Masters" (2026-10-16).
         const showing = !isTag(element, "input") && !isTag(element, "textarea") ? normalize(textValue(element) || "") : "";
         if (!selector.everyValue && showing && selector.actions?.some((action) => action.path) && values.some((value) => normalize(value) === showing)) {
+          options.onConfirmed?.(element);
           results.push({ key, status: "filled" });
           completed = true;
           break;
@@ -2524,7 +2704,7 @@ export async function interpretConfig(
           // holds no answer (Lever keeps the chosen location in a hidden
           // field). Not a failure, and not silent either. Only for a pick the
           // rule marks pickRequired: elsewhere typed text can be the answer.
-          const typing = /^(default|defaultWithoutBlur|jQuery|react|keyType|trustedType|trustedSearch|setValue)$/;
+          const typing = /^(default|defaultWithoutBlur|jQuery|react|keyType|trustedType|trustedSearch|trustedChoose|setValue)$/;
           const picks = (action: FillAction) =>
             Boolean(action.pickRequired && action.path) && (["click", "reactClick"].includes(action.method || "") || /^(mousedown|click)$/.test(action.event || ""));
           // browse: the list opened with nothing typed, the pick made from
@@ -2569,7 +2749,7 @@ export async function interpretConfig(
             !selector.everyValue &&
             values.length > 0 &&
             selector.actions.some((action) =>
-              /^(default|defaultWithoutBlur|keyType|trustedType|trustedSearch)$/.test(action.method || ""),
+              /^(default|defaultWithoutBlur|keyType|trustedType|trustedSearch|trustedChoose)$/.test(action.method || ""),
             ) &&
             selector.actions.some((action) =>
               paths(action.path).some((path) => /%(LOWER|UPPER)?VALUE%/.test(path)),
@@ -2708,8 +2888,13 @@ export async function interpretConfig(
             }
             // Each value searched in turn (Workday's skills, one search each):
             // a limit keeps a long profile list from taking minutes.
+            // A skill is searched by its own name and picked under the
+            // library's (skill-names.ts): "C#" as "C Sharp (Programming
+            // Language)".
+            const skillList = selector.everyValue && /^skills?$/.test(selector.valueKey || key);
+            if (skillList) for (const action of selector.actions) siteOrdered.add(action);
             const valueBatches = selector.everyValue
-              ? values.slice(0, selector.limit ?? values.length).map((value) => [value])
+              ? values.slice(0, selector.limit ?? values.length).map((value) => [value, ...(skillList ? skillNames(value) : [])])
               : [values];
             // In a list of picks, one it already holds is not searched again
             // (a second fill pressed nothing for each and waited 3 s), and one
@@ -2721,13 +2906,20 @@ export async function interpretConfig(
             const held = (value: string) =>
               [...(pickBox?.querySelectorAll('[data-automation-id="selectedItem"]') || [])].some((item) => {
                 const shown = (item.getAttribute("title") || item.textContent || "").trim().toLowerCase();
-                const wanted = value.trim().toLowerCase();
-                return shown === wanted || shown.startsWith(`${wanted} (`);
+                return [value, ...(skillList ? skillNames(value) : [])].some((name) => {
+                  const wanted = name.trim().toLowerCase();
+                  return shown === wanted || shown.startsWith(`${wanted} (`) || shown.endsWith(` (${wanted})`);
+                });
               });
-            for (const actionValues of valueBatches) {
-              if (pickBox && held(actionValues[0])) continue;
-              await runActions(actionValues);
-              if (pickBox && !held(actionValues[0])) notPicked.push(actionValues[0]);
+            try {
+              for (const actionValues of valueBatches) {
+                if (pickBox && held(actionValues[0])) continue;
+                await runActions(actionValues);
+                if (pickBox && !held(actionValues[0])) notPicked.push(actionValues[0]);
+              }
+            } catch (error) {
+              if (!isAbortError(error)) await closeOpenedList(element, options);
+              throw error;
             }
           }
         } else {

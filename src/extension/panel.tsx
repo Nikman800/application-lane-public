@@ -37,6 +37,50 @@ import {
   type LegalDetailKey,
 } from "../shared/model";
 
+// An education entry's own transcript (2026-11-08): uploaded to the
+// transcripts folder, and its name kept on the entry, so a form asking for
+// one degree's transcript gets that degree's (shared/transcripts.ts).
+function TranscriptPicker({ value, onChange }: { value?: string; onChange: (name: string | undefined) => void }) {
+  const [busy, setBusy] = useState(false);
+  const [problem, setProblem] = useState("");
+  async function choose(file: File | undefined) {
+    if (!file) return;
+    setProblem("");
+    if (!/\.(pdf|docx)$/i.test(file.name)) return setProblem("A transcript must be a PDF or a Word (.docx) file.");
+    if (file.size > 8 * 1024 * 1024) return setProblem("The transcript is larger than 8 MB.");
+    setBusy(true);
+    try {
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      let binary = "";
+      for (let at = 0; at < bytes.length; at += 0x8000) binary += String.fromCharCode(...bytes.subarray(at, at + 0x8000));
+      await command({ type: "API", path: "/v1/transcript", method: "PUT", body: { name: file.name, data: btoa(binary) } });
+      onChange(file.name);
+    } catch (error) {
+      setProblem((error as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <div className="transcript-picker">
+      <label>
+        Transcript for this school (optional)
+        <input type="file" accept=".pdf,.docx" disabled={busy} onChange={(e) => void choose(e.target.files?.[0])} />
+      </label>
+      {value && (
+        <small>
+          {value}{" "}
+          <button className="text-button muted" type="button" onClick={() => onChange(undefined)}>
+            Remove
+          </button>
+        </small>
+      )}
+      {busy && <small>Saving…</small>}
+      {problem && <small className="fill-blocker">{problem}</small>}
+    </div>
+  );
+}
+
 async function command<T = any>(message: unknown): Promise<T> {
   const response = await chrome.runtime.sendMessage(message);
   if (!response?.ok)
@@ -305,10 +349,14 @@ function AppIssues({ app }: { app: Application }) {
   return (
     <>
       {problems.length > 0 && (
-        <div className="app-problems" aria-label="Problems to resolve">
-          <strong>
-            {problems.length} {problems.length === 1 ? "problem needs" : "problems need"} you
-          </strong>
+        // Folded by default: a list of varying length above the buttons moved
+        // Fill this step about as it grew (2026-11-04).
+        <details className="app-problems" aria-label="Problems to resolve">
+          <summary>
+            <strong>
+              {problems.length} {problems.length === 1 ? "problem needs" : "problems need"} you
+            </strong>
+          </summary>
           <ul>
             {problems.map((item, i) => (
               <li key={i}>
@@ -317,7 +365,7 @@ function AppIssues({ app }: { app: Application }) {
               </li>
             ))}
           </ul>
-        </div>
+        </details>
       )}
       {notes.length > 0 && (
         <details className="app-notes">
@@ -495,12 +543,18 @@ function App() {
   // Scans answer in their own time: only the newest one may set the card, or
   // a slow read of the tab just left would replace the tab now in front.
   const scanned = useRef(0);
+  // The tab just brought to the front, named at once while its page is read:
+  // a read takes seconds while a fill runs, and the card meanwhile showed
+  // the tab left behind, its buttons acting on that application
+  // (2026-11-07).
+  const [switching, setSwitching] = useState<{ title: string; url: string } | undefined>();
   const scanActive = (attempt = 0) => {
     window.clearTimeout(rescan.current);
     const turn = ++scanned.current;
     return command<TabContext>({ type: "ACTIVE_TAB" })
       .then((value) => {
         if (turn !== scanned.current) return;
+        setSwitching(undefined);
         setTabContext(value);
         setScanError("");
         if (!attempt) setAttachChoice(value.suggestions[0]?.applicationId || "");
@@ -510,6 +564,7 @@ function App() {
       })
       .catch((error) => {
         if (turn !== scanned.current) return;
+        setSwitching(undefined);
         // Keep the tab actions reachable; a failed scan must not hide them.
         setTabContext(undefined);
         setScanError((error as Error).message);
@@ -527,7 +582,16 @@ function App() {
       if (changes.queue) setQueue(changes.queue.newValue);
     };
     chrome.storage.onChanged.addListener(listener);
-    const activated = () => void scanActive();
+    const activated = (info: chrome.tabs.TabActiveInfo) => {
+      void chrome.tabs.get(info.tabId).then((tab) => {
+        setTabContext((shown) => {
+          if (shown?.tabId === info.tabId) return shown;
+          setSwitching({ title: tab.title || "This tab", url: tab.url || "" });
+          return undefined;
+        });
+      }, () => {});
+      void scanActive();
+    };
     const updated = (_tabId: number, change: chrome.tabs.TabChangeInfo) => {
       if (change.status === "complete" || change.url) void scanActive();
     };
@@ -945,6 +1009,19 @@ function App() {
                 <Icon type="check" />
               </button>
             </div>
+            {!tabContext && switching && !scanError && (
+              <section className="current-tab" aria-label="Current browser tab">
+                <div className="section-title">
+                  <div>
+                    <span className="kicker">CURRENT TAB</span>
+                    <h2>{switching.title}</h2>
+                    <small>{switching.url ? hostname(switching.url) : ""}</small>
+                  </div>
+                  <span className="detect-badge">Reading…</span>
+                </div>
+                <p className="help">Reading this tab…</p>
+              </section>
+            )}
             {!tabContext && scanError && (
               <section className="current-tab" aria-label="Current browser tab">
                 <span className="kicker">CURRENT TAB</span>
@@ -2734,6 +2811,12 @@ function App() {
                                 />{" "}
                                 I am still studying here
                               </label>
+                              <TranscriptPicker
+                                value={row.transcript}
+                                onChange={(name) =>
+                                  edit(kind, profile[kind].map((r, i) => (i === index ? { ...r, transcript: name } : r)))
+                                }
+                              />
                             </>
                           )}
                         </div>

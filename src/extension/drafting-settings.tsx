@@ -279,7 +279,9 @@ export function DraftingSettings({ connected }: { connected: boolean }) {
         <h2>Transcript</h2>
         <p className="help">
           Your most recent transcript, as a PDF or Word file. It is kept on this computer and uploaded, unchanged, to a form
-          that asks for one. Upload a newer one whenever you have it: the newest is the one used.
+          that asks for one. Upload a newer one whenever you have it: the newest is the one used. With more than one degree,
+          attach each school's transcript to its entry under Education instead: a form asking for your undergraduate or
+          graduate transcript then gets that one, and never another degree's.
         </p>
         <p role="status">
           {view.transcript

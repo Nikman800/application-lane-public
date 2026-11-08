@@ -390,15 +390,16 @@ export function applyMainWorld(
         .toLowerCase()
         .replace(/[^a-z0-9]+/g, " ")
         .trim();
+    // Each stage judges one value at a time. The values are alternatives in
+    // order of preference: AMD's iCIMS "Did You Graduate?" lists both "In
+    // Progress" and "Not Received" for an unfinished degree, and taken
+    // together they matched two options and the write was refused as
+    // ambiguous (2026-11-07). One value matching two options still is.
     const stages = [
-      (option: HTMLOptionElement) =>
-        values.some(
-          (value) => (!/^(yes|no)$/i.test(value.trim()) || normalized(option.label).split(" ")[0] === normalized(value)) &&
+      (option: HTMLOptionElement, value: string) =>
+          (!/^(yes|no)$/i.test(value.trim()) || normalized(option.label).split(" ")[0] === normalized(value)) &&
             (option.label === value || option.value === value),
-        ),
-      (option: HTMLOptionElement) =>
-        values.some(
-          (value) =>
+      (option: HTMLOptionElement, value: string) =>
             (!/^(yes|no)$/i.test(value.trim()) || normalized(option.label).split(" ")[0] === normalized(value)) &&
             (normalized(option.label) === normalized(value) ||
             normalized(option.value) === normalized(value) ||
@@ -406,15 +407,18 @@ export function applyMainWorld(
             // Ashby set the month it left empty to the current one when the
             // year was picked (report 9027045f, 2026-10-28).
             (/^\d+$/.test(option.value) && /^\d+$/.test(value.trim()) && Number(option.value) === Number(value))),
-        ),
-      (option: HTMLOptionElement) =>
-        values.some((value) => /^(yes|no)$/i.test(value.trim()) &&
-          new RegExp(`^${value.trim()}\\b`, "i").test(option.label.trim())),
+      (option: HTMLOptionElement, value: string) =>
+        /^(yes|no)$/i.test(value.trim()) &&
+          new RegExp(`^${value.trim()}\\b`, "i").test(option.label.trim()),
     ];
     for (const stage of stages) {
-      const found = options.filter(stage);
-      if (found.length === 1) return found[0];
-      if (found.length > 1) return;
+      let ambiguous = false;
+      for (const value of values) {
+        const found = options.filter((option) => stage(option, value));
+        if (found.length === 1) return found[0];
+        if (found.length > 1) ambiguous = true;
+      }
+      if (ambiguous) return;
     }
   };
   let focusedQuietly = false;

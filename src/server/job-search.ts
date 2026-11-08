@@ -27,6 +27,76 @@ export function openingKey(url: string): string {
   }
 }
 
+// An application or submission, as the queue and the submission log keep it.
+// Its address follows the applicant's tab through the apply flow (a
+// success page, Workday's "userHome", SmartRecruiters' one-click form), so
+// it is seldom the listing's own, and is matched by more than that
+// (2026-11-07: of the day's submitted openings, only those whose apply page
+// kept the listing's address were marked tracked).
+export type KnownOpening = { url: string; company?: string; title?: string };
+
+const compact = (text: string) => text.toLowerCase().replace(/[^a-z0-9]+/g, "");
+// "jmfamily" is "JM Family"; "LinkedIn3" is "LinkedIn"; "Intuitive" is
+// "Intuitive Surgical". Generic words do not make two companies one.
+function sameCompany(a: string, b: string): boolean {
+  const first = (text: string) => compact(text.split(/[\s,(&-]+/).find((word) => compact(word)) || "");
+  const x = compact(a).replace(/\d+$/, "");
+  const y = compact(b).replace(/\d+$/, "");
+  if (!x || !y) return false;
+  if (x === y) return true;
+  const head = (text: string) => first(text).replace(/\d+$/, "");
+  return [[x, head(b)], [y, head(a)]].some(([whole, word]) => word.length >= 3 && whole.startsWith(word));
+}
+
+// Long numbers in an address: a job's own id (AMD's 93894 is short and
+// read by its path, Greenhouse's gh_jid, Microsoft's pid, a board's id).
+function jobIds(url: string): string[] {
+  let text = url;
+  try { text = decodeURIComponent(url); } catch {}
+  return [...new Set([
+    ...(text.match(/\d{5,}/g) || []),
+    ...(text.match(/\b[JR]R?\d{4,}(?:-\d+)?\b/gi) || []).map((id) => id.toUpperCase()),
+    // Workable's "DE75CD20B8".
+    ...(text.match(/\/j\/([A-Z0-9]{8,12})\b/g) || []).map((id) => id.slice(3)),
+  ])];
+}
+const host = (url: string) => {
+  try { return new URL(url).hostname.toLowerCase(); } catch { return ""; }
+};
+
+// A title's words without its season, year, dates or the listing's places:
+// "Compiler Software Engineering Intern - Summer 2027" is the listing's
+// "Compiler Software Engineer Intern".
+function titleWords(title: string, places: string[]): Set<string> {
+  const placeWords = new Set(places.flatMap((place) => place.toLowerCase().split(/[^a-z0-9]+/)).filter(Boolean));
+  const skip = /^(summer|fall|spring|winter|20\d\d|january|february|march|april|may|june|july|august|september|october|november|december|to|the|and|of|a|an|in|for|with|at)$/;
+  return new Set(
+    title.toLowerCase().replace(/engineering/g, "engineer").split(/[^a-z0-9]+/)
+      .filter((word) => word && !skip.test(word) && !placeWords.has(word)),
+  );
+}
+function sameTitle(a: string, b: string, places: string[]): boolean {
+  const x = titleWords(a, places);
+  const y = titleWords(b, places);
+  if (x.size < 2 || x.size !== y.size) return false;
+  return [...x].every((word) => y.has(word));
+}
+
+export function isTracked(listing: { url: string; company: string; title: string; locations?: string[] }, known: KnownOpening[]): boolean {
+  const key = openingKey(listing.url);
+  const ids = jobIds(listing.url);
+  return known.some((opening) => {
+    if (openingKey(opening.url) === key) return true;
+    if (!opening.company || !sameCompany(opening.company, listing.company)) return false;
+    const theirs = jobIds(opening.url);
+    if (ids.length && theirs.some((id) => ids.includes(id))) return true;
+    // Two openings of one site, each named by its own id, are two openings
+    // whatever their titles (neurohire's two "Business Data Analyst" jobs).
+    if (ids.length && theirs.length && host(opening.url) === host(listing.url)) return false;
+    return Boolean(opening.title) && sameTitle(opening.title!, listing.title, listing.locations || []);
+  });
+}
+
 export const searchSettingsSchema = z.object({
   // Job titles to look for ("software engineer", "machine learning").
   roles: z.array(z.string().trim().min(1).max(100)).max(30).default([]),
@@ -90,6 +160,8 @@ export type Listing = {
   score: number;
   // Already an application here (tracked, or submitted).
   tracked?: boolean;
+  // The site it is applied on and whether a rule covers it (site-check.ts).
+  site?: { ats?: string; by: string; via?: string };
 };
 export type SearchResult = {
   at: number;
@@ -253,10 +325,10 @@ function placeMatch(locations: string[], places: string[], remote: boolean, coun
 export async function searchJobs(
   settings: SearchSettings,
   profile: Profile,
-  options: { cacheDir: string; preferences?: string; known?: Set<string>; fetcher?: Fetch; now?: number },
+  options: { cacheDir: string; preferences?: string; known?: Set<string> | KnownOpening[]; fetcher?: Fetch; now?: number },
 ): Promise<SearchResult> {
   // Addresses as two pages of an opening agree on them (openingKey).
-  const known = new Set([...(options.known || [])].map(openingKey));
+  const known: KnownOpening[] = [...(options.known || [])].map((opening) => (typeof opening === "string" ? { url: opening } : opening));
   const fetcher = options.fetcher || fetch;
   const now = options.now ?? Date.now();
   const suggested = settings.fromProfile ? profileTargets(profile, options.preferences) : { roles: [], locations: [] };
@@ -314,7 +386,7 @@ export async function searchJobs(
     // An exact role in the title first, then the newest.
     const exact = ` ${normalize(job.title)} `.includes(` ${normalize(role)} `) ? 2 : 1;
     const days = job.postedAt ? Math.max(0, (now - job.postedAt) / 86_400_000) : settings.postedWithinDays;
-    listings.push({ ...job, matched: [role, place], score: exact * 100 - days, tracked: known.has(openingKey(job.url)) || undefined });
+    listings.push({ ...job, matched: [role, place], score: exact * 100 - days, tracked: isTracked(job, known) || undefined });
   }
   listings.sort((a, b) => b.score - a.score);
   return { at: now, roles, locations, country, remote: settings.remote, listings: listings.slice(0, settings.limit), sources };

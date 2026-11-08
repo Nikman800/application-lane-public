@@ -11,7 +11,21 @@
   "defaultMethod": "default",
   "submitButtonPaths": [],
   "submittedSuccessPaths": [],
-  "trackedInputSelectors": [],
+  "trackedInputSelectors": [
+    {
+      "kind": "file",
+      "label": "Resume",
+      "fieldPath": "//*[@data-test='resume-upload']/shadow-root/input[@type='file']",
+      "labelPath": [
+        "ancestor::*[@data-test='resume-upload-container'][1]//*[@data-test='section-title']"
+      ],
+      "fillActions": [
+        {
+          "method": "uploadFile"
+        }
+      ]
+    }
+  ],
   "inputSelectors": [
     [
       "first_name",
@@ -46,6 +60,12 @@
     [
       "city",
       [
+        {
+          "path": [
+            "//spl-autocomplete[@label='City']/shadow-root/spl-input/shadow-root/input"
+          ],
+          "method": "trustedChoose"
+        },
         "//spl-autocomplete[@label='City']//input",
         "//spl-input[@label='City']/shadow-root/input"
       ]
@@ -79,30 +99,75 @@
             [
               "title",
               [
-                ".//*[@data-test='job-title-autocomplete']//input"
+                {
+                  "path": [
+                    ".//*[@data-test='job-title-autocomplete']/shadow-root/spl-input/shadow-root/input",
+                    ".//*[@data-test='job-title-autocomplete']/shadow-root/input",
+                    ".//*[@data-test='job-title-autocomplete']//input"
+                  ],
+                  "method": "trustedChoose"
+                }
               ]
             ],
             [
               "company",
               [
-                ".//*[@data-test='company-autocomplete']//input"
+                {
+                  "path": [
+                    ".//*[@data-test='company-autocomplete']/shadow-root/spl-input/shadow-root/input",
+                    ".//*[@data-test='company-autocomplete']/shadow-root/input",
+                    ".//*[@data-test='company-autocomplete']//input"
+                  ],
+                  "method": "trustedChoose"
+                }
               ]
             ],
             [
               "location",
               [
-                ".//*[@data-test='location-autocomplete']//input"
+                {
+                  "path": [
+                    ".//*[@data-test='location-autocomplete']/shadow-root/spl-input/shadow-root/input",
+                    ".//*[@data-test='location-autocomplete']/shadow-root/input",
+                    ".//*[@data-test='location-autocomplete']//input"
+                  ],
+                  "method": "trustedChoose"
+                }
               ]
             ],
             [
               "description_stripped",
               [
+                ".//*[@data-test='experience-description']//spl-textarea/shadow-root/textarea",
                 ".//*[@data-test='experience-description']//textarea"
+              ]
+            ],
+            [
+              "start_date",
+              [
+                {
+                  "path": [
+                    ".//*[@data-test='experience-date-from']//spl-date-field/shadow-root/spl-date-picker/shadow-root/input[contains(@class,'flatpickr-input')]"
+                  ],
+                  "method": "pickMonth"
+                }
+              ]
+            ],
+            [
+              "end_date",
+              [
+                {
+                  "path": [
+                    ".//*[@data-test='experience-date-to']//spl-date-field/shadow-root/spl-date-picker/shadow-root/input[contains(@class,'flatpickr-input')]"
+                  ],
+                  "method": "pickMonth"
+                }
               ]
             ],
             [
               "currently_working",
               [
+                ".//*[@data-test='experience-current']//spl-checkbox/shadow-root/input[@type='checkbox']",
                 ".//*[@data-test='experience-current']//input[@type='checkbox']"
               ]
             ],
@@ -112,6 +177,108 @@
                 {
                   "path": [
                     ".//*[@data-test='experience-save']"
+                  ],
+                  "method": "click",
+                  "valueRequired": false
+                }
+              ]
+            ]
+          ]
+        }
+      ]
+    ],
+    [
+      "education",
+      [
+        {
+          "containerPath": [
+            ".//oc-education-entry[.//div[@data-test='education-edit-form']]"
+          ],
+          "addButtonPath": [
+            ".//*[@data-test='add-education']"
+          ],
+          "savedRowPath": [
+            ".//oc-education-entry[not(.//div[@data-test='education-edit-form'])]"
+          ],
+          "inputSelectors": [
+            [
+              "school",
+              [
+                {
+                  "path": [
+                    ".//*[@data-test='institution-autocomplete']/shadow-root/spl-input/shadow-root/input"
+                  ],
+                  "method": "trustedChoose"
+                }
+              ]
+            ],
+            [
+              "major",
+              [
+                {
+                  "path": [
+                    ".//*[@data-test='education-major']//spl-input/shadow-root/input"
+                  ],
+                  "method": "trustedType"
+                }
+              ]
+            ],
+            [
+              "degree",
+              [
+                {
+                  "path": [
+                    ".//*[@data-test='education-degree']//spl-input/shadow-root/input"
+                  ],
+                  "method": "trustedType"
+                }
+              ]
+            ],
+            [
+              "location",
+              [
+                {
+                  "path": [
+                    ".//*[@data-test='education-form-location']//*[@data-test='location-autocomplete']/shadow-root/spl-input/shadow-root/input"
+                  ],
+                  "method": "trustedChoose"
+                }
+              ]
+            ],
+            [
+              "start_date",
+              [
+                {
+                  "path": [
+                    ".//*[@data-test='education-date-from']//spl-date-field/shadow-root/spl-date-picker/shadow-root/input[contains(@class,'flatpickr-input')]"
+                  ],
+                  "method": "pickMonth"
+                }
+              ]
+            ],
+            [
+              "end_date",
+              [
+                {
+                  "path": [
+                    ".//*[@data-test='education-date-to']//spl-date-field/shadow-root/spl-date-picker/shadow-root/input[contains(@class,'flatpickr-input')]"
+                  ],
+                  "method": "pickMonth"
+                }
+              ]
+            ],
+            [
+              "description",
+              [
+                ".//*[@data-test='education-description']//spl-textarea/shadow-root/textarea"
+              ]
+            ],
+            [
+              "save",
+              [
+                {
+                  "path": [
+                    ".//*[@data-test='education-save']"
                   ],
                   "method": "click",
                   "valueRequired": false

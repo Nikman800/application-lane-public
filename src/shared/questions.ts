@@ -68,8 +68,14 @@ export function structuredFallbackField(field: Field, legalToo = false): boolean
   // empty (an end date for a job still held) stays empty. The model, told
   // only "End Date" under "Previous employment", gave a current job another
   // job's end date (SuccessFactors, report 7810d2d5, 2026-10-15).
+  // Only an entry's own short date label in a section that names it:
+  // Workday titles each question's section with the question itself, and
+  // Leidos's "Do you now, or did you … in the past 24 months, serve as an
+  // official or employee of the DoD?" read as a job's date (2026-11-08).
   if (
+    (field.section || "").length <= 80 &&
     /education|academic|school|work|employment|experience/i.test(field.section || "") &&
+    field.label.length <= 60 &&
     /\b(date|from|to|start|end|month|year)\b/i.test(field.label)
   )
     return false;

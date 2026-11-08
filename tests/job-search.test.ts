@@ -4,7 +4,7 @@ import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { profileSchema } from "../src/shared/model";
-import { boardFor, openingKey, profileTargets, searchJobs, searchSettingsSchema } from "../src/server/job-search";
+import { boardFor, isTracked, openingKey, profileTargets, searchJobs, searchSettingsSchema } from "../src/server/job-search";
 import { sameOpening, workdayOpening } from "../src/shared/matching";
 
 const day = 86_400_000;
@@ -107,4 +107,28 @@ test("addresses of one Workday requisition are one opening, and other requisitio
   assert.ok(!sameOpening(search, "https://other.wd1.myworkdayjobs.com/search/job/Springfield-IL/Software-Engineer-Intern_2642721-1"));
   assert.equal(workdayOpening("https://boards.greenhouse.io/acme/jobs/2642721"), undefined);
   assert.ok(sameOpening("https://boards.greenhouse.io/acme/jobs/1?utm_source=x", "https://boards.greenhouse.io/acme/jobs/1"));
+});
+
+// An application's address follows the tab through the apply flow (a
+// success page, Workday's "userHome", SmartRecruiters' one-click form), and
+// the day's submitted openings were not marked tracked (2026-11-07).
+test("a listing is tracked by its application's job id or its company and title, wherever the application ended", () => {
+  const known = [
+    { url: "https://careers-acme.icims.com/jobs/93894/platform-engineer/job?mode=submit_apply", company: "acme", title: "Platform Engineer" },
+    { url: "https://apply.example.test/careers/apply/success?pid=1970393557049981", company: "example", title: "Careers at Example" },
+    { url: "https://beta.wd1.myworkdayjobs.com/en-US/External/userHome", company: "betacorp", title: "Compiler Software Engineering Intern - Summer 2027" },
+    { url: "https://jobs.smartrecruiters.com/oneclick-ui/company/Gamma3/publication/a65e1dba", company: "Gamma3", title: "Software Engineer Intern (First Play) - Summer 2027 (Mountain View, CA)" },
+    { url: "https://apply.workable.com/delta/j/DE75CD20B8/apply/?success=", company: "Delta", title: "Business Data Analyst" },
+  ];
+  const listing = (company: string, title: string, url: string, locations: string[] = []) => ({ company, title, url, locations });
+  assert.equal(isTracked(listing("Acme", "Platform Engineer", "https://careers.acme.test/jobs/93894?icims=1"), known), true);
+  assert.equal(isTracked(listing("Example", "Research Intern", "https://apply.example.test/careers/job/1970393557049981"), known), true);
+  assert.equal(isTracked(listing("Beta Corp", "Compiler Software Engineer Intern", "https://beta.wd1.myworkdayjobs.com/External/job/US-WA/Compiler-Software-Engineer-Intern_R1"), known), true);
+  assert.equal(isTracked(listing("Gamma", "Software Engineer Intern - First Play", "https://jobs.smartrecruiters.com/Gamma3/744000158394370", ["Mountain View, CA"]), known), true);
+  assert.equal(isTracked(listing("Delta", "Business Data Analyst", "https://apply.workable.com/delta/j/DE75CD20B8/apply"), known), true);
+  // Another opening of one title on the same site, by its own id: not this one.
+  assert.equal(isTracked(listing("Delta", "Business Data Analyst", "https://apply.workable.com/delta/j/516C3CF516/apply"), known), false);
+  // Another company with the same title, or another title at the company.
+  assert.equal(isTracked(listing("Epsilon", "Platform Engineer", "https://jobs.epsilon.test/1"), known), false);
+  assert.equal(isTracked(listing("Acme", "Data Engineer", "https://careers.acme.test/jobs/1"), known), false);
 });

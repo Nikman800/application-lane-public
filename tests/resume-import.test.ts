@@ -154,14 +154,14 @@ test("a résumé's wrapped lines become whole facts, without its headings or con
 test("a heading-shaped line inside a sentence is not mistaken for furniture", () => {
   const facts = resumeFacts(
     [
-      "- Built a U-Net reproducing USGS satellite surface temperature to 0.85 K",
+      "- Built a U-Net reproducing thermal sensor surface temperature to 0.85 K",
       "MAE on MSU Research Computing hardware.",
       "Awards",
       "- First place, MSU Innovation Challenge.",
     ].join("\n"),
   ).map((f) => f.text);
   assert.deepEqual(facts, [
-    "- Built a U-Net reproducing USGS satellite surface temperature to 0.85 K MAE on MSU Research Computing hardware.",
+    "- Built a U-Net reproducing thermal sensor surface temperature to 0.85 K MAE on MSU Research Computing hardware.",
     "- First place, MSU Innovation Challenge.",
   ]);
 });

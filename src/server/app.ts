@@ -14,7 +14,10 @@ import { cleanFixerSettings } from "../shared/fixer-settings";
 import { devToolsEnabled } from "../shared/dev-tools";
 import { Store, atomicJSON, type Config } from "./store";
 import { attachLive } from "./live";
-import { profileTargets, searchJobs, searchSettingsSchema, stageDefaults, openingKey } from "./job-search";
+import { profileTargets, searchJobs, searchSettingsSchema, stageDefaults, isTracked, type KnownOpening } from "./job-search";
+import { checkSites, type SiteCheck } from "./site-check";
+import { classify, fillHistory, greenhouseJob, readGreenhouse, siteGaps, type Preview, type QueuedApplication } from "./form-preview";
+import type { Field } from "../shared/model";
 import { GenerationQueue, draftProviderChain, type Generate } from "./generation";
 import { extractResume, transcriptsFolder } from "./documents";
 import { desktopPath, exportDocuments, exportedPaths, markSent, openFolder, removeWritten } from "./export";
@@ -619,15 +622,66 @@ export async function createApp(
       // only when the search ran, one saved three days before marked none of
       // the applications tracked since (2026-11-02).
       const knownOpenings = async () => {
-        const queued = JSON.parse(await readFile(join(directory, "queue.json"), "utf8").catch(() => "null")) as { applications?: { url: string }[] } | null;
-        const submitted = JSON.parse(await readFile(join(directory, "submissions.json"), "utf8").catch(() => "[]")) as { url: string }[];
-        return new Set([...(queued?.applications || []).map((app) => app.url), ...submitted.map((record) => record.url)].map(openingKey));
+        const queued = JSON.parse(await readFile(join(directory, "queue.json"), "utf8").catch(() => "null")) as { applications?: KnownOpening[] } | null;
+        const submitted = JSON.parse(await readFile(join(directory, "submissions.json"), "utf8").catch(() => "[]")) as KnownOpening[];
+        return [...(queued?.applications || []), ...submitted].map(({ url, company, title }) => ({ url, company, title }));
+      };
+      // Which site each opening is applied on, and whether a rule covers it,
+      // each address checked once and kept (site-check.ts). A search waits
+      // at most 20 s for it; what is left is checked by the next read.
+      const siteCachePath = join(searchDir, "sites.json");
+      const withSites = async <T extends { url: string; company: string }>(listings: T[]): Promise<(T & { site?: SiteCheck; preview?: Preview })[]> => {
+        const cache = new Map<string, SiteCheck>(Object.entries(JSON.parse(await readFile(siteCachePath, "utf8").catch(() => "{}")) as Record<string, SiteCheck>));
+        const before = cache.size;
+        await Promise.race([checkSites(listings.map((listing) => listing.url), cache), new Promise((resolve) => setTimeout(resolve, 20_000))]);
+        if (cache.size !== before) {
+          await mkdir(searchDir, { recursive: true });
+          await atomicJSON(siteCachePath, Object.fromEntries([...cache].slice(-5000)));
+        }
+        const sited = listings.map((listing) => (cache.has(listing.url) ? { ...listing, site: cache.get(listing.url) } : listing));
+        return withPreviews(sited);
+      };
+      // What each opening's form will ask and how much a fill answers, before
+      // it is opened (form-preview.ts): past fills on its site and at its
+      // company, the site rule's known gaps, and, where Greenhouse publishes
+      // the form, its questions answered offline. Each form is read once.
+      const questionsPath = join(searchDir, "questions.json");
+      const withPreviews = async <T extends { url: string; company: string; site?: SiteCheck }>(listings: T[]): Promise<(T & { preview?: Preview })[]> => {
+        const queued = JSON.parse(await readFile(join(directory, "queue.json"), "utf8").catch(() => "null")) as { applications?: QueuedApplication[] } | null;
+        const history = fillHistory(queued?.applications || []);
+        const read = new Map<string, Field[] | null>(Object.entries(JSON.parse(await readFile(questionsPath, "utf8").catch(() => "{}")) as Record<string, Field[] | null>));
+        const before = read.size;
+        const formOf = (listing: T) => [listing.url, listing.site?.via || ""].find((url) => url && greenhouseJob(url));
+        const pending = [...new Set(listings.map(formOf).filter((url): url is string => Boolean(url) && !read.has(url!)))];
+        let next = 0;
+        await Promise.race([
+          Promise.all(Array.from({ length: Math.min(4, pending.length) }, async () => {
+            while (next < pending.length) {
+              const url = pending[next++];
+              read.set(url, (await readGreenhouse(url)) ?? null);
+            }
+          })),
+          new Promise((resolve) => setTimeout(resolve, 15_000)),
+        ]);
+        if (read.size !== before) {
+          await mkdir(searchDir, { recursive: true });
+          await atomicJSON(questionsPath, Object.fromEntries([...read].slice(-3000)));
+        }
+        return listings.map((listing) => {
+          const gaps = siteGaps(listing.site?.via || listing.url, listing.site?.ats);
+          const past = history.forListing(listing);
+          const form = formOf(listing);
+          const fields = form ? read.get(form) : undefined;
+          const questions = fields?.length ? classify(fields, store.data.profile, listing.company) : undefined;
+          const preview: Preview = { ...(gaps.length ? { gaps } : {}), ...(past ? { history: past } : {}), ...(questions ? { questions } : {}) };
+          return Object.keys(preview).length ? { ...listing, preview } : listing;
+        });
       };
       if (path === "/v1/search" && req.method === "GET") {
-        const saved = JSON.parse(await readFile(searchResultsPath, "utf8").catch(() => "null")) as { listings?: { url: string; tracked?: boolean }[] } | null;
+        const saved = JSON.parse(await readFile(searchResultsPath, "utf8").catch(() => "null")) as { listings?: { url: string; company: string; title: string; locations?: string[]; tracked?: boolean }[] } | null;
         if (saved?.listings) {
           const known = await knownOpenings();
-          saved.listings = saved.listings.map(({ tracked: _, ...listing }) => (known.has(openingKey(listing.url)) ? { ...listing, tracked: true } : listing));
+          saved.listings = await withSites(saved.listings.map(({ tracked: _, ...listing }) => (isTracked(listing, known) ? { ...listing, tracked: true } : listing)));
         }
         return send(res, 200, saved);
       }
@@ -637,6 +691,7 @@ export async function createApp(
         const settings = searchSettingsSchema.parse({ ...(await readSearchSettings()), ...overrides });
         const known = await knownOpenings();
         const result = await searchJobs(settings, store.data.profile, { cacheDir: join(searchDir, "cache"), preferences: await preferences(), known });
+        result.listings = await withSites(result.listings);
         await mkdir(searchDir, { recursive: true });
         await atomicJSON(searchResultsPath, result);
         return send(res, 200, result);
@@ -654,6 +709,20 @@ export async function createApp(
       }
       if (path === "/v1/queue" && req.method === "GET")
         return send(res, 200, JSON.parse(await readFile(queuePath, "utf8").catch(() => "null")));
+      // Applications the fixer is correcting (2026-11-07): the full-screen
+      // view shows them apart, so the applicant leaves them alone meanwhile.
+      const fixingPath = join(directory, "fixing.json");
+      const readFixing = async () =>
+        JSON.parse(await readFile(fixingPath, "utf8").catch(() => "{}")) as Record<string, { since: number; note: string }>;
+      if (path === "/v1/fixing" && req.method === "GET") return send(res, 200, await readFixing());
+      if (path === "/v1/fixing" && req.method === "POST") {
+        const { id, note, done } = z.object({ id: z.string().min(1).max(100), note: z.string().max(500).optional(), done: z.boolean().optional() }).parse(await jsonBody(req));
+        const fixing = await readFixing();
+        if (done) delete fixing[id];
+        else fixing[id] = { since: fixing[id]?.since || Date.now(), note: note ?? fixing[id]?.note ?? "" };
+        await atomicJSON(fixingPath, fixing);
+        return send(res, 200, fixing);
+      }
       if (path === "/v1/inbox" && req.method === "GET") return send(res, 200, await readInbox());
       if (path === "/v1/inbox" && req.method === "POST") {
         const { urls } = z.object({ urls: z.array(z.string().url().max(2000)).min(1).max(1000) }).parse(await jsonBody(req));

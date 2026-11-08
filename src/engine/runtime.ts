@@ -1,5 +1,6 @@
 import {
   interpretConfig,
+  searchListDropdown,
   matchesSiteConfig,
   paths,
   queryXPathAll,
@@ -158,4 +159,10 @@ export function addableCollections(): string[] {
       ),
     )
     .map(([key]) => key);
+}
+
+// An iCIMS search list in a row no site rule reaches, searched as a rule
+// would (see searchListDropdown).
+export function searchSiteList(target: Element, values: string[], signal?: AbortSignal) {
+  return searchListDropdown(target, values, globals, { signal });
 }

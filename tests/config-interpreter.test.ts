@@ -1486,6 +1486,250 @@ test("SmartRecruiters' saved experience cards are the profile's rows, not ones t
   assert.deepEqual(clicked, []);
 });
 
+// LinkedIn's SmartRecruiters form (report f3cfe0cf, 2026-11-04): each box of
+// an experience entry sits inside its component's shadow root, so none was
+// found, and the entry was saved empty and refused ("Title" required).
+test("SmartRecruiters' experience boxes inside their components' shadow roots are filled before Save", async () => {
+  const parsed = siteConfigSchema.parse(JSON.parse(await readFile("src/engine/config/sites/smartrecruiters.json", "utf8")));
+  const only: unknown = JSON.parse(JSON.stringify({ ...parsed, inputSelectors: parsed.inputSelectors.filter((selector) => selector[0] === "experience") }));
+  await page.setContent(`<div id="form"><oc-experience><oc-button data-test="add-experience"><button type="button">Add</button></oc-button><div id="entries"></div></oc-experience></div>
+  <script>{
+    const shadowed = (tag, inner) => { const host = document.createElement(tag); host.attachShadow({ mode: "open" }).innerHTML = inner; return host; };
+    document.querySelector('[data-test="add-experience"]').addEventListener("click", () => {
+      if (document.querySelector('[data-test="experience-edit-form"]')) return;
+      const entry = document.createElement("oc-experience-entry");
+      const form = document.createElement("div");
+      form.setAttribute("data-test", "experience-edit-form");
+      for (const [test, label] of [["job-title-autocomplete", "Title"], ["company-autocomplete", "Company"], ["location-autocomplete", "Location"]]) {
+        // The box is one shadow root further in, inside the autocomplete's
+        // own spl-input.
+        const box = shadowed("spl-autocomplete", '<div><label>' + label + '</label><spl-dropdown><div></div></spl-dropdown></div>');
+        box.shadowRoot.querySelector("spl-dropdown div").append(shadowed("spl-input", '<div><input type="text" role="combobox"></div>'));
+        box.setAttribute("data-test", test);
+        form.append(box);
+      }
+      const description = document.createElement("oc-textarea");
+      description.setAttribute("data-test", "experience-description");
+      description.append(shadowed("spl-textarea", "<textarea></textarea>"));
+      const current = document.createElement("oc-checkbox");
+      current.setAttribute("data-test", "experience-current");
+      current.append(shadowed("spl-checkbox", '<input type="checkbox">'));
+      const save = document.createElement("oc-button");
+      save.setAttribute("data-test", "experience-save");
+      save.append(shadowed("spl-button", '<button type="button">Save</button>'));
+      form.append(description, current, save);
+      entry.append(form);
+      document.getElementById("entries").append(entry);
+    });
+  }</script>`);
+  await page.addScriptTag({ content: "globalThis.__name ??= (f) => f;" });
+  await page.addScriptTag({ content: bundle });
+  const touched = await page.evaluate(async ({ globals, only }) => {
+    const order: string[] = [];
+    const profile = { revision: 1, confirmed: true, firstName: "", lastName: "", email: "", phone: "", city: "", state: "", country: "", address: "", postalCode: "", linkedin: "", website: "", facts: [], education: [], answers: [],
+      work: [{ organization: "Pixelforge", title: "Founder & Solo Developer", location: "Remote", startDate: "2025-03", endDate: "", details: "Built the scoring service." }] };
+    await (window as any).ConfigEngine.interpretConfig(document, "https://jobs.smartrecruiters.com/oneclick-ui/company/Acme/publication/1", only, globals, profile, {
+      execute: async ({ element, values }: { element: Element; values: string[] }) => {
+        // The component the box belongs to: the nearest host with a name.
+        let host = (element.getRootNode() as ShadowRoot).host as Element | undefined;
+        while (host && !host.getAttribute("data-test") && !host.parentElement?.getAttribute("data-test")) host = ((host.getRootNode() as ShadowRoot).host as Element | undefined);
+        const name = host ? (host.getAttribute("data-test") || host.parentElement?.getAttribute("data-test") || host.tagName) : element.getAttribute("data-test") || element.tagName;
+        order.push(`${name}${values[0] ? `=${values[0]}` : ""}`);
+        if (element instanceof HTMLButtonElement || element.matches("oc-button, spl-button")) element.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+        return true;
+      },
+    });
+    return order;
+  }, { globals, only });
+  const save = touched.findIndex((step) => step.startsWith("experience-save"));
+  assert.ok(touched.includes("job-title-autocomplete=Founder & Solo Developer"), touched.join(" | "));
+  assert.ok(touched.includes("company-autocomplete=Pixelforge"), touched.join(" | "));
+  assert.ok(touched.some((step) => step.startsWith("experience-description=Built the scoring service")), touched.join(" | "));
+  assert.ok(save > touched.indexOf("job-title-autocomplete=Founder & Solo Developer"), touched.join(" | "));
+});
+
+// LinkedIn's SmartRecruiters form (2026-11-04): the title was typed, its
+// suggestion list opened, and the Escape that closed the list discarded the
+// typed text, as the component takes Escape in a box that keeps what is typed.
+test("a SmartRecruiters box that keeps typed text keeps it when its list is closed", async () => {
+  const parsed = siteConfigSchema.parse(JSON.parse(await readFile("src/engine/config/sites/smartrecruiters.json", "utf8")));
+  const only: unknown = JSON.parse(JSON.stringify({ ...parsed, inputSelectors: parsed.inputSelectors.filter((selector) => selector[0] === "experience") }));
+  await page.setContent(`<div id="form"><oc-experience><oc-button data-test="add-experience"><button type="button">Add</button></oc-button><div id="entries"></div></oc-experience></div>
+  <script>{
+    const shadowed = (tag, inner) => { const host = document.createElement(tag); host.attachShadow({ mode: "open" }).innerHTML = inner; return host; };
+    document.querySelector('[data-test="add-experience"]').addEventListener("click", () => {
+      if (document.querySelector('[data-test="experience-edit-form"]')) return;
+      const entry = document.createElement("oc-experience-entry");
+      const form = document.createElement("div");
+      form.setAttribute("data-test", "experience-edit-form");
+      const box = shadowed("spl-autocomplete", "<div><spl-dropdown><div></div></spl-dropdown></div>");
+      box.setAttribute("data-test", "job-title-autocomplete");
+      box.setAttribute("allowcustomvalues", "");
+      const input = shadowed("spl-input", '<input type="text" role="combobox" aria-expanded="false">').shadowRoot;
+      box.shadowRoot.querySelector("spl-dropdown div").append(input.host);
+      const field = input.querySelector("input");
+      field.id = "title-box";
+      // As the component does: the typed text is offered in its menu a
+      // moment later, and only an entry clicked there becomes its value.
+      field.addEventListener("input", () => {
+        field.setAttribute("aria-expanded", "true");
+        clearTimeout(field.offer);
+        field.offer = setTimeout(() => {
+          box.shadowRoot.querySelector('[role="listbox"]')?.remove();
+          const menu = document.createElement("div");
+          menu.setAttribute("role", "listbox");
+          menu.innerHTML = '<div role="option">' + field.value + '</div><div role="option">' + field.value + ' (Senior)</div>';
+          menu.firstElementChild.addEventListener("click", () => { box.setAttribute("value", field.value); menu.remove(); });
+          box.shadowRoot.append(menu);
+        }, 300);
+      });
+      // Down highlights the menu's first entry and Enter picks it; Enter
+      // alone picks nothing (the applicant's account, 2026-11-04).
+      let highlighted = null;
+      field.addEventListener("keydown", (event) => {
+        const first = box.shadowRoot.querySelector('[role="listbox"] [role="option"]');
+        if (event.key === "ArrowDown" && first) highlighted = first;
+        if (event.key === "Enter" && highlighted) highlighted.click();
+      });
+      field.addEventListener("keydown", (event) => { if (event.key === "Escape") { field.value = ""; field.setAttribute("aria-expanded", "false"); } });
+      field.addEventListener("blur", () => field.setAttribute("aria-expanded", "false"));
+      form.append(box);
+      entry.append(form);
+      document.getElementById("entries").append(entry);
+    });
+    window.titleBox = () => document.querySelector('[data-test="job-title-autocomplete"]').shadowRoot.querySelector("spl-input").shadowRoot.querySelector("input");
+  }</script>`);
+  await page.addScriptTag({ content: "globalThis.__name ??= (f) => f;" });
+  await page.addScriptTag({ content: bundle });
+  const kept = await page.evaluate(async ({ globals, only }) => {
+    const profile = { revision: 1, confirmed: true, firstName: "", lastName: "", email: "", phone: "", city: "", state: "", country: "", address: "", postalCode: "", linkedin: "", website: "", facts: [], education: [], answers: [],
+      work: [{ organization: "Pixelforge", title: "Founder & Solo Developer", location: "", startDate: "2025-03", endDate: "", details: "" }] };
+    await (window as any).ConfigEngine.interpretConfig(document, "https://jobs.smartrecruiters.com/oneclick-ui/company/Acme/publication/1", only, globals, profile);
+    return [(window as any).titleBox()?.value, document.querySelector('[data-test="job-title-autocomplete"]')!.getAttribute("value")];
+  }, { globals, only });
+  assert.deepEqual(kept, ["Founder & Solo Developer", "Founder & Solo Developer"]);
+});
+
+// SmartRecruiters' dates (2026-11-04): a flatpickr month picker inside two
+// shadow roots, its year between two arrows and its months as cells named by
+// their first day. "From" was required and left empty, so no entry saved.
+test("a SmartRecruiters experience date is picked from its month calendar", async () => {
+  const parsed = siteConfigSchema.parse(JSON.parse(await readFile("src/engine/config/sites/smartrecruiters.json", "utf8")));
+  const only: unknown = JSON.parse(JSON.stringify({ ...parsed, inputSelectors: parsed.inputSelectors.filter((selector) => selector[0] === "experience") }));
+  await page.setContent(`<div id="form"><oc-experience><oc-button data-test="add-experience"><button type="button">Add</button></oc-button><div id="entries"></div></oc-experience></div>
+  <script>{
+    const names = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+    const datePicker = (test) => {
+      const holder = document.createElement("oc-datepicker");
+      holder.setAttribute("data-test", test);
+      const field = document.createElement("spl-date-field");
+      const picker = document.createElement("spl-date-picker");
+      const root = picker.attachShadow({ mode: "open" });
+      root.innerHTML = '<input class="c-spl-input flatpickr-input" type="text" placeholder="Pick a date">' +
+        '<div class="flatpickr-calendar"><span class="flatpickr-prev-month" role="button"></span><input class="numInput cur-year" type="number" value="2026"><span class="flatpickr-next-month" role="button"></span><div class="flatpickr-monthSelect-months"></div></div>';
+      const year = root.querySelector(".cur-year");
+      const draw = () => {
+        root.querySelector(".flatpickr-monthSelect-months").innerHTML = names.map((name) => '<span class="flatpickr-monthSelect-month" aria-label="' + name + ' 1, ' + year.value + '">' + name.slice(0, 3) + '</span>').join("");
+        for (const cell of root.querySelectorAll(".flatpickr-monthSelect-month"))
+          cell.addEventListener("click", () => { root.querySelector(".flatpickr-input").value = cell.textContent + " " + year.value; });
+      };
+      root.querySelector(".flatpickr-prev-month").addEventListener("click", () => { year.value = String(Number(year.value) - 1); draw(); });
+      root.querySelector(".flatpickr-next-month").addEventListener("click", () => { year.value = String(Number(year.value) + 1); draw(); });
+      draw();
+      field.attachShadow({ mode: "open" }).append(picker);
+      holder.append(field);
+      return holder;
+    };
+    document.querySelector('[data-test="add-experience"]').addEventListener("click", () => {
+      if (document.querySelector('[data-test="experience-edit-form"]')) return;
+      const entry = document.createElement("oc-experience-entry");
+      const form = document.createElement("div");
+      form.setAttribute("data-test", "experience-edit-form");
+      form.append(datePicker("experience-date-from"), datePicker("experience-date-to"));
+      entry.append(form);
+      document.getElementById("entries").append(entry);
+    });
+    window.dateOf = (test) => document.querySelector('[data-test="' + test + '"] spl-date-field').shadowRoot.querySelector("spl-date-picker").shadowRoot.querySelector(".flatpickr-input").value;
+  }</script>`);
+  await page.addScriptTag({ content: "globalThis.__name ??= (f) => f;" });
+  await page.addScriptTag({ content: bundle });
+  const dates = await page.evaluate(async ({ globals, only }) => {
+    const profile = { revision: 1, confirmed: true, firstName: "", lastName: "", email: "", phone: "", city: "", state: "", country: "", address: "", postalCode: "", linkedin: "", website: "", facts: [], education: [], answers: [],
+      work: [{ organization: "Pixelforge", title: "Founder & Solo Developer", location: "", startDate: "2023-07", endDate: "2024-09", details: "" }] };
+    await (window as any).ConfigEngine.interpretConfig(document, "https://jobs.smartrecruiters.com/oneclick-ui/company/Acme/publication/1", only, globals, profile);
+    return [(window as any).dateOf("experience-date-from"), (window as any).dateOf("experience-date-to")];
+  }, { globals, only });
+  assert.deepEqual(dates, ["Jul 2023", "Sep 2024"]);
+});
+
+// L3Harris's SuccessFactors application lives on ns2cloud.com (report
+// a43e721f, 2026-11-04): the rule did not cover that host, so the page was
+// filled as a generic form, its sections, resume and cover letter untouched.
+test("SuccessFactors' rule covers an application on ns2cloud.com", async () => {
+  const parsed = siteConfigSchema.parse(JSON.parse(await readFile("src/engine/config/sites/successfactors.json", "utf8")));
+  await page.setContent("<main></main>");
+  await page.addScriptTag({ content: "globalThis.__name ??= (f) => f;" });
+  await page.addScriptTag({ content: bundle });
+  const matched = await page.evaluate((config) => [
+    "https://career-hcm20.ns2cloud.com/portalcareer?_s.crb=fixture",
+    "https://career5.successfactors.eu/careers?company=acme",
+    "https://jobs.example.test/apply",
+  ].map((url) => (window as any).ConfigEngine.matchesSiteConfig(config, url, document)), JSON.parse(JSON.stringify(parsed)));
+  assert.deepEqual(matched, [true, true, false]);
+});
+
+// L3Harris's SuccessFactors Veteran Status (report a172edaa, 2026-11-07):
+// its list words the answer "Not Protected Veteran (OFCCP)", and the rule
+// took "No Selection", which begins with the last wording tried, "No".
+test("SuccessFactors' veteran list takes its Not Protected Veteran entry, never No Selection", async () => {
+  const parsed = siteConfigSchema.parse(JSON.parse(await readFile("src/engine/config/sites/successfactors.json", "utf8")));
+  const config = { ...parsed, urls: ["https://jobs.example.test/*"], inputSelectors: parsed.inputSelectors.filter(([key]) => key === "veteran") };
+  // As L3Harris draws it: the label inside <font> tags, so the rule's
+  // label path misses and the accessible fallback picks; the list checks
+  // itself only as focus leaves it.
+  await page.setContent(`<div class="RCMFormField rcmFormElement "><font face="Arial"><font face="Arial"><font face="Arial"><label id="574:" for="570:_input" class="rcmFormFieldLabel"><span class="requiredField" aria-hidden="true" role="presentation">*</span>&nbsp;Veteran Status</label><div class="fieldComponentInput"><input aria-label="Veteran Status" type="text" role="combobox" placeholder="No Selection" aria-owns="571:_listSelect" aria-required="true" aria-invalid="true" id="570:_input" class="rcmpaginatedselectinput rcmpaginatedselectitem rcmpaginatedselect_accessible"><div role="alert" class="rcmValidationMsgArea">Veteran Status is required</div></div></font></font></font></div>
+  <script>{
+    const input = document.getElementById("570:_input");
+    // As its RCMPaginatedPicklistSingleSelect does: the list stays open
+    // after a pick, Escape (keyCode 27) closes it, and leaving the box checks
+    // it only with the list closed.
+    input.addEventListener("blur", () => {
+      if (input.getAttribute("aria-expanded") === "true") return;
+      if (input.value && input.value !== "No Selection") input.setAttribute("aria-invalid", "false");
+    });
+    input.addEventListener("keydown", (event) => {
+      if (event.keyCode !== 27) return;
+      document.querySelector(".sf-combo-listselect")?.remove();
+      input.setAttribute("aria-expanded", "false");
+    });
+    window.picked = [];
+    input.addEventListener("click", () => {
+      if (document.getElementById("571:_listSelect")) return;
+      const menu = document.createElement("div");
+      menu.className = "globalMenu sf-combo-listselect";
+      menu.innerHTML = '<ul id="571:_listSelect" role="listbox" class="sf-list-select fd-list fd-list--compact">' +
+        ["No Selection", "Not Protected Veteran (OFCCP)", "Prefer Not To Answer (OFCCP)", "Protected Veteran (OFCCP)"].map((name, n) =>
+          '<li id="571:item' + n + '" role="option" class="globalMenuItem fd-list__item fd-list__item--compact"><a title="' + name + '">' + name + '</a></li>').join("") + "</ul>";
+      menu.addEventListener("click", (event) => {
+        const a = event.target.closest("li").querySelector("a");
+        window.picked.push(a.title);
+        input.value = a.title;
+        input.focus();
+      });
+      input.setAttribute("aria-expanded", "true");
+      document.body.append(menu);
+    });
+  }</script>`);
+  await page.addScriptTag({ content: "globalThis.__name ??= (f) => f;" });
+  await page.addScriptTag({ content: bundle });
+  const picked = await page.evaluate(async ({ globals, config }) => {
+    const profile = { revision: 1, confirmed: true, firstName: "", lastName: "", email: "", phone: "", city: "", state: "", country: "", address: "", postalCode: "", linkedin: "", website: "", veteranStatus: "I am not a veteran", facts: [], work: [], education: [], answers: [] };
+    await (window as any).ConfigEngine.interpretConfig(document, "https://jobs.example.test/apply", config, globals, profile);
+    return [(window as any).picked, document.getElementById("570:_input")!.getAttribute("aria-invalid")];
+  }, { globals, config: JSON.parse(JSON.stringify(config)) });
+  assert.deepEqual(picked, [["Not Protected Veteran (OFCCP)"], "false"]);
+});
+
 test("a Workday list opened and left without a pick is closed by a press beside it", async () => {
   // Booz Allen's Veteran Status (report 424d47c0, 2026-11-02): a second press
   // on its button leaves Workday's list open over the form.
@@ -1532,10 +1776,115 @@ test("SmartRecruiters' City box is found by its component's label", async () => 
   await page.addScriptTag({ content: "globalThis.__name ??= (f) => f;" });
   await page.addScriptTag({ content: bundle });
   const result = await page.evaluate(async ({ globals, only }) => {
-    const profile = { revision: 1, confirmed: true, firstName: "", lastName: "", email: "", phone: "", city: "Tempe", state: "", country: "", address: "", postalCode: "", linkedin: "", website: "", facts: [], work: [], education: [], answers: [] };
+    const profile = { revision: 1, confirmed: true, firstName: "", lastName: "", email: "", phone: "", city: "Lansing", state: "", country: "", address: "", postalCode: "", linkedin: "", website: "", facts: [], work: [], education: [], answers: [] };
     const statuses = await (window as any).ConfigEngine.interpretConfig(document, "https://jobs.smartrecruiters.com/oneclick-ui/company/Acme/publication/1", only, globals, profile);
     return { statuses, value: (document.querySelector("input") as HTMLInputElement).value };
   }, { globals, only });
   assert.deepEqual(result.statuses, [{ key: "city", status: "filled" }]);
-  assert.equal(result.value, "Tempe");
+  assert.equal(result.value, "Lansing");
+});
+
+// SmartRecruiters (report a8c856cd, 2026-11-05): a pass cut off midway left
+// the second school's editor open, its fields in shadow roots no match can
+// read. The next pass saw the first school saved, paired the open editor
+// with it by page order, added the second school again, and never saved the
+// open one. An open editor belongs to the profile's unsaved rows.
+test("an entry editor left open is finished for the unsaved row, not added again", async () => {
+  await page.setContent(`
+    <form id="application">
+      <div class="saved">Michigan State University · Computer Science · 2018 - 2022</div>
+      <div class="editor"><span class="school"></span><span class="major"></span><button type="button" class="save">Save</button></div>
+      <button type="button" id="add">Add education</button>
+    </form>
+    <script>
+      window.added = 0;
+      window.saved = 0;
+      const field = (host, value) => { const input = document.createElement('input'); input.value = value; host.attachShadow({ mode: 'open' }).append(input); };
+      field(document.querySelector('.school'), 'Penn State');
+      field(document.querySelector('.major'), '');
+      document.querySelector('.save').addEventListener('click', () => window.saved++);
+      document.getElementById('add').addEventListener('click', () => {
+        window.added++;
+        const editor = document.createElement('div');
+        editor.className = 'editor';
+        editor.innerHTML = '<span class="school"></span><span class="major"></span><button type="button" class="save">Save</button>';
+        document.getElementById('add').before(editor);
+        field(editor.querySelector('.school'), '');
+        field(editor.querySelector('.major'), '');
+      });
+    </script>
+  `);
+  await page.addScriptTag({ content: bundle });
+  const result = await page.evaluate(
+    async ({ globals }) => {
+      const profile = {
+        revision: 1, confirmed: true, firstName: "Alex", lastName: "Rivera", email: "alex@example.test", phone: "",
+        city: "", state: "", country: "", address: "", postalCode: "", linkedin: "", website: "", facts: [], answers: [], work: [],
+        education: [
+          { organization: "Michigan State University", title: "Bachelor of Science", fieldOfStudy: "Computer Science", location: "East Lansing", details: "", startDate: "2018-08", endDate: "2022-05" },
+          { organization: "Penn State", title: "Master of Science", fieldOfStudy: "Data Science", location: "State College", details: "", startDate: "2022-08", endDate: "2024-05" },
+        ],
+      };
+      await (window as any).ConfigEngine.interpretConfig(
+        document,
+        "https://jobs.example.test/apply",
+        {
+          ats: "Fixture", urls: ["https://jobs.example.test/*"], urlsExcluded: [], embeddedPaths: [], pathsExcluded: [],
+          containerPath: [".//form[@id='application']"], containerRequired: true, defaultMethod: "default",
+          submitButtonPaths: [], submittedSuccessPaths: [], trackedInputSelectors: [],
+          inputSelectors: [["education", [{
+            array: true,
+            addButtonPath: [".//button[@id='add']"],
+            containerPath: [".//div[@class='editor']"],
+            savedRowPath: [".//div[@class='saved']"],
+            inputSelectors: [
+              ["school", [".//span[@class='school']/shadow-root/input"]],
+              ["major", [".//span[@class='major']/shadow-root/input"]],
+              ["save", [{ path: [".//button[@class='save']"], method: "click", valueRequired: false }]],
+            ],
+          }]]],
+        },
+        globals,
+        profile,
+      );
+      const editors = [...document.querySelectorAll(".editor")];
+      return {
+        added: (window as any).added,
+        saved: (window as any).saved,
+        editors: editors.map((editor) => [editor.querySelector(".school")!.shadowRoot!.querySelector("input")!.value, editor.querySelector(".major")!.shadowRoot!.querySelector("input")!.value]),
+      };
+    },
+    { globals },
+  );
+  assert.equal(result.added, 0);
+  assert.deepEqual(result.editors, [["Penn State", "Data Science"]]);
+  assert.equal(result.saved, 1);
+});
+
+// Microsoft's careers form (2026-11-07): the box showed the profile's address
+// while the site's own state held none ("Address cannot be left blank").
+// Skipped as already right, it was never typed again.
+test("a value that looks right but the site calls invalid is written again", async () => {
+  await page.setContent(`<form id="application">
+    <label for="address">Address</label><input id="address" aria-required="true" aria-invalid="true" value="100 Test Way">
+    <label for="city">City</label><input id="city" value="Phoenix">
+  </form><script>{
+    window.writes = [];
+    for (const id of ["address", "city"]) document.getElementById(id).addEventListener("input", () => window.writes.push(id));
+  }</script>`);
+  await page.addScriptTag({ content: "globalThis.__name ??= (f) => f;" });
+  await page.addScriptTag({ content: bundle });
+  const writes = await page.evaluate(async ({ globals }) => {
+    const config = {
+      ats: "Fixture", urls: ["https://jobs.example.test/*"], urlsExcluded: [], embeddedPaths: [], pathsExcluded: [],
+      containerPath: [".//form[@id='application']"], containerRequired: true, defaultMethod: "default",
+      submitButtonPaths: [], submittedSuccessPaths: [], trackedInputSelectors: [],
+      inputSelectors: [["address", [".//input[@id='address']"]], ["city", [".//input[@id='city']"]]],
+    };
+    const profile = { revision: 1, confirmed: true, firstName: "Alex", lastName: "Rivera", email: "alex@example.test", phone: "", city: "Phoenix", state: "", country: "", address: "100 Test Way", postalCode: "", linkedin: "", website: "", facts: [], work: [], education: [], answers: [] };
+    await (window as any).ConfigEngine.interpretConfig(document, "https://jobs.example.test/apply", config, globals, profile, { isReplaceable: () => true });
+    return (window as any).writes;
+  }, { globals });
+  // The flagged one is typed again; the one the site took is left alone.
+  assert.deepEqual(writes, ["address"]);
 });

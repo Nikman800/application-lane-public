@@ -45,8 +45,8 @@ const educationRow = (row: string, position: number) => `
       ${dropdown(row, "CandProfileFields", "Degree", "Degree")}
       ${dropdown(row, "CandProfileFields", "Major", "Major")}
       <div class="iCIMS_TableRow"><label>Did You Graduate?
-        <select id="${row}_CandProfileFields.IsGraduated" name="${row}_CandProfileFields.IsGraduated">
-          <option value=""></option><option>Yes</option><option>No</option>
+        <select id="${row}_CandProfileFields.IsGraduated" name="${row}_CandProfileFields.IsGraduated" data-label="Did You Graduate?" class=" iCIMS_Forms_Global customFieldContainer iCIMS_Forms_ListEditorField iCIMS_Forms_Qnull form-control" aria-label="Did You Graduate?" type="3081" icimsdropdown-enabled="0" icimsdropdown-ajax="1" icimsdropdown-search="0">
+          <option value="" legacy="true"></option><option title="In Progress" value="28595">In Progress</option><option title="Not Received" value="28596">Not Received</option><option title="Received" value="28598">Received</option>
         </select></label></div>
       <div class="iCIMS_TableRow"><label>Start Date</label>
         <select aria-label="Start Date Month" name="${row}_CandProfileFields.EducationStartDate_Month">
@@ -60,7 +60,7 @@ const educationRow = (row: string, position: number) => `
     </fieldset>
   </div>`;
 
-export function icimsCandidatePage(options: { schoolListed?: boolean } = {}) {
+export function icimsCandidatePage(options: { schoolListed?: boolean; swapped?: boolean } = {}) {
   const schools = allSchools.filter(
     (school) => options.schoolListed !== false || school !== "Pennsylvania State University-University Park",
   );
@@ -71,7 +71,11 @@ export function icimsCandidatePage(options: { schoolListed?: boolean } = {}) {
     AddressCountry: ["Canada", "United States"],
     AddressState: ["Arizona", "California", "Texas"],
   };
-  const rows = educationRow("-3", 1) + educationRow("-1", 2) + educationRow("-2", 3);
+  // Swapped: both schools shown exactly as listed, the other way round from
+  // the profile, as AMD's iCIMS redrew them (2026-11-07).
+  const rows = options.swapped
+    ? educationRow("-1", 1) + educationRow("-2", 2)
+    : educationRow("-3", 1) + educationRow("-1", 2) + educationRow("-2", 3);
   return `<!doctype html><meta charset="utf-8"><title>Candidate Profile</title><form>
     <div><h3>Resume</h3>
       <p>Provide your resume below to pre-fill your profile. Existing data in the form will be replaced.</p>
@@ -143,13 +147,18 @@ export function icimsCandidatePage(options: { schoolListed?: boolean } = {}) {
       label.className = "iCIMS_CurrentFile";
       label.querySelector("span").textContent = sessionStorage.getItem("parsed");
       // The parser's guesses: three rows for two schools, one school twice
-      // (a real but oddly spelled list entry), a wrong "Yes", and an address.
+      // (a real but oddly spelled list entry), a wrong "Received", and an address.
       document.getElementById("education").innerHTML = ${JSON.stringify(rows)};
+      const shownSchools = ${JSON.stringify(options.swapped
+        ? { "-1": "Pennsylvania State University-University Park", "-2": "Michigan State University" }
+        : { "-1": "Michigan state university", "-2": "Michigan state university" })};
       for (const row of ["-1", "-2"]) {
-        document.getElementById(row + "_CandProfileFields.School_icimsDropdown").querySelector(".dropdown-text").textContent = "Michigan state university";
-        document.getElementById(row + "_CandProfileFields.School").innerHTML = '<option value="42767" selected>Michigan state university</option>';
+        document.getElementById(row + "_CandProfileFields.School_icimsDropdown").querySelector(".dropdown-text").textContent = shownSchools[row];
+        document.getElementById(row + "_CandProfileFields.School").innerHTML = '<option value="42767" selected>' + shownSchools[row] + '</option>';
       }
-      document.getElementById("-1_CandProfileFields.IsGraduated").value = "Yes";
+      document.getElementById("-1_CandProfileFields.IsGraduated").value = "28598";
+      // and a right one, for the school that ends up second.
+      document.getElementById("-2_CandProfileFields.IsGraduated").value = "28598";
       setText(document.getElementById("-1_PersonProfileFields.AddressCountry_icimsDropdown"), "United States");
       setText(document.getElementById("-1_PersonProfileFields.AddressState_icimsDropdown"), "Arizona");
     }

@@ -7,7 +7,7 @@ import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { profileSchema, type Field, type GenerationRequest } from "../src/shared/model";
-import { leftReasons } from "../src/shared/answers";
+import { leftReasons, pickOption } from "../src/shared/answers";
 import {
   applicationQuestion,
   fitLength,
@@ -1197,6 +1197,11 @@ test("AI structured-field suggestions require saved sources and exact available 
                     value: "N/A",
                     sourceIds: ["education.1"],
                   },
+                  {
+                    fieldId: "q5",
+                    value: "N/A",
+                    sourceIds: ["education.1"],
+                  },
                 ],
               }),
             },
@@ -1252,6 +1257,12 @@ test("AI structured-field suggestions require saved sources and exact available 
       kind: "text",
       section: "Job-Specific Information",
     }),
+    field("If Yes, what is your relationship to the employee(s)", {
+      id: "relationship",
+      kind: "text",
+      required: false,
+      section: "Job-Specific Information",
+    }),
   ];
   const result = await writeFieldFallback(
     config,
@@ -1279,6 +1290,10 @@ test("AI structured-field suggestions require saved sources and exact available 
   // 2026-10-15).
   assert.equal(result.drafts[3].value, "");
   assert.match(result.drafts[3].skipReason!, /not a date/);
+  // An optional follow-up to a Yes is left empty: its "N/A" beside the
+  // question it follows read as a contradiction (L3Harris, report 726eafd7).
+  assert.equal(result.drafts[4].value, "");
+  assert.match(result.drafts[4].skipReason!, /follow-up to a Yes/);
   const input = JSON.parse(sent.messages[1].content);
   assert.ok(
     input.sources.some(
@@ -1644,21 +1659,21 @@ test("a degree listed with the subjects it covers, and a Low-to-High language sc
 });
 
 test("a figure the draft rounded and a verb in another form are still the profile's", async () => {
-  // Syngenta, 2026-11-02: "a U-Net that predicts Landsat surface temperature
+  // Syngenta, 2026-11-02: "a U-Net that predicts sensor surface temperature
   // to 0.85 K" was taken out, the profile saying "predicting" and "0.854 K".
   const { supportedBy } = await import("../src/server/verify");
   const entries = [
-    "### Landsat-cGAN\n- Built the supervised U-Net baseline predicting USGS Level-2 per-pixel surface temperature from six raw Level-1 Landsat 8 bands.\n- Reached MAE 0.854 K over a full Landsat scene.",
+    "### Thermal-cGAN\n- Built the supervised U-Net baseline predicting per-pixel sensor surface temperature from six raw thermal camera bands.\n- Reached MAE 0.854 K over a full test plate.",
   ];
-  const sentence = "I have trained models on real data: a U-Net that predicts Landsat surface temperature to 0.85 K.";
+  const sentence = "I have trained models on real data: a U-Net that predicts sensor surface temperature to 0.85 K.";
   const stands = (claim: string) => supportedBy(claim, "", sentence, entries);
-  assert.equal(stands("a U-Net that predicts Landsat surface temperature to 0.85 K"), true);
-  assert.equal(stands("a U-Net that predicted Landsat surface temperature"), true);
+  assert.equal(stands("a U-Net that predicts sensor surface temperature to 0.85 K"), true);
+  assert.equal(stands("a U-Net that predicted sensor surface temperature"), true);
   // Another figure, or one rounded the wrong way, is not the profile's.
-  assert.equal(stands("a U-Net that predicts Landsat surface temperature to 0.86 K"), false);
-  assert.equal(stands("a U-Net that predicts Landsat surface temperature to 0.8 K"), false);
+  assert.equal(stands("a U-Net that predicts sensor surface temperature to 0.86 K"), false);
+  assert.equal(stands("a U-Net that predicts sensor surface temperature to 0.8 K"), false);
   // Nor is a result the entry does not state, in any form.
-  assert.equal(stands("a U-Net that predicts Landsat surface temperature and cut costs"), false);
+  assert.equal(stands("a U-Net that predicts sensor surface temperature and cut costs"), false);
   // Read whole, the figure keeps its unit: "0.85 K" is the entry's 0.854 K.
   const { unclaimed } = await import("../src/server/verify");
   assert.deepEqual(unclaimed(sentence, [], entries), []);
@@ -1692,8 +1707,26 @@ test("a claim the checker reworded is held to the sentence it came from", async 
   const check = verifier(configSchema.parse({ token: "synthetic-token-".repeat(4), provider: "http", model: "drafter", verifyModel: "checker", endpoint: `http://127.0.0.1:${(server.address() as { port: number }).port}/v1` }))!;
   const verdicts = await check(
     [{ id: "letter:1", kind: "letter", draftedWith: { provider: "http", model: "drafter" }, text: "I am applying for the Robotics Software Developer role at Argonne. I built a U-Net baseline." }],
-    { profile: "### Landsat\n- Built the supervised U-Net baseline.", posting: "" },
+    { profile: "### Thermal\n- Built the supervised U-Net baseline.", posting: "" },
     new AbortController().signal,
   );
   assert.deepEqual(verdicts.get("letter:1")?.unsupported, []);
+});
+
+// Databricks' Greenhouse questions (2026-11-08): a GPA list noting its scale
+// after each range, and a graduation list of academic seasons.
+test("a GPA takes a range noted with its 4.0 scale, and a graduation month its season", () => {
+  const gpa = ["2.4 or below", "2.5 - 2.7 (out of 4.0)", "2.8 - 3.0 (out of 4.0)", "3.1 - 3.3 (out of 4.0)", "3.4 - 3.5 (out of 4.0)",
+    "3.6 or above (out of 4.0)", "80% or above (Canadian Institutions)", "70-79% (Canadian Institutions)"];
+  const pick = (value: string, options: string[], numeric?: number) => pickOption({ value, numeric }, options, (option) => option);
+  assert.equal(pick("3.84", gpa, 3.84), "3.6 or above (out of 4.0)");
+  assert.equal(pick("3.2", gpa, 3.2), "3.1 - 3.3 (out of 4.0)");
+  assert.equal(pick("2.1", gpa, 2.1), "2.4 or below");
+  const terms = ["Earlier than Fall 2026", "Fall 2026", "Spring 2027", "Later than Summer 2027"];
+  assert.equal(pick("May 2027", terms), "Spring 2027");
+  assert.equal(pick("December 2026", terms), "Fall 2026");
+  assert.equal(pick("December 2027", terms), "Later than Summer 2027");
+  assert.equal(pick("May 2026", terms), "Earlier than Fall 2026");
+  // Summer 2027 itself is none of them.
+  assert.equal(pick("July 2027", terms), undefined);
 });

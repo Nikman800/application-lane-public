@@ -50,10 +50,12 @@ export function styled(text: string, width: number, style: string): string {
 // line it was cut off in a narrow pane, and nothing showed which openings
 // were already applications (2026-11-02).
 export function openingLine(
-  listing: { company: string; title: string; locations: string[]; postedAt?: number; tracked?: boolean },
+  listing: { company: string; title: string; locations: string[]; postedAt?: number; tracked?: boolean; site?: { ats?: string } },
   ago: (at: number) => string,
 ): string {
-  return `${listing.tracked ? "✓ tracked · " : ""}${listing.company} — ${listing.title} · ${listing.locations.slice(0, 2).join("; ")}${listing.postedAt ? ` · ${ago(listing.postedAt)}` : ""}`;
+  // An opening on a site no rule covers, marked before it is opened
+  // (site-check.ts).
+  return `${listing.tracked ? "✓ tracked · " : ""}${listing.site && !listing.site.ats ? "⚠ no site rule · " : ""}${listing.company} — ${listing.title} · ${listing.locations.slice(0, 2).join("; ")}${listing.postedAt ? ` · ${ago(listing.postedAt)}` : ""}`;
 }
 
 // Colour for the command line, from the same themes as the extension
@@ -121,6 +123,7 @@ export function createPalette(theme: ThemeTokens, depth: ColorDepth) {
   const fg = (hex: string) => paint(sgr(hex, depth));
   const stageOf: Record<string, string> = {
     "needs you": theme.warning,
+    "being fixed": theme.info,
     "in progress": theme.stage.applying,
     failed: theme.danger,
     "ready to review": theme.stage.review,

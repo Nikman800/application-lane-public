@@ -11,6 +11,8 @@ permissions:
 jobs:
   check:
     runs-on: ubuntu-latest
+    # A hung step ran to GitHub's 6-hour limit on every push (Nov 2026).
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -20,8 +22,11 @@ jobs:
       - run: npm ci
       - name: Type check
         run: npm run check
+      # Some unit tests drive a headless Chromium (the config interpreter,
+      # the submit capture): without it they failed and the run hung.
+      - run: npx playwright install --with-deps chromium
       - name: Unit tests
-        run: node --import tsx --test tests/*.test.ts
+        run: node --import tsx --test --test-timeout=120000 tests/*.test.ts
       - name: Build
         run: npm run build
       - name: Chrome Web Store build

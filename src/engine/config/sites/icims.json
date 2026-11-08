@@ -43,6 +43,9 @@
           "containerPath": [
             ".//*[contains(@class,'iCIMS_CollectionContainer')][.//*[contains(@name,'CandProfileFields.School') or contains(@id,'CandProfileFields.School')]]"
           ],
+          "addButtonPath": [
+            ".//a[starts-with(@id,'CandProfileFields.EducationButton')]"
+          ],
           "inputSelectors": [
             [
               "school",
@@ -95,7 +98,16 @@
                   "path": [
                     ".//select[contains(@name,'CandProfileFields.IsGraduated')]"
                   ],
-                  "valueKey": "graduated_flag"
+                  "valueKey": "graduated_flag",
+                  "values": {
+                    "No": [
+                      "In Progress",
+                      "Not Received"
+                    ],
+                    "Yes": [
+                      "Received"
+                    ]
+                  }
                 }
               ]
             ],

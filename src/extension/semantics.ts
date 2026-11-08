@@ -1,5 +1,6 @@
 import { type Field } from "../shared/model";
 import { wordLimit } from "../shared/questions";
+import { askedLevel } from "../shared/transcripts";
 
 export function fieldWordLimit(element: Element, label: string): number | undefined {
   const texts = [label];
@@ -182,6 +183,40 @@ function radioOptionBeside(element: Element): string {
   return block === element ? "" : cleanLabel(labelText(block));
 }
 
+// iCIMS's EEO forms draw a radio inside a span of its own, its option as
+// bare text after it up to a line break, and the question as the text
+// before the first of them ("…please indicate by checking the appropriate
+// box below", AMD's veteran question, report c1e21ba3, 2026-11-07).
+function bareWrapper(element: Element): Element {
+  const parent = element.parentElement;
+  return parent && parent.tagName === "SPAN" && parent.childElementCount === 1 && !(parent.textContent || "").trim() ? parent : element;
+}
+function textAfterRadio(element: Element): string {
+  let text = "";
+  for (let node = bareWrapper(element).nextSibling; node; node = node.nextSibling) {
+    if (node instanceof HTMLBRElement) { if (text.trim()) break; continue; }
+    if (node instanceof Element && node.querySelector("input,select,textarea")) break;
+    text += node.textContent || "";
+    if (text.length > 300) break;
+  }
+  return cleanLabel(text);
+}
+function textBeforeRadios(element: Element): string {
+  const members = sameNamedRadios(element);
+  const first = members[0] && bareWrapper(members[0]);
+  if (!first || members.length < 2 || members.some((member) => member.labels?.length)) return "";
+  const parts: string[] = [];
+  for (let node = first.previousSibling; node; node = node.previousSibling) {
+    if (node instanceof Element && node.querySelector("input,select,textarea")) break;
+    const text = (node.textContent || "").trim();
+    if (text) parts.unshift(text);
+    if (parts.join(" ").length > 400) break;
+  }
+  // The last sentences: the ask comes just before the boxes.
+  const text = cleanLabel(parts.join(" "));
+  return text.length > 300 ? cleanLabel(text.slice(-300).replace(/^\S*\s/, "")) : text;
+}
+
 export function fieldLabel(element: Control): string {
   if (isToggleChoice(element))
     return cleanLabel(labelText(toggleQuestion(element)) || element.parentElement!.getAttribute("aria-label") || "") || "Unlabelled field";
@@ -220,6 +255,7 @@ export function fieldLabel(element: Control): string {
           ripplingQuestion(element) ||
           questionLabel(element) ||
           groupQuestion(element)?.text ||
+          textBeforeRadios(element) ||
           // Generated names (Ashby's form and field UUIDs) are not labels.
           (/[a-f0-9]{8}-[a-f0-9-]{20,}|cards\[/i.test(name) ? "" : name) ||
           ownLabel(element),
@@ -236,6 +272,18 @@ export function fieldLabel(element: Control): string {
   if (/^Address$/i.test(own) && /\binclude your city, region, and country\b/i.test(description))
     return "Address (city, region, country)";
   if (asked && own) return cleanLabel(`${asked}: ${own}`);
+  // A lone box named only by its answer ("Yes") whose question is the
+  // group's, named by aria-labelledby: Microsoft's three acknowledgments
+  // each read "Yes", and as one label repeated all three were left alone
+  // (report bce03da9, 2026-11-04).
+  if (element instanceof HTMLInputElement && /^(checkbox|radio)$/.test(element.type) && /^(yes|no|i agree|agree|i accept|accept|i acknowledge|acknowledge)$/i.test(own.trim())) {
+    for (let box = element.parentElement, depth = 0; box && depth < 4; box = box.parentElement, depth++) {
+      const ids = (box.getAttribute("aria-labelledby") || "").split(/\s+/).filter(Boolean);
+      if (!ids.length || box === element) continue;
+      const question = cleanLabel(ids.map((id) => root.querySelector(`#${CSS.escape(id)}`)?.textContent || "").join(" "));
+      if (question && question.toLowerCase() !== own.trim().toLowerCase()) return cleanLabel(`${question}: ${own}`);
+    }
+  }
   // A Workday date's Month, Day and Year are named only so: the question is
   // its field's legend ("What is your first available start date?", TSC,
   // report e48a61a1, 2026-11-02).
@@ -370,8 +418,19 @@ export function profileImport(element: Control): boolean {
 }
 
 export function fileKind(element: Control): DocumentKind | undefined {
+  return fileQuestion(element)?.kind;
+}
+
+// What a file field is for, and the words that say so ("Please provide a
+// recent transcript of your undergraduate studies"): the degree a transcript
+// field asks for is read from them (shared/transcripts.ts).
+export function fileQuestion(element: Control): { kind: DocumentKind; text: string } | undefined {
   if (!(element instanceof HTMLInputElement) || element.type !== "file") return;
-  const direct = documentKind(
+  const named = (text: string) => {
+    const kind = documentKind(text);
+    return kind ? { kind, text } : undefined;
+  };
+  const direct = named(
     [
       element.name,
       element.id,
@@ -410,8 +469,8 @@ export function fileKind(element: Control): DocumentKind | undefined {
         .map((id) => (id ? section.ownerDocument.getElementById(id) : null))
         .map((label) => (label ? labelText(label) : "")),
     ].join(" ");
-    const kind = documentKind([labels.map(labelText).join(" "), identity].join(" "));
-    if (kind) return kind;
+    const found = named([labels.map(labelText).join(" "), identity].join(" "));
+    if (found) return found;
   }
   // Oracle's block names what goes in its one uploader, nine levels up, in
   // its title and instructions: "Additional Documents. Add any additional
@@ -419,7 +478,7 @@ export function fileKind(element: Control): DocumentKind | undefined {
   // report 392583f7).
   const block = element.closest(".apply-flow-block");
   if (block && block.querySelectorAll('input[type="file"]').length === 1)
-    return documentKind(
+    return named(
       [...block.querySelectorAll(".apply-flow-block__title,.apply-flow-block__instructions")].map(labelText).join(" "),
     );
 }
@@ -566,7 +625,13 @@ function ripplingQuestion(element: Element): string {
 export function ownLabel(element: Control): string {
   // A toggle choice's option is its own text ("Yes", "No").
   if (isToggleChoice(element)) return cleanLabel(element.textContent || "");
-  const purpose = fileKind(element);
+  const question = fileQuestion(element);
+  const purpose = question?.kind;
+  // A transcript for one degree says which: "Undergraduate transcript".
+  if (purpose === "transcript") {
+    const level = askedLevel(question!.text);
+    return level ? `${level === "undergraduate" ? "Undergraduate" : "Graduate"} transcript` : "Transcript";
+  }
   if (purpose) return { resume: "Resume", cover: "Cover letter", transcript: "Transcript" }[purpose];
   // An ARIA radio or checkbox drawn around a native input is named by that
   // input's label (Rippling), or by its own text.
@@ -595,6 +660,10 @@ export function ownLabel(element: Control): string {
   }
   const explicit = associatedLabel(element);
   if (explicit) return explicit;
+  if (element instanceof HTMLInputElement && /^(radio|checkbox)$/.test(element.type)) {
+    const after = textAfterRadio(element);
+    if (after) return after;
+  }
   // Select2's hidden select is named by its visible selection (Amazon's,
   // whose only name is the selection's aria-labelledby).
   const selection = select2Selection(element);
@@ -709,10 +778,14 @@ export function placeholderOption(option: HTMLOptionElement): boolean {
 }
 
 export function writable(element: Control): boolean {
+  // A read-only combobox naming its list is chosen from, not typed into:
+  // Microsoft's careers form draws every list so, and its sponsorship
+  // question was refused as "no longer writable" (2026-11-07).
+  const chosenFrom = element.getAttribute("role") === "combobox" && Boolean(element.getAttribute("aria-controls"));
   return (
     controlVisible(element) &&
     !(element as HTMLInputElement).disabled &&
-    !(element as HTMLInputElement).readOnly &&
+    (!(element as HTMLInputElement).readOnly || chosenFrom) &&
     element.getAttribute("aria-disabled") !== "true" &&
     element.getAttribute("aria-readonly") !== "true"
   );
@@ -853,6 +926,15 @@ export function isRequired(element: Control): boolean {
   if (isToggleChoice(element))
     return /required/i.test(String(toggleQuestion(element)?.className || ""));
   if (element.closest(".required-field")) return true;
+  // Workday's question dropdowns: the button's own name ends "Required"
+  // (" Select One Required"), and the question's legend carries the
+  // asterisk. KLA's OPT questions were listed as optional (2026-11-04).
+  if (/\brequired\s*$/i.test(element.getAttribute("aria-label") || "")) return true;
+  const fieldset = element.closest("fieldset");
+  const legend = fieldset?.querySelector(":scope > legend");
+  if (legend && fieldset!.querySelectorAll(controlSelector).length <= 2 &&
+      (legend.querySelector('abbr[title="required"], abbr.requiredAsterisk') || /[*✱]\s*$/.test((legend.textContent || "").trim())))
+    return true;
   const ashbyTitle = element.matches("input.ashby-application-form-input-autocomplete") ? element.parentElement?.previousElementSibling : null;
   if (ashbyTitle?.matches("label.ashby-application-form-question-title")) return /required/i.test(String(ashbyTitle.className));
   // (A custom Ashby dropdown's entry is a fieldset without the public class.)

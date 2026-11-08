@@ -324,6 +324,14 @@ export async function writeFieldFallback(
       value = "";
       skipReason ||= "The suggestion was not a date.";
     }
+    // An optional follow-up to a Yes ("If Yes, what is your relationship to
+    // the employee(s)") is left empty: its "N/A" beside a question left
+    // unanswered read as a contradiction (L3Harris, report 726eafd7,
+    // 2026-11-07), and empty it reads as not applying.
+    if (value && !field.required && /^(if (yes|so)\b|if you (answered|responded|selected|said|checked) ['"‘’“”]?yes)/i.test(field.label.trim())) {
+      value = "";
+      skipReason ||= "A follow-up to a Yes; left empty.";
+    }
     if (field.maxLength && value.length > field.maxLength) {
       value = "";
       skipReason ||= `The suggestion exceeded the ${field.maxLength}-character limit.`;

@@ -186,7 +186,7 @@ test("the command line searches for openings and queues them by number", async (
   try {
     const found = await lane("search", "--role", "software engineer", "--country", "United States", "--no-profile", "--save");
     assert.match(found, /Looked for software engineer \(United States\)/);
-    assert.match(found, /  1\. Acme — Software Engineer, New Grad · Phoenix, AZ/);
+    assert.match(found, /  1\. ⚠ no site rule · Acme — Software Engineer, New Grad · Phoenix, AZ/);
     // Senior and abroad are left out.
     assert.doesNotMatch(found, /Beta|Gamma/);
     // Saved, as the dashboard shows them.
@@ -211,6 +211,24 @@ test("the command line searches for openings and queues them by number", async (
       body: JSON.stringify({ at: Date.now(), applications: [{ id: "f00dcafe-0000-4000-8000-000000000001", url: "https://ACME.example.test/1/?gh_src=board", company: "Acme", title: "Software Engineer, New Grad", status: "awaiting-user", stage: "applying", note: "Tracked.", needs: [], updatedAt: Date.now(), reports: 0 }] }),
     });
     assert.deepEqual(await read(), [true]);
+    // What an earlier fill at the same company left to the applicant is
+    // shown before the opening is opened (form-preview.ts).
+    await fetch(`${url}/v1/queue`, {
+      method: "PUT",
+      headers: auth,
+      body: JSON.stringify({ at: Date.now(), applications: [{ id: "f00dcafe-0000-4000-8000-000000000002", url: "https://acme.example.test/9", company: "Acme", title: "Software Engineer", status: "awaiting-user", stage: "applying", note: "Filled.", needs: ["How did you hear about us?"], lastFill: { status: "needs-review", note: "Review.", completedAt: Date.now(), filled: 12 }, updatedAt: Date.now(), reports: 0 }] }),
+    });
+    const previewed = (await (await fetch(`${url}/v1/search`, { headers: auth })).json()).listings[0].preview;
+    assert.deepEqual(previewed?.history?.company, { applications: 1, left: ["How did you hear about us?"] });
+    // An application the fixer is correcting is shown apart, for the
+    // applicant to leave alone, until it is marked done (2026-11-07).
+    assert.match(await lane("fixing", "f00dca", "retrying", "the", "upload"), /marked as being fixed/);
+    const marked = await lane("status");
+    assert.match(marked, /being fixed\s+1/);
+    assert.match(marked, /Being fixed \(leave these alone for now\):\n\s+\[f00dca\] Acme — Software Engineer\n\s+retrying the upload/);
+    assert.doesNotMatch(marked, /Needs you:/);
+    assert.match(await lane("fixed", "f00dca"), /no longer marked/);
+    assert.match(await lane("status"), /Needs you:\n\s+\[f00dca\] Acme/);
   } finally {
     server.close();
   }

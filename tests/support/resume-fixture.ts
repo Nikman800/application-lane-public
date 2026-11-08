@@ -28,7 +28,7 @@ export const resumeProfile = (): Profile => ({
       title: "Software Engineer",
       startDate: "2019-06-01",
       endDate: "2022-02",
-      location: "Tempe, AZ",
+      location: "Lansing, MI",
       details:
         "• Built TypeScript interfaces for internal analytics dashboards\n• Migrated a legacy jQuery front end to React with no downtime\n• Mentored two interns through their first production releases",
     },
@@ -40,7 +40,7 @@ export const resumeProfile = (): Profile => ({
       fieldOfStudy: "Computer Science",
       startDate: "2015-08",
       endDate: "2019-05",
-      location: "Tempe, AZ",
+      location: "Lansing, MI",
       details: "Dean's List; capstone on accessible web forms",
     },
   ],

@@ -1,0 +1,50 @@
+{
+  "ats": "Microsoft Careers",
+  "urls": [
+    "*://apply.careers.microsoft.com/careers/apply*"
+  ],
+  "urlsExcluded": [],
+  "embeddedPaths": [],
+  "pathsExcluded": [],
+  "containerPath": [],
+  "containerRequired": false,
+  "defaultMethod": "default",
+  "submitButtonPaths": [],
+  "submittedSuccessPaths": [],
+  "trackedInputSelectors": [],
+  "inputSelectors": [
+    [
+      "address",
+      [
+        {
+          "path": [
+            "//input[@data-test-id='Contact_Information_q_address']"
+          ],
+          "method": "trustedType"
+        }
+      ]
+    ],
+    [
+      "city",
+      [
+        {
+          "path": [
+            "//input[@data-test-id='Contact_Information_q_city']"
+          ],
+          "method": "trustedType"
+        }
+      ]
+    ],
+    [
+      "postal_code",
+      [
+        {
+          "path": [
+            "//input[@data-test-id='Contact_Information_q_zip']"
+          ],
+          "method": "trustedType"
+        }
+      ]
+    ]
+  ]
+}

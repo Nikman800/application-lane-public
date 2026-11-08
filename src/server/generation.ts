@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 import {
   narrativeSchema,
   sensitiveQuestion,
+  type Artifact,
   type Field,
   type GenerationJob,
   type GenerationRequest,
@@ -17,7 +18,7 @@ import {
 } from "../shared/model";
 import { CliFailure, cliComplete, cliDefaults } from "./cli-provider";
 import { schoolNames } from "../shared/schools";
-import { renderArtifacts, transcriptArtifact, transcriptsFolder } from "./documents";
+import { renderArtifacts, transcriptArtifacts, transcriptsFolder } from "./documents";
 import { exportDocuments } from "./export";
 import {
   buildTailored,
@@ -1644,12 +1645,13 @@ export class GenerationQueue {
   }
   // The applicant's transcript goes with every application's documents, for
   // a form that asks for one.
-  private transcript(request: Pick<GenerationRequest, "applicationId" | "operation">) {
-    return transcriptArtifact(
+  private transcripts(request: Pick<GenerationRequest, "applicationId" | "operation">) {
+    return transcriptArtifacts(
       this.store.directory,
       [transcriptsFolder(this.config.transcriptsDir, this.store.directory)],
       request,
-    ).catch(() => undefined);
+      this.store.data.profile,
+    ).catch(() => [] as Artifact[]);
   }
   // The verifier's reading applied: an answer with an unsupported claim, or
   // one that talks to the applicant, is left for them; a letter or answer
@@ -1979,8 +1981,11 @@ export class GenerationQueue {
         // provider here, and "Codex could not draft this" on a reused
         // document read as a new failure after the model had been changed
         // (2026-10-14).
+        // Nor that the earlier step's drafts could not be checked: a later
+        // step with no written questions checks nothing, and Leidos's
+        // questions page said so after its documents page had (2026-11-08).
         const warnings = (previous.narrative!.warnings || []).filter(
-          (warning) => !/^(Left "|Application answers could not)|^(Claude|Codex) could not draft this\b/.test(warning),
+          (warning) => !/^(Left "|Application answers could not)|^(Claude|Codex) could not draft this\b|^A second model could not check\b/.test(warning),
         );
         let answers: Narrative["answers"] = [];
         if (questions.length) {
@@ -2009,11 +2014,11 @@ export class GenerationQueue {
         // The transcript is the applicant's file as it is now, not the copy
         // (or the absence) the earlier step had: one uploaded since the
         // documents were drafted reached no form until they were redrafted.
-        const transcript = await this.transcript(request);
+        const transcripts = await this.transcripts(request);
         // Copied under this run's own ids: the page attaches only documents
         // made for the operation it is filling.
         job.artifacts = await Promise.all(
-          previous.artifacts.filter((artifact) => !transcript || artifact.kind !== "transcript").map(async (artifact) => {
+          previous.artifacts.filter((artifact) => !transcripts.length || artifact.kind !== "transcript").map(async (artifact) => {
             const id = randomUUID();
             const file = (name: string) =>
               join(this.store.directory, "artifacts", `${name}.${artifact.format}`);
@@ -2021,7 +2026,7 @@ export class GenerationQueue {
             return { ...artifact, id, operation: job.operation };
           }),
         );
-        if (transcript) job.artifacts.push(transcript);
+        job.artifacts.push(...transcripts);
         job.narrative = { ...previous.narrative!, answers, warnings: distinctWarnings(warnings) || [] };
         job.fit = await fitting;
         job.status = "complete";
@@ -2178,8 +2183,8 @@ export class GenerationQueue {
         this.store.data.profile.revision !== profile.revision
       )
         throw new Error("Generation cancelled or profile changed.");
-      const transcript = await this.transcript(request);
-      job.artifacts = transcript ? [...artifacts, transcript] : artifacts;
+      const transcripts = await this.transcripts(request);
+      job.artifacts = [...artifacts, ...transcripts];
       job.narrative = { ...narrative, warnings: distinctWarnings(narrative.warnings) };
       if (!job.narrative.warnings) delete job.narrative.warnings;
       job.status = "complete";

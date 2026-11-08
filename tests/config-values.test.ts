@@ -274,6 +274,14 @@ test("answer-bank choices reach each site's own option wording", async () => {
   assert.equal(pick("veteran", { veteranStatus: "Not a veteran" }, veteran), veteran[0]);
   assert.equal(pick("veteran", { veteranStatus: "Yes" }, veteran), veteran[1]);
   assert.equal(pick("veteran", { veteranStatus: "Prefer not to say" }, veteran), veteran[2]);
+  // Sonos's Workday lists no "protected" wording (2026-11-04): "I am not a
+  // veteran" is picked for someone whose saved answers say they never
+  // served, and never for someone who did serve.
+  const plain = ["I AM A VETERAN", "I AM NOT A VETERAN", "I DO NOT WISH TO SELF-IDENTIFY"];
+  const served = (answer: string) => ({ veteranStatus: "No", answers: [{ question: "Military status", answer }] });
+  assert.equal(pick("veteran", served("No"), plain), plain[1]);
+  assert.notEqual(pick("veteran", served("Yes"), plain), plain[1]);
+  assert.notEqual(pick("veteran", { veteranStatus: "No" }, plain), plain[1]);
   const gender = ["Male", "Female", "I do not wish to self-identify"];
   assert.equal(pick("gender", { gender: "Man" }, gender), "Male");
   assert.equal(pick("gender", { gender: "Decline" }, gender), gender[2]);
@@ -385,7 +393,7 @@ test("a work row gives its own address parts and reason for leaving", () => {
   const worked = profileSchema.parse({
     ...profile,
     work: [
-      { organization: "Example Labs", title: "Intern", startDate: "2024-06", endDate: "2024-08", location: "Tucson, AZ", details: "", address: "1 Lab Way", county: "Maricopa", postalCode: "85281", reasonForLeaving: "Internship ended" },
+      { organization: "Example Labs", title: "Intern", startDate: "2024-06", endDate: "2024-08", location: "Tucson, AZ", details: "", address: "1 Lab Way", county: "Maricopa", postalCode: "48910", reasonForLeaving: "Internship ended" },
       { organization: "Remote Co", title: "Engineer", startDate: "2024-09", endDate: "", location: "Remote", details: "" },
     ],
   });
@@ -394,7 +402,7 @@ test("a work row gives its own address parts and reason for leaving", () => {
   assert.equal(row("city", 0), "Tucson");
   assert.equal(row("state", 0), "AZ");
   assert.equal(row("county", 0), "Maricopa");
-  assert.equal(row("postal_code", 0), "85281");
+  assert.equal(row("postal_code", 0), "48910");
   assert.equal(row("reason_for_leaving", 0), "Internship ended");
   assert.equal(row("location", 0), "Tucson, AZ");
   // Nothing saved: nothing is offered, and never the applicant's home address.
@@ -557,5 +565,20 @@ test("a phone's type is offered in the wordings lists use, personal first", () =
   const values = canonicalValues("phone_type", { ...profile, phoneDeviceType: "Mobile" });
   assert.equal(values[0], "Mobile");
   assert.ok(values.indexOf("Personal Mobile") > 0);
+  // NVIDIA's Workday lists only "Home" and "Home Cellular" (2026-11-04).
+  assert.ok(values.includes("Home Cellular"));
+  assert.ok(!values.includes("Home"));
   assert.ok(!values.includes("Business Mobile"));
+});
+
+// L3Harris's SuccessFactors Veteran Status (report a172edaa, 2026-11-07):
+// "No" took the list's "No Selection" by its first word, and its own
+// "Not Protected Veteran (OFCCP)" matched none of the wordings tried.
+test("a veteran list's OFCCP wording is matched, and No Selection never is", () => {
+  const options = ["No Selection", "Not Protected Veteran (OFCCP)", "Prefer Not To Answer (OFCCP)", "Protected Veteran (OFCCP)"]
+    .map((label) => ({ label, value: label }));
+  const never = selectorValues("veteran", { path: ["x"] } as never, profileSchema.parse({ ...profile, veteranStatus: "I am not a veteran" }), globals);
+  assert.equal(matchOption(never, options, globals)?.label, "Not Protected Veteran (OFCCP)");
+  assert.equal(matchOption(["No"], options, globals), undefined);
+  assert.equal(matchOption(["No"], [{ label: "No Selection", value: "" }, { label: "No", value: "n" }], globals)?.label, "No");
 });

@@ -1,3 +1,4 @@
+import { keptHandAnswer } from "../shared/hand-answers";
 import {
   BACKEND,
   CONTENT_VERSION,
@@ -20,7 +21,9 @@ import {
   normalize,
 } from "../shared/model";
 import { storeBuild } from "../shared/store-build";
-import { DRAFT_ONLY_NOTE, accessPattern, canonicalURL, draftOnlySite, sameOpening, historyRowMap, postingGuess, proposals } from "../shared/matching";
+import { rowHolds } from "./row-holds";
+import { pickTranscript } from "../shared/transcripts";
+import { DRAFT_ONLY_NOTE, accessPattern, canonicalURL, draftOnlySite, sameOpening, historyRowMap, listAnswered, postingGuess, proposals } from "../shared/matching";
 import { questionTopic } from "../shared/standing";
 import { locationCountry, type Geography } from "../shared/geography";
 import globals from "../engine/config/globals.json" with { type: "json" };
@@ -176,6 +179,19 @@ function connectLive() {
   };
   socket.onerror = () => {};
 }
+// The extension's current build in a page opened before it was reloaded:
+// injected again into each of its frames, where it takes over from the old
+// copy. Nothing is reloaded, so nothing entered is lost; reloading a page a
+// form posted to asked "Confirm Form Resubmission", and opening its address
+// again showed L3Harris's SuccessFactors only an error (2026-11-07).
+async function refreshPast(tabId: number) {
+  const frames = (await chrome.webNavigation.getAllFrames({ tabId }).catch(() => undefined)) || [{ frameId: 0, url: "" }];
+  for (const frame of frames) {
+    if (frame.frameId !== 0 && captchaFrame(frame.url)) continue;
+    await chrome.scripting.executeScript({ target: { tabId, frameIds: [frame.frameId] }, files: ["content.js"], injectImmediately: true }).catch(() => {});
+  }
+}
+
 // A command from the command line, as the side panel would carry it out:
 // fill is Fill this step (it never presses Next or Submit), switch brings the
 // application's tab and its window to the front.
@@ -183,6 +199,15 @@ async function liveCommand(message: { action?: string; applicationId?: string })
   if (message.action === "pick-up") {
     await pickUpInbox();
     return;
+  }
+  // The fixer's reload (lane reload, 2026-11-07): a new build without a trip
+  // to chrome://extensions. Never under a fill, which it would cut off.
+  if (message.action === "reload") {
+    const busy = state.applications.filter((candidate) => ["inspecting", "preparing", "filling"].includes(candidate.status));
+    if (busy.length)
+      throw new Error(`Not reloaded: ${busy.map((candidate) => candidate.company || candidate.title).slice(0, 3).join(", ")} ${busy.length === 1 ? "is" : "are"} being filled. Try again when ${busy.length === 1 ? "it finishes" : "they finish"}.`);
+    setTimeout(() => chrome.runtime.reload(), 300);
+    return "Reloading the extension. A page open before it is on the old build until refreshed.";
   }
   const app = state.applications.find((candidate) => candidate.id === message.applicationId);
   if (!app) throw new Error("No such application. It may have been removed.");
@@ -202,6 +227,14 @@ async function liveCommand(message: { action?: string; applicationId?: string })
   if (message.action === "abandon") {
     await uiMessage({ type: "CANCEL_APP", id: app.id });
     return "Abandoned. Change its stage in the panel to undo.";
+  }
+  // Its page loaded again, on the extension's current build (after a
+  // reload, a page keeps the old one until refreshed). Never under a fill.
+  if (message.action === "refresh") {
+    if (["inspecting", "preparing", "filling"].includes(app.status)) throw new Error("It is being filled. Try again when it finishes.");
+    if (app.tabId === undefined) throw new Error("Its tab is closed. Switch to it first.");
+    await refreshPast(app.tabId);
+    return "Its page now runs the current build.";
   }
   if (message.action === "fill") {
     if (app.tabId === undefined) throw new Error("Its tab is closed. Switch to it first, then fill.");
@@ -1396,14 +1429,22 @@ function fallbackProblems(
         (proposal) => proposal.fieldId,
       ),
     );
+    // A list the fill answered (one box of it ticked) is not left: the
+    // sanctions list given "None of the above" was still listed (2026-11-08).
+    const answeredLists = new Set(
+      frame.observation.fields
+        .filter((field) => field.question && (planned.has(field.id) || listAnswered(field, profile)))
+        .map((field) => field.question),
+    );
     if (!legalToo)
       legalLeft.push(
         ...frame.observation.fields
-          .filter((field) => !planned.has(field.id) && structuredFallbackField(field, true) && !structuredFallbackField(field))
+          .filter((field) => !planned.has(field.id) && !(field.question && answeredLists.has(field.question)) &&
+            structuredFallbackField(field, true) && !structuredFallbackField(field))
           .map((field) => field.label),
       );
     const fields = withRows(frame.observation.fields)
-      .filter((field) => structuredFallbackField(field, legalToo))
+      .filter((field) => structuredFallbackField(field, legalToo) && !(field.question && answeredLists.has(field.question)))
       .slice(0, Math.max(0, 100 - problems.length));
     if (!fields.length) continue;
     frames.push({
@@ -1789,10 +1830,40 @@ async function fillFieldFallback(app: Application, message: any) {
     fieldFallbackFills.delete(app.id);
   }
 }
+// The options of a step's empty dropdowns that show none until opened (see
+// OPTIONS in content.ts: Workday's from its questionnaire where it lists
+// them, else opened and closed with nothing chosen). A draft-only site is
+// spared the opening.
+async function readListOptions(app: Application, frame: { frameId: number; observation: Observation }) {
+  if (draftOnlySite(frame.observation.url)) return;
+  const unread = frame.observation.fields.filter(
+    (field) => !field.value && !field.protected && !field.options.length && /combobox|listbox/.test(field.kind),
+  );
+  if (!unread.length) return;
+  const read: { id: string; options: string[] }[] = await frameCall(app, frame.frameId, {
+    type: "OPTIONS",
+    documentId: frame.observation.documentId,
+    fieldIds: unread.map((field) => field.id),
+    // Only list buttons (Workday's) during a fill: opening a SuccessFactors
+    // or react-select list then got in the way of its own fill, which picks
+    // from the open list anyway (suite, 2026-11-04).
+    listButtonsOnly: true,
+  }).catch(() => []);
+  for (const { id, options } of Array.isArray(read) ? read : []) {
+    const field = frame.observation.fields.find((candidate) => candidate.id === id);
+    if (field && Array.isArray(options)) field.options = options.filter((option) => typeof option === "string").slice(0, 300);
+  }
+}
+
 async function run(app: Application, operation: number) {
   if (!app.startedAt) app.startedAt = Date.now();
-  touch(app, "inspecting", "Reading application fields…");
-  await persist();
+  // Each look at whether its documents are ready runs this again: one still
+  // tailoring stays "Tailoring" rather than flicking to "Reading form" and
+  // back every few seconds (2026-11-04).
+  if (app.status !== "preparing") {
+    touch(app, "inspecting", "Reading application fields…");
+    await persist();
+  }
   const tab =
     app.tabId && (await chrome.tabs.get(app.tabId).catch(() => undefined));
   if (!tab)
@@ -2031,6 +2102,12 @@ async function run(app: Application, operation: number) {
       frame.observation = result.observation;
       if (result.ats) app.ats = result.ats;
     }
+    // Dropdowns that list their answers only once opened are read first, so
+    // an answer is chosen from the site's own list rather than guessed:
+    // NVIDIA's "…in that country?" was held back for want of one, and its
+    // phone type was guessed as "Mobile" against "Home Cellular" (2026-11-04).
+    await readListOptions(app, frame);
+    if (!alive(app, operation)) return;
     const plan = proposals(frame.observation.fields, profile);
     if (plan.length) {
       const result = await applyFrame(app, frame, plan, operation);
@@ -2094,7 +2171,7 @@ async function run(app: Application, operation: number) {
       app.postingUrl = led.url;
       if (led.description) app.sourceDescription = `${led.description.slice(0, 12500)}\n${app.sourceDescription || ""}`;
       await persist();
-    } else if (!app.postingUrl && !app.postingText) {
+    } else if (!app.postingText && guessedAgain(app)) {
       app.postingUrl = postingGuess(app.url);
       if (app.postingUrl) await persist();
     }
@@ -2126,14 +2203,21 @@ async function run(app: Application, operation: number) {
       ]
         .join("\n")
         .slice(0, 25000),
-      fields: frames
-        .flatMap((f) =>
+      fields: [
+        ...frames.flatMap((f) =>
           f.observation.fields.map((field) => ({
             ...field,
             id: `${f.frameId}|${field.id}`,
           })),
-        )
-        .slice(0, 250),
+        ),
+        // A cover letter slot drawn without a file box (SuccessFactors'
+        // attachment widget) still takes a letter: asked for by name, as
+        // draftDocuments does.
+        ...(frames.some((f) => f.observation.documentSlots?.includes("cover")) &&
+          !frames.some((f) => f.observation.fields.some((field) => field.documentKind === "cover"))
+          ? [{ id: "documents|cover", label: "Cover letter", kind: "file", required: false, value: "", options: [], revision: 0, protected: false, documentKind: "cover" as const }]
+          : []),
+      ].slice(0, 250),
       // The pages being filled: one may lead to the posting when the
       // tracked URL does not (Intel's was its account page).
       ...(app.postingUrl ? { postingUrl: app.postingUrl } : {}),
@@ -2339,7 +2423,14 @@ async function run(app: Application, operation: number) {
               "application/*",
             ].includes(a.trim().toLowerCase()),
           );
-      const artifact = job.artifacts.find((a) => a.kind === kind && accepts(a));
+      // A transcript is one degree's: a field naming a level gets that
+      // level's or none (see shared/transcripts.ts).
+      const picked = kind === "transcript" ? pickTranscript(field.label, job.artifacts.filter(accepts), profile) : undefined;
+      if (picked?.missing) {
+        issues.push(`Upload your ${picked.missing} transcript yourself for "${field.label}", or attach it to its school under Education in the dashboard. Another degree's was not used.`.slice(0, 350));
+        continue;
+      }
+      const artifact = picked ? picked.artifact : job.artifacts.find((a) => a.kind === kind && accepts(a));
       if (!artifact && kind === "transcript" && !job.artifacts.some((a) => a.kind === "transcript")) {
         issues.push(`No transcript to upload for ${field.label}: add yours under Settings, in the dashboard.`);
         continue;
@@ -2355,12 +2446,13 @@ async function run(app: Application, operation: number) {
       // An upload already confirmed by this extension, still retained under
       // the exact filename and containing identical bytes, is not sent again.
       const fingerprint = await digest(bytes.data);
+      const memo = artifact.education !== undefined ? `${kind}:${artifact.education}` : kind;
       if ((field.attachmentId || held) && field.value === artifact.name &&
-        app.uploadedDocuments?.[kind] === fingerprint) continue;
+        app.uploadedDocuments?.[memo] === fingerprint) continue;
       // Workday empties its file input once the upload is done and lists the
       // file beside it: the same document already shown there is not sent
       // again on a second fill (Jabil, report f0a42a0f).
-      if (app.uploadedDocuments?.[kind] === fingerprint &&
+      if (app.uploadedDocuments?.[memo] === fingerprint &&
         (await frameCall(app, frame.frameId, { type: "ATTACHED", name: artifact.name }).catch(() => undefined))?.attached) continue;
       if (!alive(app, operation)) return;
       // The site rewrites the form from this upload, often reloading before
@@ -2371,13 +2463,24 @@ async function run(app: Application, operation: number) {
         app.siteFillTried = true;
         await persist();
       }
+      // The field as the page now reads, not as the step began: an upload
+      // before it redraws its group (Workday's shared uploader, where the
+      // resume goes first), and the cover letter sent with the revision read
+      // before that was refused as stale and never uploaded (Leidos, report
+      // 7dd8aa83, 2026-11-07).
+      const now = frame.observation.fields.find((f) => f.id === field.id) ||
+        frame.observation.fields.find((f) => f.kind === "file" && fileKind(f) === kind && f.label === field.label);
+      if (!now) {
+        issues.push(`Verify upload: ${field.label}`);
+        continue;
+      }
       try {
         const result = await frameCall(app, frame.frameId, {
           type: "ATTACH",
           documentId: frame.observation.documentId,
-          fieldId: field.id,
-          expectedValue: field.value,
-          revision: field.revision,
+          fieldId: now.id,
+          expectedValue: now.value,
+          revision: now.revision,
           artifact: bytes,
           profile,
           replaceExisting: held,
@@ -2395,7 +2498,7 @@ async function run(app: Application, operation: number) {
           );
         else if (!result.attached && !shown) issues.push(`Verify upload: ${field.label}`);
         else {
-          app.uploadedDocuments = { ...app.uploadedDocuments, [kind]: fingerprint };
+          app.uploadedDocuments = { ...app.uploadedDocuments, [memo]: fingerprint };
           if (held) {
             const note = `Replaced the ${field.label} the site already had with this application's tailored one.`;
             if (!app.configNotes?.includes(note)) app.configNotes = [...(app.configNotes || []), note];
@@ -2411,7 +2514,11 @@ async function run(app: Application, operation: number) {
     // Sites that upload through a dialog (SuccessFactors' "Upload a Resume")
     // show no file field until it opens. A document with no file field of its
     // kind on the page goes through the site config's upload steps instead.
-    if (configEngineEnabled && !resumeFirst) {
+    // Not in an embedded frame with nothing in it: Microsoft's near-empty
+    // profile export frame, gone by then, turned the rule's uploads into a
+    // résumé and cover letter reported as failed while the résumé was in
+    // (2026-11-07).
+    if (configEngineEnabled && !resumeFirst && (frame.frameId === 0 || frame.observation.fields.length)) {
       for (const field of frame.observation.fields.filter((f) => f.kind === "file")) fieldKinds.add(fileKind(field));
       // One document at a time: SuccessFactors saves an upload and then
       // reloads the whole form from its server (recording, 2026-10-01),
@@ -2503,6 +2610,12 @@ async function run(app: Application, operation: number) {
       type: "INSPECT",
       documentId: frame.observation.documentId,
     }).catch(async (error: Error) => {
+      // An embedded frame with nothing to fill that the page has since
+      // removed (Microsoft's sign-in helpers come and go) is no part of the
+      // form: it ended the whole fill with "Receiving end does not exist"
+      // (report a563a4f0, 2026-11-04).
+      if (frame.frameId !== 0 && !frame.observation.fields.length && /receiving end does not exist|no frame with id \d+/i.test(error.message))
+        return frame.observation;
       const fresh = await reinspectNavigation(app, frame.frameId, frame.observation.documentId, operation, error, frame.observation.url);
       if (!fresh) return frame.observation;
       frame.frameId = fresh.frameId;
@@ -2587,7 +2700,7 @@ async function run(app: Application, operation: number) {
               !job.artifacts.some((a) => a.id === f.attachmentId)) &&
             // What this application uploaded, shown again on a later page
             // (Amazon's next step, 2026-10-31), is its own document.
-            !(app.uploadedDocuments?.[f.documentKind || documentKind(f.label) || "resume"] &&
+            !(Object.keys(app.uploadedDocuments || {}).some((key) => key.split(":")[0] === (f.documentKind || documentKind(f.label) || "resume")) &&
               job.artifacts.some((a) => a.kind === (f.documentKind || documentKind(f.label)) && a.name === f.value)),
         )
         .map(
@@ -2613,7 +2726,11 @@ async function run(app: Application, operation: number) {
         ...issues.filter((issue) => /upload|document|file|access/i.test(issue)),
       ]
     : [...new Set(issues)];
-  app.missing = unresolved.slice(0, 60).map((issue) => issue.slice(0, 350));
+  // Whole questions: a long one's ask comes last ("If you qualify, please
+  // select yes."), and cut at 350 it was gone (JM Family, 2026-11-04), as was
+  // the match that clears it once answered. Labels are already clipped at
+  // 1000 where they are read.
+  app.missing = unresolved.slice(0, 60).map((issue) => issue.slice(0, 1100));
   app.replaceDocuments = false;
   if (unresolved.length > 60)
     app.missing.push(
@@ -2630,20 +2747,6 @@ async function run(app: Application, operation: number) {
     // though no rule answers it: a Workday job's Month and Year, its
     // description, whether it is current (Jabil, 2026-10-16). The site's
     // reading of the resume got it right.
-    const rowHolds = (field: Observation["fields"][number]) => {
-      const rows = /education/.test(normalize(field.section || "")) ? profile.education : profile.work;
-      const row = rows[field.index || 0];
-      const value = normalize(field.value);
-      if (!row || !value) return false;
-      if (field.kind === "checkbox")
-        return /\bcurrent/.test(normalize(field.label)) && (value === "yes") === !row.endDate;
-      const dates = [row.startDate, row.endDate].filter((date) => /^\d{4}-\d{2}/.test(date));
-      if (/^\d{1,2}$/.test(value)) return dates.some((date) => Number(date.slice(5, 7)) === Number(value));
-      if (/^\d{4}$/.test(value)) return dates.some((date) => date.slice(0, 4) === value);
-      return [row.organization, row.title, row.fieldOfStudy, row.location, row.details]
-        .map((text) => normalize(text || ""))
-        .some((text) => text && (text.includes(value) || (value.length > 20 && value.includes(text))));
-    };
     // Pre-filled education or work details the profile could not correct.
     for (const frame of frames)
       for (const field of frame.observation.fields)
@@ -2653,7 +2756,7 @@ async function run(app: Application, operation: number) {
           // A list showing its prompt holds nothing the site parsed (Avature's
           // University/School, "Select an option").
           !/^(?:please )?(?:select|choose)(?: an?| one)?(?: option)?\.{0,3}$/i.test(field.value.trim()) &&
-          !rowHolds(field) &&
+          !rowHolds(field, frame.observation.fields, profile) &&
           // What the site parsed is already the profile's answer (a GPA of
           // 3.84 with the profile's 3.84, Jabil, 2026-10-16): confirmed, so
           // nothing was written and nothing needs checking.
@@ -2663,7 +2766,7 @@ async function run(app: Application, operation: number) {
           )
         )
           app.missing.push(
-            `${field.label}: "${field.value.slice(0, 80)}" was filled in by the site from your resume and not corrected. Check it.`,
+            `${field.label}: "${(field.valueText || field.value).slice(0, 80)}" was filled in by the site from your resume and not corrected. Check it.`,
           );
     app.siteFillPending = false;
   }
@@ -3081,7 +3184,7 @@ async function trackTab(tabId: number) {
     if (led) {
       app.postingUrl = led.url;
       if (led.description) app.sourceDescription = `${led.description.slice(0, 12500)}\n${app.sourceDescription || ""}`;
-    } else if (!app.postingUrl && !app.postingText) app.postingUrl = postingGuess(app.url);
+    } else if (!app.postingText && guessedAgain(app)) app.postingUrl = postingGuess(app.url);
   }
   await persist();
   return state;
@@ -3164,6 +3267,24 @@ const wordCount = (text?: string) => text?.match(/\S+/g)?.length || 0;
 
 // The application's own posting page, open in another tab and now showing
 // more of the posting than was read from it: its words and address.
+// Whether the posting's address is to be guessed from the form's: none yet,
+// or one an earlier guess made that the guess now makes better (Microsoft's
+// form at /careers/apply?pid= was taken to post at /careers, 2026-11-04).
+function guessedAgain(app: Application): boolean {
+  if (!app.postingUrl) return true;
+  const guess = postingGuess(app.url);
+  if (!guess || guess === app.postingUrl) return false;
+  try {
+    const url = new URL(app.url);
+    url.pathname = url.pathname.replace(/\/(apply|application)\/?$/i, "");
+    url.search = "";
+    url.hash = "";
+    return url.href === app.postingUrl;
+  } catch {
+    return false;
+  }
+}
+
 async function postingFromOwnTab(app: Application, filling?: Observation, open = false): Promise<{ url: string; description: string } | undefined> {
   const own = new Set([app.sourceUrl, app.postingUrl, ...app.tabs.map((related) => related.url)].filter(Boolean).map((url) => canonicalURL(url!)));
   const filled = new Set([app.url, filling?.url].filter(Boolean).map((url) => canonicalURL(url!)));
@@ -3649,16 +3770,15 @@ function recordHandAnswersSoon(app: Application) {
 async function recordHandAnswers(app: Application) {
   if (app.tabId === undefined) return;
   const fields = await editedAnswers(app.tabId);
-  const kept = new Map((app.handAnswers || []).map((entry) => [normalize(entry.question), entry]));
+  // (Entries kept before keptHandAnswer's later checks are dropped here.)
+  const kept = new Map((app.handAnswers || [])
+    .filter((entry) => keptHandAnswer({ label: entry.question, value: entry.answer }))
+    .map((entry) => [normalize(entry.question), entry]));
   for (const field of fields) {
-    const question = normalize(field.label);
-    if (!question || question === "unlabelled field") continue;
-    if (/education|experience|employment|work/.test(normalize(field.section || ""))) continue;
-    if (field.kind === "textarea" || field.kind === "file" || !field.value.trim() || field.value.length > 120) continue;
+    if (!keptHandAnswer(field)) continue;
     // Their own edit, not a value the site put there (a parsed resume).
     if (!/^a real|from (a real|an edit saved)/.test(field.protectedReason || "")) continue;
-    if (/signature|initials|password|captcha|^(first|last|middle|full|legal|preferred) name$|^name$|e ?mail|phone/.test(question)) continue;
-    kept.set(question, { question: field.label.slice(0, 300), answer: field.value.slice(0, 200), at: Date.now() });
+    kept.set(normalize(field.label),{ question: field.label.slice(0, 300), answer: field.value.slice(0, 200), at: Date.now() });
   }
   if (!kept.size) return;
   app.handAnswers = [...kept.values()].sort((a, b) => a.at - b.at).slice(-80);
@@ -3672,7 +3792,9 @@ async function recurringAnswers(): Promise<RecurringAnswer[]> {
   const groups = new Map<string, RecurringAnswer & { seen: Set<string> }>();
   for (const app of state.applications)
     for (const entry of app.handAnswers || []) {
-      const asked = questionTopic(entry.question) || normalize(entry.question);
+      // One kept before keptHandAnswer's later checks (a list's hidden value).
+      if (!keptHandAnswer({ label: entry.question, value: entry.answer })) continue;
+      const asked =questionTopic(entry.question) || normalize(entry.question);
       const key = `${asked}=${normalize(entry.answer)}`;
       const group = groups.get(key) || { key, question: entry.question, answer: entry.answer, applications: 0, seen: new Set<string>() };
       group.seen.add(app.id);
@@ -4193,6 +4315,9 @@ chrome.runtime.onMessage.addListener((message, sender, respond) => {
         const request = message.request as {
           clear?: unknown;
           enter?: unknown;
+          choose?: unknown;
+          hold?: unknown;
+          click?: unknown;
           text?: unknown;
           token?: unknown;
         };
@@ -4230,7 +4355,8 @@ chrome.runtime.onMessage.addListener((message, sender, respond) => {
           !activeStatuses.includes(app.status)
         )
           throw new Error("Field write was cancelled, locked, or superseded.");
-        await typeTrusted(sender.tab!.id!, request.text, request.clear, request.enter === true);
+        await typeTrusted(sender.tab!.id!, request.text, request.clear, request.enter === true, request.choose === true || (typeof request.choose === "number" ? request.choose : false), request.hold === true,
+          request.click && typeof request.click === "object" ? { x: Number((request.click as { x?: unknown }).x), y: Number((request.click as { y?: unknown }).y) } : undefined);
         return { ok: true };
       })
       .then(

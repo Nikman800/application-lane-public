@@ -5,6 +5,7 @@ import { countriesNamed, countryCode, type Geography } from "./geography";
 import { askedCountry, citizenOf, jobCountry, usCitizen, usPerson, workAuthorizations } from "./authorization";
 import { parseSalary, salaryAnswer } from "./salary";
 import { localDate, writtenDate } from "./dates";
+import { degreeLevel } from "./education";
 
 const geography = globals as Geography;
 
@@ -25,10 +26,12 @@ export type Topic =
   | "adult"
   | "priorEmployment"
   | "referred"
+  | "relatedToEmployee"
   | "fullTime"
   | "essentialFunctions"
   | "military"
-  | "interviewed";
+  | "interviewed"
+  | "enrolled";
 
 // A standing answer is about where the applicant lives or the job is; a
 // question about another country (or about the EU, abroad) is another
@@ -78,6 +81,15 @@ const topics: [Topic, RegExp][] = [
   ["essentialFunctions", /\bessential (job )?(functions|duties)\b/],
   ["military", /^(military|armed forces) (status|service)$|\b(are|have) you (ever )?(currently )?(serv(ed|ing)|been) in the (u s |us |united states )?(military|armed forces)\b|\bare you serving or have you ever served in the (u s |us )?(military|armed forces)\b/],
   ["interviewed", /\b(have you|did you)\b.*\b(ever |previously )?interviewed (with|at|for)\b/],
+  // ("To qualify for our program, interns must be actively enrolled in a
+  // bachelor's, master's, or other degree-seeking program … If you qualify,
+  // please select yes.", JM Family, report 5494cdaa, 2026-11-04.) Which
+  // school one attends is another question, asked by name.
+  ["enrolled", /^(?!(what|which|where|name|please (include|list|enter|provide))\b).*\b(are you|must be|be|currently|actively)\b( currently| actively)? enrolled\b.*\b(degree|program|college|university|school|student)\b/],
+  // ("Are you related or have close personal friendships with any current
+  // L3Harris employees with whom you will be directly working…", report
+  // 726eafd7, 2026-11-07.)
+  ["relatedToEmployee", /\b(are you|do you have)\b.*\b(related|relatives?|family members?|close (personal )?friendships?|personal relationships?)\b.*\bemployees?\b/],
   ["referred", /\b(were|was) you referred\b|\breferred (to this (position|job|role) )?by (someone|anyone|an? (current )?(employee|associate|team member))\b/],
 ];
 
@@ -135,6 +147,10 @@ export function questionTopic(question: string): Topic | undefined {
     // clearance? No" answered "Are you eligible to obtain a U.S. security
     // clearance?" No (L3Harris, report 17ac6723, 2026-10-15).
     if (topic === "clearance" && /\b(obtain\w*|get|getting|receiv\w*|acquir\w*|be granted|prevent\w*)\b/.test(label)) return;
+    // Where one would move from is a place, not whether one would move:
+    // "…please tell us the city, state, and zip code you'd be moving from"
+    // was answered "Yes" (Applied Materials, report 297590e2, 2026-11-08).
+    if (topic === "relocate" && (/\bcity\b.*\bstate\b.*\b(zip|postal)\b/.test(normalize(question)) || /\b(moving|relocating) from\b/.test(normalize(question)))) return;
     return topic;
   };
   if (!asked) return of(question);
@@ -150,6 +166,20 @@ type Answer = Pick<Proposal, "value" | "choices" | "numeric">;
 function yesNo(answer: "Yes" | "No", field: Field): Answer {
   // A list's placeholder ("No Selection") is no way of saying No.
   const worded = field.options.filter((option) => new RegExp(`^${answer}\\b`, "i").test(option.trim()) && normalize(option) !== normalize(answer) && !/^no selection$/.test(normalize(option)));
+  // A list with no No says it as not applying: LinkedIn's "Do you currently
+  // or have you previously worked at LinkedIn or Microsoft? (Select all that
+  // apply)" offers "Not Applicable" beside each way one has (2026-11-04).
+  const inapplicable = answer === "No" && !worded.length && !field.options.some((option) => normalize(option) === "no")
+    ? field.options.filter((option) => /^(not applicable|n a|does not apply)$/.test(normalize(option)))
+    : [];
+  if (inapplicable.length) return { value: inapplicable[0], choices: inapplicable.slice(1) };
+  // Or as the sentence a No makes: Rubrik's "I have never been employed by
+  // Rubrik or contracted to provide services to Rubrik" (2026-11-07). One
+  // such option only; two would need telling apart.
+  const never = answer === "No" && !worded.length && !field.options.some((option) => normalize(option) === "no")
+    ? field.options.filter((option) => /^(i have never|i ve never|never|i have not|i haven t|i am not and have never)\b/.test(normalize(option)))
+    : [];
+  if (never.length === 1) return { value: never[0] };
   return { value: answer, ...(worded.length ? { choices: worded } : {}) };
 }
 
@@ -227,10 +257,57 @@ export function priorEmploymentAnswer(profile: Profile, question: string): "Yes"
 // A saved or profile answer for a standing question, when the field asks the
 // same thing in other words. Exactly worded saved answers are matched before
 // this (matching.ts) and are not second-guessed here.
+export function enrolledNow(profile: Pick<Profile, "education">, now = new Date()): boolean {
+  const month = (date: Date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+  const today = month(now);
+  const termAgo = month(new Date(now.getFullYear(), now.getMonth() - 4, 1));
+  return (profile.education || []).some((row) => {
+    const start = /^\d{4}-\d{2}/.test(row.startDate || "") ? row.startDate.slice(0, 7) : "";
+    const end = /^\d{4}-\d{2}/.test(row.endDate || "") ? row.endDate.slice(0, 7) : "";
+    return Boolean(start) && start <= termAgo && (!end || end >= today);
+  });
+}
+
 export function standingAnswer(field: Field, profile: Profile): Answer | undefined {
   const label = normalize(field.label);
   const topic = questionTopic(field.label);
   if (!topic) return;
+  // Enrolled now: a degree under way, begun at least a term ago (such
+  // questions ask for a semester done). Yes only; anyone else is left to
+  // answer it, since the conditions around it vary.
+  if (topic === "enrolled") {
+    if (/^(text|textarea|email|tel|number|url|date)$/.test(field.kind)) return;
+    // A question naming one level of degree asks about that level: "Are you
+    // currently enrolled in a Doctorate Degree program…?" was answered Yes
+    // for a master's student (Microsoft, 2026-11-07). A program under way at
+    // another level, No; at that level, as any enrollment. One naming several
+    // ("a bachelor's, master's, or other degree-seeking program") asks any.
+    const named = ([
+      ["doctorate", /\b(doctora\w*|ph ?d|doctor of)\b/],
+      ["master", /\b(master\w*|m s|m a|mba)\b/],
+      ["bachelor", /\b(bachelor\w*|undergrad\w*|b s|b a)\b/],
+      ["associate", /\bassociate\w*\b/],
+    ] as const).filter(([, pattern]) => pattern.test(label)).map(([level]) => level);
+    if (named.length === 1 && !/\bor other\b/.test(label)) {
+      const now = new Date();
+      const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+      const underWay = (profile.education || []).filter((row) => {
+        const end = /^\d{4}-\d{2}/.test(row.endDate || "") ? row.endDate.slice(0, 7) : "";
+        return row.current === true || (row.current !== false && Boolean(end) && end >= today);
+      });
+      const levels = underWay.map((row) => (degreeLevel(row.title) === "mba" ? "master" : degreeLevel(row.title)));
+      if (underWay.length && levels.every(Boolean) && !levels.includes(named[0])) return yesNo("No", field);
+    }
+    return enrolledNow(profile) ? yesNo("Yes", field) : undefined;
+  }
+  // A box that asks for the details behind the question ("If you have
+  // previously worked at LinkedIn, please provide your approximate last date
+  // of employment (MM/DD/YYYY)") is not answered Yes or No: it got "No"
+  // (2026-11-04).
+  if ((topic === "priorEmployment" || topic === "referred" || topic === "interviewed") &&
+    /^(text|email|tel|number|url|date|datepicker)$/.test(field.kind) &&
+    (field.format || /\b(provide|enter|list|give|specify|include|share)\b.*\b(date|dates|email|name|names|address|id|number|title|details?|when|where|who)\b|\b(mm dd yyyy|mm yyyy|dd mm yyyy)\b/.test(label)))
+    return;
   if (topic === "priorEmployment") {
     const answer = priorEmploymentAnswer(profile, field.label);
     return answer ? yesNo(answer, field) : undefined;
@@ -253,6 +330,18 @@ export function standingAnswer(field: Field, profile: Profile): Answer | undefin
     return yesNo("No", field);
   }
   if (topic === "referred" && elsewhere(field.label, profile)) return;
+  // Related to, or close friends with, someone at the company: as with a
+  // referral, the people the applicant knows there are their references.
+  // None of them there and no job of their own there, No; else theirs to say.
+  if (topic === "relatedToEmployee" && !profile.answers.some((answer) => questionTopic(answer.question) === "relatedToEmployee")) {
+    const company = label.match(/\b(?:current|any|of|at) (?:current )?([a-z0-9&]+) (?:employees?|team members?|staff)\b/)?.[1] ||
+      normalize(profile.applyingTo?.company || "").split(" ")[0];
+    if (!company || /^(us|our|this|the|your|a|an|any|current)$/.test(company)) return;
+    const theirs = (text: string) => normalize(text).includes(company);
+    if ((profile.references || []).some((reference) => theirs(`${reference.relationship || ""} ${reference.email || ""}`))) return;
+    if (profile.work.some((row) => row.organization && theirs(row.organization))) return;
+    return yesNo("No", field);
+  }
   // Citizenship is asked of one country: the one the question names, else
   // the job's. A status list naming neither ("Citizenship status") is a
   // U.S. one when it words U.S. statuses, or offers nothing yet.
@@ -293,6 +382,19 @@ export function standingAnswer(field: Field, profile: Profile): Answer | undefin
             : "");
   if (!saved?.trim()) return;
   const yes = plainYesNo(saved);
+  // A Yes worded as living there already ("Yes, I am currently based in
+  // Atlanta, GA") is the applicant's only where they live; willing to
+  // relocate is the other Yes. Both read as Yes, and the first was taken for
+  // an applicant in their own city (CharterUP, 2026-11-07).
+  if ((topic === "relocate" || topic === "workThere") && yes === "Yes") {
+    const answer = yesNo("Yes", field);
+    const located = /\b(currently|already|presently)\b.*\b(based|located|living|live|reside|residing)\b|\b(i am|i m) local\b/;
+    const home = normalize(profile.city || "");
+    const fitting = (answer.choices || []).filter((option) => !located.test(normalize(option)) || (Boolean(home) && normalize(option).includes(home)));
+    if (answer.choices?.length && fitting.length && fitting.length < answer.choices.length)
+      return fitting.length === 1 ? { value: fitting[0] } : { value: "Yes", choices: fitting };
+    if (topic === "workThere") return answer;
+  }
   if (topic === "workThere") return yes === "Yes" ? yesNo("Yes", field) : undefined;
   // "US citizenship or permanent residence: do you meet either?" A citizen
   // does; someone who is not a citizen may still, which this cannot say.

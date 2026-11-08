@@ -39,3 +39,13 @@ test("a school's GPA is never left to the model", () => {
   assert.equal(structuredFallbackField(field("Cumulative Grade Point Average", { section: "Education" })), false);
   assert.equal(structuredFallbackField(field("Field of Study", { section: "Education", index: 1 })), true);
 });
+
+// Leidos's Workday (report bb699b7d, 2026-11-08): each question's section is
+// the question itself, and a long question naming "employment" and "Year"
+// was kept from the fallback as a job's date.
+test("a long question whose own text is its section is not taken for an entry's date", () => {
+  const asked = "2. Section 847 of the National Defense Authorization Act for Fiscal Year 2008 requires certain current and former DoD officials or employees to seek a written ethics opinion regarding post-employment restrictions. Do you now, or did you at any time in the past 24 months, serve as an official or employee of the DoD?";
+  assert.equal(structuredFallbackField(field(asked, { section: asked, kind: "combobox" }), true), true);
+  // An entry's own date is still kept out.
+  assert.equal(structuredFallbackField(field("End Date", { section: "Previous employment", index: 1 })), false);
+});

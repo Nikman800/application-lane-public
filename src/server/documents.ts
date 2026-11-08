@@ -8,6 +8,7 @@ import { Document, Packer, Paragraph, TextRun, HeadingLevel } from "docx";
 import mammoth from "mammoth";
 import { latexResume } from "./latex";
 import { resumeDocx, resumePdf } from "./resume-layout";
+import { degreeLevel } from "../shared/transcripts";
 import { letterDateText, paperSize } from "../shared/dates";
 import type {
   Artifact,
@@ -81,33 +82,48 @@ export async function newestTranscript(folder: string): Promise<{ name: string; 
   return candidates.sort((a, b) => b.mtime - a.mtime)[0];
 }
 
-// The applicant's transcript as an artifact of this application: their own
-// file, copied as it is, never generated or changed. The newest PDF or DOCX
-// in the first transcripts folder that has one.
-export async function transcriptArtifact(
+// The applicant's transcripts as artifacts of this application: their own
+// files, copied as they are, never generated or changed. Each education
+// entry's own, tagged with its degree's level; where no entry has one, the
+// newest PDF or DOCX in the first transcripts folder that has one, as before.
+export async function transcriptArtifacts(
   directory: string,
   folders: string[],
   request: Pick<GenerationRequest, "applicationId" | "operation">,
-): Promise<Artifact | undefined> {
-  for (const folder of folders) {
-    const newest = await newestTranscript(folder);
-    if (!newest) continue;
-    const format = newest.name.toLowerCase().endsWith(".pdf") ? ("pdf" as const) : ("docx" as const);
+  profile?: Pick<Profile, "education">,
+): Promise<Artifact[]> {
+  const copy = async (folder: string, name: string, tags: Pick<Artifact, "education" | "level"> = {}): Promise<Artifact> => {
+    const format = name.toLowerCase().endsWith(".pdf") ? ("pdf" as const) : ("docx" as const);
     const id = randomUUID();
-    await copyFile(join(folder, newest.name), join(directory, "artifacts", `${id}.${format}`));
+    await copyFile(join(folder, name), join(directory, "artifacts", `${id}.${format}`));
     return {
       id,
       kind: "transcript",
       format,
-      name: newest.name,
+      name,
       applicationId: request.applicationId,
       operation: request.operation,
       mime:
         format === "pdf"
           ? "application/pdf"
           : "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      ...tags,
     };
+  };
+  const own: Artifact[] = [];
+  for (const [index, row] of (profile?.education || []).entries()) {
+    const name = row.transcript && basename(row.transcript);
+    if (!name || !/\.(pdf|docx)$/i.test(name)) continue;
+    const folder = folders.find((candidate) => existsSync(join(candidate, name)));
+    if (!folder) continue;
+    own.push(await copy(folder, name, { education: index, level: degreeLevel(row.title) }));
   }
+  if (own.length) return own;
+  for (const folder of folders) {
+    const newest = await newestTranscript(folder);
+    if (newest) return [await copy(folder, newest.name)];
+  }
+  return [];
 }
 
 export function letterBody(profile: Profile, narrative: Narrative): string[] {

@@ -70,15 +70,23 @@ const questions = (app: QueueSummaryItem, most = 10) =>
   );
 // A fill that failed: the application failed, or its last fill ended in error.
 const failed = (app: QueueSummaryItem) => app.status === "failed" || app.lastFill?.status === "error";
+// Applications the fixer is correcting: shown apart, so they are left alone
+// until it is done (lane fixing / lane fixed).
+let fixing: Record<string, { since: number; note: string }> = {};
 const group = (app: QueueSummaryItem) =>
   app.stage === "submitted" ? "submitted"
     : app.status === "cancelled" || app.stage === "abandoned" ? "closed"
+    : fixing[app.id] ? "being fixed"
     : failed(app) ? "failed"
     : ["queued", "inspecting", "preparing", "filling"].includes(app.status) || app.assisting ? "in progress"
     : app.status === "ready" ? "ready to review"
     : "needs you";
 
+const readFixing = async () => {
+  fixing = await api<typeof fixing>("/v1/fixing").catch(() => fixing);
+};
 async function snapshot(): Promise<QueueSnapshot> {
+  await readFixing();
   const queue = await api<QueueSnapshot | null>("/v1/queue");
   if (!queue) throw new Error("The extension has not sent its queue yet. Open Chrome with the extension paired.");
   return queue;
@@ -104,9 +112,15 @@ async function status() {
   const counts = new Map<string, number>();
   for (const app of queue.applications) counts.set(group(app), (counts.get(group(app)) || 0) + 1);
   console.log(colors.bold(`As of ${ago(queue.at)}: ${queue.applications.length} applications.`));
-  for (const key of ["in progress", "needs you", "ready to review", "failed", "submitted", "closed"])
+  for (const key of ["being fixed", "in progress", "needs you", "ready to review", "failed", "submitted", "closed"])
     if (counts.get(key)) console.log(`  ${colors.group(key)(key.padEnd(16))} ${colors.bold(String(counts.get(key)))}`);
   if (inbox.length) console.log(`  ${colors.info("queued links".padEnd(16))} ${inbox.length} not tracked yet`);
+  const beingFixed = queue.applications.filter((app) => group(app) === "being fixed");
+  if (beingFixed.length) {
+    console.log(`\n${colors.group("being fixed")(colors.bold("Being fixed (leave these alone for now):"))}`);
+    for (const app of beingFixed)
+      console.log(`  ${colors.muted(`[${short(app)}]`)} ${colors.bold(name(app))}${fixing[app.id].note ? `\n    ${fixing[app.id].note}` : ""}`);
+  }
   const waiting = queue.applications.filter((app) => group(app) === "needs you").sort((a, b) => b.updatedAt - a.updatedAt);
   if (waiting.length) {
     console.log(`\n${colors.group("needs you")(colors.bold("Needs you:"))}`);
@@ -163,7 +177,32 @@ function find(queue: QueueSnapshot, wanted: string): QueueSummaryItem {
   if (!matches.length) throw new Error(`No application matches "${wanted}".`);
   throw new Error(`"${wanted}" matches ${matches.length}: ${matches.slice(0, 5).map((app) => `[${short(app)}] ${name(app)}`).join(", ")}`);
 }
-async function act(action: "fill" | "switch" | "abandon") {
+// lane fixing <application> [note]: mark it as being corrected by the
+// fixer; lane fixed <application>: done, back with the rest.
+async function markFixing(done: boolean) {
+  const [target, ...note] = words;
+  if (!target) {
+    await readFixing();
+    const queue = await snapshot();
+    const list = queue.applications.filter((app) => fixing[app.id]);
+    return console.log(list.length ? list.map((app) => `[${short(app)}] ${name(app)}${fixing[app.id].note ? ` — ${fixing[app.id].note}` : ""}`).join("\n") : "Nothing is being fixed.");
+  }
+  const app = find(await snapshot(), target);
+  await api("/v1/fixing", "POST", done ? { id: app.id, done: true } : { id: app.id, note: note.join(" ") });
+  console.log(`${name(app)}: ${done ? "no longer marked as being fixed." : "marked as being fixed."}`);
+}
+
+// lane reload: the extension takes its newest build (refused while anything
+// fills); lane refresh <application>: its page then loads that build.
+async function reload() {
+  const line = await connect();
+  const result = await line.send("reload");
+  line.socket.close();
+  if (!result.ok) throw new Error(result.error || "It did not reload.");
+  console.log(result.detail || "Reloading.");
+}
+
+async function act(action: "fill" | "switch" | "abandon" | "refresh") {
   const app = find(await snapshot(), words.join(" "));
   const line = await connect();
   const result = await line.send(action, app.id);
@@ -218,7 +257,7 @@ async function search() {
 // openings from.
 async function ui() {
   if (!process.stdin.isTTY) throw new Error("ui needs a terminal.");
-  const tabs = ["needs you", "in progress", "failed", "ready to review", "submitted", "all", "find jobs"] as const;
+  const tabs = ["needs you", "being fixed", "in progress", "failed", "ready to review", "submitted", "all", "find jobs"] as const;
   let queue = await snapshot();
   let found = await api<SearchResult | null>("/v1/search").catch(() => null);
   // The submissions history, for the streak and today's goal in the header.
@@ -238,6 +277,8 @@ async function ui() {
     if (needed && !spinner) spinner = setInterval(() => ((frame = (frame + 1) % 6), draw()), 180);
     if (!needed && spinner) (clearInterval(spinner), (spinner = undefined));
   };
+  // What the fixer marks shows without waiting for the queue to change.
+  setInterval(() => void readFixing().then(draw), 10_000).unref();
   let tab = 0;
   let row = 0;
   let message = "";
@@ -248,6 +289,7 @@ async function ui() {
   const line = await connect(
     (next) => {
       queue = next;
+      void readFixing().then(draw);
       if (submittedNow() !== submittedSeen) (submittedSeen = submittedNow()), readSubmissions();
       animate();
       draw();
@@ -483,6 +525,10 @@ const commands: Record<string, () => Promise<unknown>> = {
   fill: () => act("fill"),
   switch: () => act("switch"),
   abandon: () => act("abandon"),
+  refresh: () => act("refresh"),
+  reload,
+  fixing: () => markFixing(false),
+  fixed: () => markFixing(true),
   search,
   ui,
 };
@@ -496,6 +542,10 @@ if (!run) {
   fill <application>  Fill this step on its tab
   switch <application> bring its tab to the front in Chrome
   abandon <application> stop applying: any fill stops, and it moves to Abandoned
+  reload              the extension takes its newest build (not while anything is being filled)
+  refresh <application> reload its page, as after a reload (not while it is being filled)
+  fixing [<application> [note]]  mark it as being fixed (shown apart; leave it alone); alone, list them
+  fixed <application> it is done being fixed
   search [options]    find openings to apply for (see below); search add 1 2 queues them
   ui                  a full-screen view: tabs by stage, f fill, s switch, x abandon, a add links, a find-jobs tab
   pair                show a new pairing code to connect another browser or extension

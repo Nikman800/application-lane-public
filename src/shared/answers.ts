@@ -92,6 +92,26 @@ export const choiceSynonyms: Record<string, string[]> = {
 
 // How well one option's text answers a proposal. Lower is better; undefined
 // means it does not answer it. Exact wording always beats a rule-based match.
+const months = ["january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november", "december"];
+const seasonRank: Record<string, number> = { spring: 0, summer: 1, fall: 2, autumn: 2 };
+// A month's academic term: the year's index times three plus its season's.
+function termOf(value: string): number | undefined {
+  const dated = value.trim().toLowerCase().match(/^([a-z]+)\.?\s+(\d{4})$/);
+  if (!dated) return undefined;
+  const month = months.findIndex((name) => name === dated[1] || (dated[1].length >= 3 && name.startsWith(dated[1])));
+  if (month < 0) return undefined;
+  return Number(dated[2]) * 3 + (month <= 4 ? 0 : month <= 7 ? 1 : 2);
+}
+function seasonOption(value: string, optionText: string): number | undefined {
+  const term = termOf(value);
+  if (term === undefined) return undefined;
+  const option = optionText.trim().toLowerCase().match(/^(?:(earlier than|before|later than|after)\s+)?(spring|summer|fall|autumn)\s+(\d{4})$/);
+  if (!option) return undefined;
+  const asked = Number(option[3]) * 3 + seasonRank[option[2]];
+  if (!option[1]) return asked === term ? 46 : undefined;
+  return /^(earlier|before)/.test(option[1]) ? (term < asked ? 47 : undefined) : term > asked ? 47 : undefined;
+}
+
 export function rankOption(
   proposal: { value: string; choices?: string[]; decline?: boolean; numeric?: number },
   optionText: string,
@@ -169,14 +189,33 @@ export function rankOption(
       !Object.values(qualifiedBinarySentences).some(sentences => sentences.some(sentence => norm(sentence) === text)) &&
       new RegExp(`^${proposal.value.trim()}\\b`, "i").test(optionText.trim())) return 45;
   if (proposal.decline && declines.test(text)) return 50;
+  // A date as a list's academic season (Databricks' "Spring 2027" for a May
+  // 2027 graduation, 2026-11-08): January to May is spring, June to August
+  // summer, September to December fall; "Earlier than Fall 2026" and "Later
+  // than Summer 2027" by the same reckoning.
+  const seasonal = seasonOption(proposal.value, optionText);
+  if (seasonal !== undefined) return seasonal;
   if (proposal.numeric !== undefined) {
     const n = proposal.numeric;
-    const range = optionText.match(/^\s*(\d+(?:\.\d+)?)\s*(?:-|–|—|to)\s*(\d+(?:\.\d+)?)\s*$/i);
-    if (range && n >= Number(range[1]) && n <= Number(range[2]) + 0.005) return 60;
-    const below = optionText.match(/^\s*(?:below|under|less than)\s*(\d+(?:\.\d+)?)\s*$/i);
+    // A note of the scale after it, "3.6 or above (out of 4.0)": a GPA is
+    // answered on 4 (matching.ts), so only that scale's note is set aside.
+    optionText = optionText.replace(/\s*\(\s*out of 4(?:\.0+)?\s*\)\s*$/i, "");
+    // With its unit after it or not: CharterUP's "1–2 years", "Less than 1
+    // year" and "5+ years" read as no option for 1 (2026-11-07).
+    const unit = "(?:\\s*(?:years?|yrs?|months?|hours?|hrs?)(?:\\s+of\\s+experience)?)?";
+    const range = optionText.match(new RegExp(`^\\s*(\\d+(?:\\.\\d+)?)\\s*(?:-|–|—|to)\\s*(\\d+(?:\\.\\d+)?)${unit}\\s*$`, "i"));
+    // From its start, short of its end: two years is "2 - 3", not also
+    // "1 - 2" (a tie, and no choice, on Rubrik's list, 2026-11-07). A value
+    // at a list's top ("4.0" in "3.5-4.0") still falls in, scored lower.
+    if (range && n >= Number(range[1]) && n < Number(range[2])) return 60;
+    if (range && n >= Number(range[1]) && n <= Number(range[2]) + 0.005) return 59.5;
+    const below = optionText.match(new RegExp(`^\\s*(?:below|under|less than|fewer than)\\s*(\\d+(?:\\.\\d+)?)${unit}\\s*$`, "i"));
     if (below && n < Number(below[1])) return 61;
-    const above = optionText.match(/^\s*(\d+(?:\.\d+)?)\s*(?:\+|or (?:above|higher|more|greater|older|over))\s*$/i);
+    const above = optionText.match(new RegExp(`^\\s*(\\d+(?:\\.\\d+)?)\\s*(?:\\+|or (?:above|higher|more|greater|older|over))${unit}\\s*(?:or (?:more|above))?\\s*$`, "i"));
     if (above && n >= Number(above[1])) return 61;
+    // "2.4 or below" (Databricks' GPA list).
+    const atMost = optionText.match(new RegExp(`^\\s*(\\d+(?:\\.\\d+)?)\\s*or (?:below|less|lower|under|fewer)${unit}\\s*$`, "i"));
+    if (atMost && n <= Number(atMost[1])) return 61;
   }
   return;
 }
@@ -313,6 +352,9 @@ export function canonicalAnswer(field: ChoiceField, raw: string | undefined): st
     return "Yes";
   if (field === "sponsorship" && /\b(citizen|permanent resident|green card|lawful permanent)\b/.test(text))
     return "No";
+  // "I have no military experience" is not a veteran; read by its "I have",
+  // it was taken as one (Philips' Workday, report 2d320e91, 2026-11-04).
+  if (field === "veteranStatus" && /\b(no (prior )?military|never served|not a veteran|have not served|no service)\b/.test(text)) return "No";
   // Yes/No families, checked after declines so "I do not wish…" is Decline.
   if (/^(no|n|false|none|never)\b|\b(not|do not|don t|dont|am not|have not|i m not)\b/.test(text)) return "No";
   if (/^(yes|y|true)\b|\b(i am|i have|i identify|authorized|eligible)\b/.test(text)) return "Yes";

@@ -36,6 +36,17 @@ type Listing = {
   category?: string;
   matched: string[];
   tracked?: boolean;
+  // Where it is applied and whether a site rule covers it (site-check.ts).
+  site?: { ats?: string; by: string; via?: string };
+  // What its form will ask and how much a fill answers (form-preview.ts).
+  preview?: {
+    gaps?: string[];
+    history?: {
+      site?: { name: string; applications: number; leftSome: number; common: { label: string; count: number }[] };
+      company?: { applications: number; left: string[] };
+    };
+    questions?: { total: number; profile: number; ai: number; you: string[]; optional: number };
+  };
 };
 type Result = {
   at: number;
@@ -190,6 +201,38 @@ export function FindJobs({ onState }: { onState: (state: QueueState) => void }) 
                   {listing.locations.slice(0, 3).join("; ")}
                   {listing.postedAt ? ` · posted ${posted(listing.postedAt)}` : ""} · {listing.source} · for {listing.matched.join(" in ")}
                 </small>
+                {listing.site && (
+                  listing.site.ats ? (
+                    <small title={listing.site.via ? `Applied on ${listing.site.via}` : undefined}>Applies on {listing.site.ats}</small>
+                  ) : (
+                    <small className="warning-text" title="No site rule covers where this opening is applied, so only the general fill runs there.">No site rule for this site</small>
+                  )
+                )}
+                {listing.preview?.questions && (
+                  <small title="Read from the site before applying and answered offline with the profile rules a fill uses. A fill can still answer some of the rest through the site's own rule or AI review.">
+                    {listing.preview.questions.total} questions: {listing.preview.questions.profile} from your profile
+                    {listing.preview.questions.ai ? `, ${listing.preview.questions.ai} written by AI` : ""}
+                    {listing.preview.questions.you.length ? `, ${listing.preview.questions.you.length} may be left to you` : ", none left to you"}
+                  </small>
+                )}
+                {!!listing.preview?.questions?.you.length && (
+                  <details>
+                    <summary><small>May be left to you</small></summary>
+                    <ul>{listing.preview.questions.you.map((label) => <li key={label}><small>{label}</small></li>)}</ul>
+                  </details>
+                )}
+                {listing.preview?.gaps?.map((gap) => <small key={gap} className="warning-text">{gap}</small>)}
+                {listing.preview?.history?.company && listing.preview.history.company.left.length > 0 && (
+                  <small title="From your earlier applications at this company.">
+                    Earlier here, left to you: {listing.preview.history.company.left.slice(0, 3).join("; ")}
+                  </small>
+                )}
+                {listing.preview?.history?.site && listing.preview.history.site.leftSome > 0 && (
+                  <small title="From your earlier fills on this site.">
+                    {listing.preview.history.site.leftSome} of {listing.preview.history.site.applications} past fills on {listing.preview.history.site.name} left something to you
+                    {listing.preview.history.site.common.length ? `, most often ${listing.preview.history.site.common.map((entry) => `“${entry.label}” (${entry.count})`).join(", ")}` : ""}
+                  </small>
+                )}
               </span>
               <div className="row">
                 <a className="text-button" href={listing.url} target="_blank" rel="noreferrer">Open</a>

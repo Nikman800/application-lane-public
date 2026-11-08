@@ -73,7 +73,8 @@
             {
               "path": [
                 "//*[@data-automation-activepopup='true' or @data-automation-id='activeListContainer']//*[@data-automation-id='promptOption'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]",
-                "//*[@data-automation-activepopup='true' or @data-automation-id='activeListContainer']//*[@data-automation-id='promptOption' or @data-automation-id='promptLeafNode' or @role='option'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]"
+                "//*[@data-automation-activepopup='true' or @data-automation-id='activeListContainer']//*[@data-automation-id='promptOption' or @data-automation-id='promptLeafNode' or @role='option'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]",
+                "//*[@role='listbox'][@id=//button[@aria-haspopup='listbox' and @aria-expanded='true']/@aria-controls]//*[@role='option'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]"
               ],
               "method": "click",
               "time": 4000
@@ -97,7 +98,8 @@
             {
               "path": [
                 "//*[@data-automation-activepopup='true' or @data-automation-id='activeListContainer']//*[@data-automation-id='promptOption'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]",
-                "//*[@data-automation-activepopup='true' or @data-automation-id='activeListContainer']//*[@data-automation-id='promptOption' or @data-automation-id='promptLeafNode' or @role='option'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]"
+                "//*[@data-automation-activepopup='true' or @data-automation-id='activeListContainer']//*[@data-automation-id='promptOption' or @data-automation-id='promptLeafNode' or @role='option'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]",
+                "//*[@role='listbox'][@id=//button[@aria-haspopup='listbox' and @aria-expanded='true']/@aria-controls]//*[@role='option'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]"
               ],
               "method": "click",
               "time": 4000
@@ -110,21 +112,13 @@
           ],
           "actions": [
             {
-              "method": "trustedType"
-            },
-            {
-              "event": "keydown",
-              "eventOptions": {
-                "key": "Enter",
-                "code": "Enter",
-                "keyCode": 13,
-                "which": 13
-              }
+              "method": "trustedSearch"
             },
             {
               "path": [
                 "//*[@data-automation-activepopup='true' or @data-automation-id='activeListContainer']//*[@data-automation-id='promptOption'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]",
-                "//*[@data-automation-activepopup='true' or @data-automation-id='activeListContainer']//*[@data-automation-id='promptOption' or @data-automation-id='promptLeafNode' or @role='option'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]"
+                "//*[@data-automation-activepopup='true' or @data-automation-id='activeListContainer']//*[@data-automation-id='promptOption' or @data-automation-id='promptLeafNode' or @role='option'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]",
+                "//*[@role='listbox'][@id=//button[@aria-haspopup='listbox' and @aria-expanded='true']/@aria-controls]//*[@role='option'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]"
               ],
               "method": "click",
               "time": 5000
@@ -201,7 +195,8 @@
             {
               "path": [
                 "//*[@data-automation-activepopup='true' or @data-automation-id='activeListContainer']//*[@data-automation-id='promptOption'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]",
-                "//*[@data-automation-activepopup='true' or @data-automation-id='activeListContainer']//*[@data-automation-id='promptOption' or @data-automation-id='promptLeafNode' or @role='option'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]"
+                "//*[@data-automation-activepopup='true' or @data-automation-id='activeListContainer']//*[@data-automation-id='promptOption' or @data-automation-id='promptLeafNode' or @role='option'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]",
+                "//*[@role='listbox'][@id=//button[@aria-haspopup='listbox' and @aria-expanded='true']/@aria-controls]//*[@role='option'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]"
               ],
               "method": "click",
               "time": 4000
@@ -239,7 +234,8 @@
             {
               "path": [
                 "//*[@data-automation-activepopup='true' or @data-automation-id='activeListContainer']//*[@data-automation-id='promptOption'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]",
-                "//*[@data-automation-activepopup='true' or @data-automation-id='activeListContainer']//*[@data-automation-id='promptOption' or @data-automation-id='promptLeafNode' or @role='option'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]"
+                "//*[@data-automation-activepopup='true' or @data-automation-id='activeListContainer']//*[@data-automation-id='promptOption' or @data-automation-id='promptLeafNode' or @role='option'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]",
+                "//*[@role='listbox'][@id=//button[@aria-haspopup='listbox' and @aria-expanded='true']/@aria-controls]//*[@role='option'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]"
               ],
               "method": "click",
               "time": 4000
@@ -383,21 +379,13 @@
                   ],
                   "actions": [
                     {
-                      "method": "trustedType"
-                    },
-                    {
-                      "event": "keydown",
-                      "eventOptions": {
-                        "key": "Enter",
-                        "code": "Enter",
-                        "keyCode": 13,
-                        "which": 13
-                      }
+                      "method": "trustedSearch"
                     },
                     {
                       "path": [
                         "//*[@data-automation-activepopup='true' or @data-automation-id='activeListContainer']//*[@data-automation-id='promptOption'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]",
-                        "//*[@data-automation-activepopup='true' or @data-automation-id='activeListContainer']//*[@data-automation-id='promptOption' or @data-automation-id='promptLeafNode' or @role='option'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]"
+                        "//*[@data-automation-activepopup='true' or @data-automation-id='activeListContainer']//*[@data-automation-id='promptOption' or @data-automation-id='promptLeafNode' or @role='option'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]",
+                        "//*[@role='listbox'][@id=//button[@aria-haspopup='listbox' and @aria-expanded='true']/@aria-controls]//*[@role='option'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]"
                       ],
                       "method": "click",
                       "time": 5000
@@ -425,7 +413,8 @@
                     {
                       "path": [
                         "//*[@data-automation-activepopup='true' or @data-automation-id='activeListContainer']//*[@data-automation-id='promptOption'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]",
-                        "//*[@data-automation-activepopup='true' or @data-automation-id='activeListContainer']//*[@data-automation-id='promptOption' or @data-automation-id='promptLeafNode' or @role='option'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]"
+                        "//*[@data-automation-activepopup='true' or @data-automation-id='activeListContainer']//*[@data-automation-id='promptOption' or @data-automation-id='promptLeafNode' or @role='option'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]",
+                        "//*[@role='listbox'][@id=//button[@aria-haspopup='listbox' and @aria-expanded='true']/@aria-controls]//*[@role='option'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]"
                       ],
                       "method": "click",
                       "time": 4000
@@ -468,7 +457,8 @@
                     {
                       "path": [
                         "//*[@data-automation-activepopup='true' or @data-automation-id='activeListContainer']//*[@data-automation-id='promptOption'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]",
-                        "//*[@data-automation-activepopup='true' or @data-automation-id='activeListContainer']//*[@data-automation-id='promptOption' or @data-automation-id='promptLeafNode' or @role='option'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]"
+                        "//*[@data-automation-activepopup='true' or @data-automation-id='activeListContainer']//*[@data-automation-id='promptOption' or @data-automation-id='promptLeafNode' or @role='option'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]",
+                        "//*[@role='listbox'][@id=//button[@aria-haspopup='listbox' and @aria-expanded='true']/@aria-controls]//*[@role='option'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]"
                       ],
                       "method": "click",
                       "time": 5000,
@@ -597,7 +587,8 @@
                     {
                       "path": [
                         "//*[@data-automation-activepopup='true' or @data-automation-id='activeListContainer']//*[@data-automation-id='promptOption'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]",
-                        "//*[@data-automation-activepopup='true' or @data-automation-id='activeListContainer']//*[@data-automation-id='promptOption' or @data-automation-id='promptLeafNode' or @role='option'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]"
+                        "//*[@data-automation-activepopup='true' or @data-automation-id='activeListContainer']//*[@data-automation-id='promptOption' or @data-automation-id='promptLeafNode' or @role='option'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]",
+                        "//*[@role='listbox'][@id=//button[@aria-haspopup='listbox' and @aria-expanded='true']/@aria-controls]//*[@role='option'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]"
                       ],
                       "method": "click",
                       "time": 4000
@@ -620,7 +611,8 @@
                     {
                       "path": [
                         "//*[@data-automation-activepopup='true' or @data-automation-id='activeListContainer']//*[@data-automation-id='promptOption'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]",
-                        "//*[@data-automation-activepopup='true' or @data-automation-id='activeListContainer']//*[@data-automation-id='promptOption' or @data-automation-id='promptLeafNode' or @role='option'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]"
+                        "//*[@data-automation-activepopup='true' or @data-automation-id='activeListContainer']//*[@data-automation-id='promptOption' or @data-automation-id='promptLeafNode' or @role='option'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]",
+                        "//*[@role='listbox'][@id=//button[@aria-haspopup='listbox' and @aria-expanded='true']/@aria-controls]//*[@role='option'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]"
                       ],
                       "method": "click",
                       "time": 4000
@@ -643,7 +635,8 @@
                     {
                       "path": [
                         "//*[@data-automation-activepopup='true' or @data-automation-id='activeListContainer']//*[@data-automation-id='promptOption'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]",
-                        "//*[@data-automation-activepopup='true' or @data-automation-id='activeListContainer']//*[@data-automation-id='promptOption' or @data-automation-id='promptLeafNode' or @role='option'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]"
+                        "//*[@data-automation-activepopup='true' or @data-automation-id='activeListContainer']//*[@data-automation-id='promptOption' or @data-automation-id='promptLeafNode' or @role='option'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]",
+                        "//*[@role='listbox'][@id=//button[@aria-haspopup='listbox' and @aria-expanded='true']/@aria-controls]//*[@role='option'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]"
                       ],
                       "method": "click",
                       "time": 4000
@@ -666,7 +659,8 @@
                     {
                       "path": [
                         "//*[@data-automation-activepopup='true' or @data-automation-id='activeListContainer']//*[@data-automation-id='promptOption'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]",
-                        "//*[@data-automation-activepopup='true' or @data-automation-id='activeListContainer']//*[@data-automation-id='promptOption' or @data-automation-id='promptLeafNode' or @role='option'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]"
+                        "//*[@data-automation-activepopup='true' or @data-automation-id='activeListContainer']//*[@data-automation-id='promptOption' or @data-automation-id='promptLeafNode' or @role='option'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]",
+                        "//*[@role='listbox'][@id=//button[@aria-haspopup='listbox' and @aria-expanded='true']/@aria-controls]//*[@role='option'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]"
                       ],
                       "method": "click",
                       "time": 4000
@@ -699,19 +693,14 @@
           ],
           "actions": [
             {
-              "method": "trustedType"
+              "method": "trustedSearch"
             },
             {
-              "event": "keydown",
-              "eventOptions": {
-                "key": "Enter",
-                "code": "Enter",
-                "keyCode": 13,
-                "which": 13
-              }
-            },
-            {
-              "path": "//*[@data-automation-activepopup='true' or @data-automation-id='activeListContainer']//*[@data-automation-id='promptOption' or @data-automation-id='promptLeafNode'][normalize-space(.)=\"%VALUE%\" or starts-with(normalize-space(.),\"%VALUE% (\")]",
+              "path": [
+                "//*[@data-automation-activepopup='true' or @data-automation-id='activeListContainer']//*[@data-automation-id='promptOption'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\" or starts-with(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),\"%LOWERVALUE% (\") or substring(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'), string-length(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')) - string-length(\"(%LOWERVALUE%)\") + 1)=\"(%LOWERVALUE%)\"]",
+                "//*[@data-automation-activepopup='true' or @data-automation-id='activeListContainer']//*[@data-automation-id='promptOption' or @data-automation-id='promptLeafNode'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\" or starts-with(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),\"%LOWERVALUE% (\") or substring(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'), string-length(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')) - string-length(\"(%LOWERVALUE%)\") + 1)=\"(%LOWERVALUE%)\"]",
+                "//*[@role='listbox'][@id=//button[@aria-haspopup='listbox' and @aria-expanded='true']/@aria-controls]//*[@role='option'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\" or starts-with(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),\"%LOWERVALUE% (\") or substring(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'), string-length(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')) - string-length(\"(%LOWERVALUE%)\") + 1)=\"(%LOWERVALUE%)\"]"
+              ],
               "method": "click",
               "time": 5000,
               "allowFailure": true
@@ -779,7 +768,8 @@
             {
               "path": [
                 "//*[@data-automation-activepopup='true' or @data-automation-id='activeListContainer']//*[@data-automation-id='promptOption'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]",
-                "//*[@data-automation-activepopup='true' or @data-automation-id='activeListContainer']//*[@data-automation-id='promptOption' or @data-automation-id='promptLeafNode' or @role='option'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]"
+                "//*[@data-automation-activepopup='true' or @data-automation-id='activeListContainer']//*[@data-automation-id='promptOption' or @data-automation-id='promptLeafNode' or @role='option'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]",
+                "//*[@role='listbox'][@id=//button[@aria-haspopup='listbox' and @aria-expanded='true']/@aria-controls]//*[@role='option'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]"
               ],
               "method": "click",
               "time": 4000
@@ -803,7 +793,8 @@
             {
               "path": [
                 "//*[@data-automation-activepopup='true' or @data-automation-id='activeListContainer']//*[@data-automation-id='promptOption'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]",
-                "//*[@data-automation-activepopup='true' or @data-automation-id='activeListContainer']//*[@data-automation-id='promptOption' or @data-automation-id='promptLeafNode' or @role='option'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]"
+                "//*[@data-automation-activepopup='true' or @data-automation-id='activeListContainer']//*[@data-automation-id='promptOption' or @data-automation-id='promptLeafNode' or @role='option'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]",
+                "//*[@role='listbox'][@id=//button[@aria-haspopup='listbox' and @aria-expanded='true']/@aria-controls]//*[@role='option'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]"
               ],
               "method": "click",
               "time": 4000
@@ -833,7 +824,8 @@
             {
               "path": [
                 "//*[@data-automation-activepopup='true' or @data-automation-id='activeListContainer']//*[@data-automation-id='promptOption'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]",
-                "//*[@data-automation-activepopup='true' or @data-automation-id='activeListContainer']//*[@data-automation-id='promptOption' or @data-automation-id='promptLeafNode' or @role='option'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]"
+                "//*[@data-automation-activepopup='true' or @data-automation-id='activeListContainer']//*[@data-automation-id='promptOption' or @data-automation-id='promptLeafNode' or @role='option'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]",
+                "//*[@role='listbox'][@id=//button[@aria-haspopup='listbox' and @aria-expanded='true']/@aria-controls]//*[@role='option'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]"
               ],
               "method": "click",
               "time": 4000
@@ -857,7 +849,8 @@
             {
               "path": [
                 "//*[@data-automation-activepopup='true' or @data-automation-id='activeListContainer']//*[@data-automation-id='promptOption'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]",
-                "//*[@data-automation-activepopup='true' or @data-automation-id='activeListContainer']//*[@data-automation-id='promptOption' or @data-automation-id='promptLeafNode' or @role='option'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]"
+                "//*[@data-automation-activepopup='true' or @data-automation-id='activeListContainer']//*[@data-automation-id='promptOption' or @data-automation-id='promptLeafNode' or @role='option'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]",
+                "//*[@role='listbox'][@id=//button[@aria-haspopup='listbox' and @aria-expanded='true']/@aria-controls]//*[@role='option'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]"
               ],
               "method": "click",
               "time": 4000
@@ -897,7 +890,8 @@
             {
               "path": [
                 "//*[@data-automation-activepopup='true' or @data-automation-id='activeListContainer']//*[@data-automation-id='promptOption'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]",
-                "//*[@data-automation-activepopup='true' or @data-automation-id='activeListContainer']//*[@data-automation-id='promptOption' or @data-automation-id='promptLeafNode' or @role='option'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]"
+                "//*[@data-automation-activepopup='true' or @data-automation-id='activeListContainer']//*[@data-automation-id='promptOption' or @data-automation-id='promptLeafNode' or @role='option'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]",
+                "//*[@role='listbox'][@id=//button[@aria-haspopup='listbox' and @aria-expanded='true']/@aria-controls]//*[@role='option'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]"
               ],
               "method": "click",
               "time": 4000
@@ -920,7 +914,8 @@
             {
               "path": [
                 "//*[@data-automation-activepopup='true' or @data-automation-id='activeListContainer']//*[@data-automation-id='promptOption'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]",
-                "//*[@data-automation-activepopup='true' or @data-automation-id='activeListContainer']//*[@data-automation-id='promptOption' or @data-automation-id='promptLeafNode' or @role='option'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]"
+                "//*[@data-automation-activepopup='true' or @data-automation-id='activeListContainer']//*[@data-automation-id='promptOption' or @data-automation-id='promptLeafNode' or @role='option'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]",
+                "//*[@role='listbox'][@id=//button[@aria-haspopup='listbox' and @aria-expanded='true']/@aria-controls]//*[@role='option'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]"
               ],
               "method": "click",
               "time": 4000
@@ -943,7 +938,8 @@
             {
               "path": [
                 "//*[@data-automation-activepopup='true' or @data-automation-id='activeListContainer']//*[@data-automation-id='promptOption'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]",
-                "//*[@data-automation-activepopup='true' or @data-automation-id='activeListContainer']//*[@data-automation-id='promptOption' or @data-automation-id='promptLeafNode' or @role='option'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]"
+                "//*[@data-automation-activepopup='true' or @data-automation-id='activeListContainer']//*[@data-automation-id='promptOption' or @data-automation-id='promptLeafNode' or @role='option'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]",
+                "//*[@role='listbox'][@id=//button[@aria-haspopup='listbox' and @aria-expanded='true']/@aria-controls]//*[@role='option'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]"
               ],
               "method": "click",
               "time": 4000
@@ -966,7 +962,8 @@
             {
               "path": [
                 "//*[@data-automation-activepopup='true' or @data-automation-id='activeListContainer']//*[@data-automation-id='promptOption'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]",
-                "//*[@data-automation-activepopup='true' or @data-automation-id='activeListContainer']//*[@data-automation-id='promptOption' or @data-automation-id='promptLeafNode' or @role='option'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]"
+                "//*[@data-automation-activepopup='true' or @data-automation-id='activeListContainer']//*[@data-automation-id='promptOption' or @data-automation-id='promptLeafNode' or @role='option'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]",
+                "//*[@role='listbox'][@id=//button[@aria-haspopup='listbox' and @aria-expanded='true']/@aria-controls]//*[@role='option'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]"
               ],
               "method": "click",
               "time": 4000
@@ -989,7 +986,8 @@
             {
               "path": [
                 "//*[@data-automation-activepopup='true' or @data-automation-id='activeListContainer']//*[@data-automation-id='promptOption'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]",
-                "//*[@data-automation-activepopup='true' or @data-automation-id='activeListContainer']//*[@data-automation-id='promptOption' or @data-automation-id='promptLeafNode' or @role='option'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]"
+                "//*[@data-automation-activepopup='true' or @data-automation-id='activeListContainer']//*[@data-automation-id='promptOption' or @data-automation-id='promptLeafNode' or @role='option'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]",
+                "//*[@role='listbox'][@id=//button[@aria-haspopup='listbox' and @aria-expanded='true']/@aria-controls]//*[@role='option'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]"
               ],
               "method": "click",
               "time": 4000
