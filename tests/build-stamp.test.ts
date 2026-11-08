@@ -9,7 +9,7 @@ import { configSchema } from "../src/server/store";
 import { newerBuild } from "../src/shared/build";
 
 // A forgotten reload of the extension was taken for a fix that did not work
-// (2026-10-14): the panel says when dist/ holds a newer build than it runs.
+//: the panel says when dist/ holds a newer build than it runs.
 test("a build more than a minute newer than the loaded one is waiting", () => {
   const loaded = { builtAt: 1_000_000, commit: "aaa1111" };
   assert.equal(newerBuild(loaded, { builtAt: 1_030_000, commit: "aaa1111" }), undefined);

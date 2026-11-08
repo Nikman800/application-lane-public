@@ -127,7 +127,7 @@ test("an employment agreement is never filled with the company name", async () =
 });
 
 test("a referrer's name is never filled with the applicant's", async () => {
-  // Built's Greenhouse form, report 9b657c26 (2026-10-31).
+  // Built's Greenhouse form.
   await fixture('<div><label>If you were referred by a current Built employee, please list their first and last name.</label><input type="text" id="referrer"></div>', [["last_name_2", [{ path: ".//label[contains(., \"last name\")]/parent::*//input", valueKey: "last_name" }]]]);
   const results = await page.evaluate(() => (window as any).run());
   assert.equal(results[0].status, "skipped");
@@ -138,7 +138,7 @@ test("a referrer's name is never filled with the applicant's", async () => {
 });
 
 test("Oracle's experience Employer Country is picked without waiting for a State box", async () => {
-  // Nokia, report e86eb443: the rule then waited 10 s for a State box that an
+  // an employer: the rule then waited 10 s for a State box that an
   // experience row never shows, judged the pick failed, and tried each
   // spelling in turn; a row left half filled was saved as "Unnamed Job Title".
   const oracle = JSON.parse(await readFile("src/engine/config/sites/oracle.json", "utf8"));
@@ -675,7 +675,7 @@ test("configured authorization and label fallback do not infer CPT or OPT status
   }
 });
 
-// Lever's location box (as of 2026-10-08) searches on a key press, not on
+// Lever's location box (as of) searches on a key press, not on
 // input, and takes its pick on mousedown, not on click. Typed and left, the
 // box shows the city while the hidden selectedLocation stays empty.
 async function leverLocation(offers: boolean, marked = true) {
@@ -756,7 +756,7 @@ test("a search that was typed but offered nothing to pick is said so, not passed
   assert.deepEqual(await leverLocation(false, false), [{ key: "city_state", status: "filled" }]);
 });
 
-// A report on an Ashby form, 2026-10-13: under "Which of the following
+// A report on an Ashby form: under "Which of the following
 // communities do you belong to?", the box labelled "Veteran" was ticked for
 // an applicant who is not one. The label fallback took the option for the
 // veteran question, and any value written to a box ticks it.
@@ -778,7 +778,7 @@ test("a box or radio that is one option of another question is never the answer 
   }
 });
 
-// A report on an Ashby form, 2026-10-13: "What race and/or ethnic identities
+// A report on an Ashby form: "What race and/or ethnic identities
 // do you identify with?" had East Asian ticked beside South Asian. "Asian",
 // the answer's broader wording, is a word of both names.
 test("a box naming one part of Asia is ticked only when it is the applicant's own answer", async () => {

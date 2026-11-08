@@ -50,7 +50,7 @@ export type ResumeModel = {
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
-// "2022-01" or "2022-01-15" read "Jan 2022"; a bare year stays a year, and
+// "2022-01" or "" read "Jan 2022"; a bare year stays a year, and
 // anything else is shown as the applicant wrote it.
 export function resumeDate(value: string): string {
   const text = value.trim();

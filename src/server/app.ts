@@ -620,7 +620,7 @@ export async function createApp(
       }
       // Which openings are already applications, as they are now: marked
       // only when the search ran, one saved three days before marked none of
-      // the applications tracked since (2026-11-02).
+      // the applications tracked since.
       const knownOpenings = async () => {
         const queued = JSON.parse(await readFile(join(directory, "queue.json"), "utf8").catch(() => "null")) as { applications?: KnownOpening[] } | null;
         const submitted = JSON.parse(await readFile(join(directory, "submissions.json"), "utf8").catch(() => "[]")) as KnownOpening[];
@@ -709,7 +709,7 @@ export async function createApp(
       }
       if (path === "/v1/queue" && req.method === "GET")
         return send(res, 200, JSON.parse(await readFile(queuePath, "utf8").catch(() => "null")));
-      // Applications the fixer is correcting (2026-11-07): the full-screen
+      // Applications the fixer is correcting: the full-screen
       // view shows them apart, so the applicant leaves them alone meanwhile.
       const fixingPath = join(directory, "fixing.json");
       const readFixing = async () =>
@@ -737,7 +737,7 @@ export async function createApp(
         }
         await atomicJSON(inboxPath, inbox.slice(-2000));
         // The extension picks them up now when it is listening (the
-        // applicant, 2026-10-31: "Why not instantly?"), else at its next
+        // applicant: "Why not instantly?"), else at its next
         // minute's check.
         const now = added > 0 && Boolean(live?.tell("pick-up"));
         return send(res, 201, { added, waiting: inbox.length, now });

@@ -14,10 +14,10 @@ test("each ATS application URL leads to its public posting endpoint", () => {
     api("https://boards.greenhouse.io/embed/job_app?for=acme&token=123"),
     "https://boards-api.greenhouse.io/v1/boards/acme/jobs/123",
   );
-  // An EU board's embedded form, as on ASM's careers page.
+  // An EU board's embedded form, as on one employer's careers page.
   assert.equal(
-    api("https://job-boards.eu.greenhouse.io/embed/job_app?for=asm&validityToken=x&token=4830113101"),
-    "https://boards-api.greenhouse.io/v1/boards/asm/jobs/4830113101",
+    api("https://job-boards.eu.greenhouse.io/embed/job_app?for=acme&validityToken=x&token=4830113101"),
+    "https://boards-api.greenhouse.io/v1/boards/acme/jobs/4830113101",
   );
   assert.equal(
     api("https://jobs.lever.co/acronaviation/34cf5ad0-840a-4c1b-8231-02a433d0479e/apply?lever-source=LinkedIn"),
@@ -36,7 +36,7 @@ test("each ATS application URL leads to its public posting endpoint", () => {
     "https://intel.wd1.myworkdayjobs.com/wday/cxs/intel/External/job/US-Oregon-Hillsboro/Software-Engineering---Intern--Bachelor-s_JR0286834",
   );
   // A location holding a slash is refused by the API (400) as an encoded
-  // slash; the job's slug alone finds the posting (Jabil, report b4fef18b).
+  // slash; the job's slug alone finds the posting.
   assert.equal(
     api("https://acme.wd5.myworkdayjobs.com/en-US/Acme_Careers/job/Springfield%2FShelbyville%2C-FL/Software-Developer_J1234567/apply/applyManually?utm_source=x"),
     "https://acme.wd5.myworkdayjobs.com/wday/cxs/acme/Acme_Careers/job/Software-Developer_J1234567",
@@ -177,9 +177,9 @@ test("only a public https posting page is fetched, redirects included", async ()
 });
 
 test("a Workable application's posting is read from its API", () => {
-  // NeuroHire's, 2026-10-31.
-  const endpoint = postingEndpoint("https://apply.workable.com/neurohire-dot-a-i/j/DE75CD20B8/apply/");
-  assert.equal(endpoint?.api, "https://apply.workable.com/api/v2/accounts/neurohire-dot-a-i/jobs/DE75CD20B8");
+  // one employer's.
+  const endpoint = postingEndpoint("https://apply.workable.com/acme-dot-a-i/j/DE75CD20B8/apply/");
+  assert.equal(endpoint?.api, "https://apply.workable.com/api/v2/accounts/acme-dot-a-i/jobs/DE75CD20B8");
   const posting = endpoint!.read({
     title: "Business Data Analyst",
     location: { city: "", region: null, country: "United States" },
@@ -192,18 +192,18 @@ test("a Workable application's posting is read from its API", () => {
   assert.equal(posting?.location, "United States");
   assert.match(posting!.description, /Transform raw data into insight\./);
   assert.match(posting!.description, /• Master's degree in Data Science/);
-  assert.equal(postingEndpoint("https://apply.workable.com/neurohire-dot-a-i/")?.api, undefined);
+  assert.equal(postingEndpoint("https://apply.workable.com/acme-dot-a-i/")?.api, undefined);
 });
 
 test("a SmartRecruiters application's posting is read from its API", () => {
-  // LLNL's one-click apply form, 2026-11-02: the posting could not be read.
-  const endpoint = postingEndpoint("https://jobs.smartrecruiters.com/oneclick-ui/company/LLNL/publication/43759487-0f62-484b-bb63-32a137e7ff02?dcr_ci=LLNL");
-  assert.equal(endpoint?.api, "https://api.smartrecruiters.com/v1/companies/LLNL/postings/43759487-0f62-484b-bb63-32a137e7ff02");
-  assert.equal(postingEndpoint("https://jobs.smartrecruiters.com/SyngentaGroup/744000012345678-data-scientist-intern")?.api, "https://api.smartrecruiters.com/v1/companies/SyngentaGroup/postings/744000012345678");
-  assert.equal(postingEndpoint("https://jobs.smartrecruiters.com/SyngentaGroup")?.api, undefined);
+  // ACME's one-click apply form: the posting could not be read.
+  const endpoint = postingEndpoint("https://jobs.smartrecruiters.com/oneclick-ui/company/ACME/publication/43759487-0f62-484b-bb63-32a137e7ff02?dcr_ci=ACME");
+  assert.equal(endpoint?.api, "https://api.smartrecruiters.com/v1/companies/ACME/postings/43759487-0f62-484b-bb63-32a137e7ff02");
+  assert.equal(postingEndpoint("https://jobs.smartrecruiters.com/AcmeGroup/744000012345678-data-scientist-intern")?.api, "https://api.smartrecruiters.com/v1/companies/AcmeGroup/postings/744000012345678");
+  assert.equal(postingEndpoint("https://jobs.smartrecruiters.com/AcmeGroup")?.api, undefined);
   const posting = endpoint!.read({
     name: "Geographic Information System Software Developer",
-    company: { name: "LLNL", identifier: "LLNL" },
+    company: { name: "ACME", identifier: "ACME" },
     location: { city: "Livermore", region: "CA", fullLocation: "Livermore, CA, United States" },
     jobAd: { sections: {
       companyDescription: { title: "Company Description", text: "<p>We solve <b>national security</b> problems.</p>" },
@@ -214,7 +214,7 @@ test("a SmartRecruiters application's posting is read from its API", () => {
   });
   assert.equal(posting?.source, "SmartRecruiters");
   assert.equal(posting?.title, "Geographic Information System Software Developer");
-  assert.equal(posting?.company, "LLNL");
+  assert.equal(posting?.company, "ACME");
   assert.equal(posting?.location, "Livermore, CA, United States");
   assert.match(posting!.description, /We solve national security problems\./);
   assert.match(posting!.description, /• Build GIS software/);
@@ -222,7 +222,7 @@ test("a SmartRecruiters application's posting is read from its API", () => {
 });
 
 test("a posting endpoint that drops its first answer is asked once more", async () => {
-  // Workable's, slow past the time limit at times (2026-10-31).
+  // Workable's, slow past the time limit at times.
   let calls = 0;
   const posting = await fetchPosting(["https://apply.workable.com/waggoner-financial/j/FA0B644142/apply/"], {
     fetch: async () => {

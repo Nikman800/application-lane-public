@@ -117,7 +117,7 @@ export async function atomicJSON(path: string, value: unknown) {
   await writeFile(temporary, JSON.stringify(value, null, 2), { mode: 0o600 });
   // Windows refuses to replace a file another reader has open; it is closed
   // within moments. Unretried, a fixer task's result was lost and the fixer
-  // stopped while its loop read the same file (2026-10-17).
+  // stopped while its loop read the same file.
   for (let attempt = 0; ; attempt++) {
     try {
       await rename(temporary, path);

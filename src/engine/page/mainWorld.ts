@@ -319,8 +319,7 @@ export function applyMainWorld(
     };
     // A form that keeps its answers in its own state shows the pick only
     // once that state comes back: Greenhouse's Location (City) took 330 ms,
-    // and a single look at 50 ms reported a kept pick as lost (Khan Academy,
-    // report deb4cb8d; Pinterest, 300dba70). It is read until it shows, for
+    // and a single look at 50 ms reported a kept pick as lost (an employer; an employer, 300dba70). It is read until it shows, for
     // up to 2 s.
     return (async () => {
       const deadline = Date.now() + 2_000;
@@ -391,10 +390,10 @@ export function applyMainWorld(
         .replace(/[^a-z0-9]+/g, " ")
         .trim();
     // Each stage judges one value at a time. The values are alternatives in
-    // order of preference: AMD's iCIMS "Did You Graduate?" lists both "In
+    // order of preference: one employer's iCIMS "Did You Graduate?" lists both "In
     // Progress" and "Not Received" for an unfinished degree, and taken
     // together they matched two options and the write was refused as
-    // ambiguous (2026-11-07). One value matching two options still is.
+    // ambiguous. One value matching two options still is.
     const stages = [
       (option: HTMLOptionElement, value: string) =>
           (!/^(yes|no)$/i.test(value.trim()) || normalized(option.label).split(" ")[0] === normalized(value)) &&
@@ -405,7 +404,7 @@ export function applyMainWorld(
             normalized(option.value) === normalized(value) ||
             // A month written "08" is Ashby's option "8" (August). Missed,
             // Ashby set the month it left empty to the current one when the
-            // year was picked (report 9027045f, 2026-10-28).
+            // year was picked.
             (/^\d+$/.test(option.value) && /^\d+$/.test(value.trim()) && Number(option.value) === Number(value))),
       (option: HTMLOptionElement, value: string) =>
         /^(yes|no)$/i.test(value.trim()) &&
@@ -470,8 +469,7 @@ export function applyMainWorld(
     if (request.method === "click" || request.method === "reactClick") {
       element.click();
       // A SuccessFactors picklist loads its list only once focused as well:
-      // clicked alone it reads as open and stays empty (L3Harris, report
-      // 5beb4b34, 2026-10-15).
+      // clicked alone it reads as open and stays empty.
       if (element.matches('input.rcmpaginatedselectinput[role="combobox"]')) element.focus({ preventScroll: true });
       return { ok: true, value: valueOf() };
     }
@@ -511,7 +509,7 @@ export function applyMainWorld(
       dispatch("change");
       // Or a component around the input (across shadow roots) that names it
       // in its own files list: SmartRecruiters' dropzone clears the input at
-      // once and lists the file when its server answers (LLNL, 2026-11-02).
+      // once and lists the file when its server answers.
       const hosts: Element[] = [];
       for (let node: Element | null = element; node; node = node.parentElement || ((node.getRootNode() as ShadowRoot).host ?? null))
         hosts.push(node);
@@ -588,7 +586,7 @@ export function applyMainWorld(
         !["", "false", "no", "0"].includes(value.toLowerCase());
       // A click is what a React box listens for: set alone, Workday's "I am
       // fluent in this language" showed checked without its check mark
-      // (Jabil, report b5a71768, 2026-10-15). The setter is the fallback.
+      //. The setter is the fallback.
       if (element.checked !== wanted) element.click();
       if (element.checked === wanted) return { ok: true, value: valueOf() };
       Object.getOwnPropertyDescriptor(
@@ -609,10 +607,10 @@ export function applyMainWorld(
           acquiredFocus = document.activeElement === element;
         }
         // A page without the window's focus (the applicant is in the side
-        // panel) gets no real focus events from focus() or blur(), so the
+        // panel) gets no real focus events from focus or blur, so the
         // site would never see the field entered or left. Say so ourselves,
         // as with input and change. That holds for a field the site focused
-        // itself, too: Cisco's Workday focuses the first row it adds.
+        // itself, too: one employer's Workday focuses the first row it adds.
         if (!document.hasFocus()) {
           focusedQuietly = true;
           element.dispatchEvent(new FocusEvent("focus"));

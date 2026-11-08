@@ -28,7 +28,7 @@ export const cleanLabel = (text: string) =>
     .replace(/<\/?[a-z][a-z0-9]*\s*\/?>/gi, " ")
     .replace(/\\,/g, ",")
     // Invisible joiners around a required mark ("First Name\u2060*\u2060:",
-    // Epic Games' Greenhouse form) and a closing colon are no part of a name.
+    // one employer's Greenhouse form) and a closing colon are no part of a name.
     .replace(/[\u200b-\u200d\u2060\ufeff]/g, "")
     .replace(/\s+/g, " ")
     .trim()
@@ -44,7 +44,7 @@ const notLabelText =
   'input,textarea,select,button,script,style,svg,iframe,[role="checkbox"],[role="radio"],[role="combobox"],[role="button"],[role="listbox"],[role="option"],[role="status"],[role="alert"],[aria-live],[hidden],.application-field,.select__menu,.select__value-container,.input-select-input-single-value';
 // The text a label shows, with what its <slot>s show in their place: a web
 // component's label inside its shadow root is only slots, and SmartRecruiters'
-// questions are the page's own text slotted in (Syngenta, report f3db7e7f).
+// questions are the page's own text slotted in.
 function shownText(node: Node): string {
   if (node.nodeType === Node.TEXT_NODE) return node.textContent || "";
   if (node.nodeType !== Node.ELEMENT_NODE) return "";
@@ -149,7 +149,7 @@ export function hiddenAnswerQuestion(element: Element): string {
   for (let depth = 0; block && depth < 3; depth++, block = block.parentElement) {
     // A label with an empty "for" names nothing: searching for it built
     // 'input[type="hidden"]#', which the browser rejects, and the whole
-    // fill stopped with no field filled (2026-10-31).
+    // fill stopped with no field filled.
     const label = [...block.querySelectorAll<HTMLLabelElement>(":scope > label[for]")].find((candidate) =>
       Boolean(candidate.htmlFor) && block!.querySelector(`input[type="hidden"]#${CSS.escape(candidate.htmlFor)}`),
     );
@@ -160,7 +160,7 @@ export function hiddenAnswerQuestion(element: Element): string {
   return "";
 }
 
-// LinkedIn names every radio of a group with the question itself and leaves
+// an employer names every radio of a group with the question itself and leaves
 // each one's label empty; the option is the text drawn beside the radio.
 function sameNamedRadios(element: Element): HTMLInputElement[] {
   if (!(element instanceof HTMLInputElement) || element.type !== "radio" || !element.name) return [];
@@ -186,7 +186,7 @@ function radioOptionBeside(element: Element): string {
 // iCIMS's EEO forms draw a radio inside a span of its own, its option as
 // bare text after it up to a line break, and the question as the text
 // before the first of them ("…please indicate by checking the appropriate
-// box below", AMD's veteran question, report c1e21ba3, 2026-11-07).
+// box below", one employer's veteran question).
 function bareWrapper(element: Element): Element {
   const parent = element.parentElement;
   return parent && parent.tagName === "SPAN" && parent.childElementCount === 1 && !(parent.textContent || "").trim() ? parent : element;
@@ -225,7 +225,7 @@ export function fieldLabel(element: Control): string {
     element.getAttribute("role") === "radio"
   ) {
     // Or the group a component draws around it in its own shadow root
-    // (SmartRecruiters' spl-radio-group, report f3db7e7f).
+    // (SmartRecruiters' spl-radio-group).
     const group = element.closest('fieldset,[role="radiogroup"]') ||
       element.parentElement?.shadowRoot?.querySelector('fieldset[role="radiogroup"],[role="radiogroup"]') || null;
     const root = (group || element).getRootNode() as Document | ShadowRoot;
@@ -236,7 +236,7 @@ export function fieldLabel(element: Control): string {
     // several, the radio's own: the one whose "for" begins its id (Tesla's
     // "<id>" question over "<id>_yes" and "<id>_no"), else the nearest before
     // it. Tesla puts every question in one fieldset, and each was read as the
-    // first (report 64249b85, 2026-11-02).
+    // first.
     const titles = [...(group?.querySelectorAll("label") || [])].filter(
       (label) => !label.control && !label.querySelector("input"),
     );
@@ -274,8 +274,7 @@ export function fieldLabel(element: Control): string {
   if (asked && own) return cleanLabel(`${asked}: ${own}`);
   // A lone box named only by its answer ("Yes") whose question is the
   // group's, named by aria-labelledby: Microsoft's three acknowledgments
-  // each read "Yes", and as one label repeated all three were left alone
-  // (report bce03da9, 2026-11-04).
+  // each read "Yes", and as one label repeated all three were left alone.
   if (element instanceof HTMLInputElement && /^(checkbox|radio)$/.test(element.type) && /^(yes|no|i agree|agree|i accept|accept|i acknowledge|acknowledge)$/i.test(own.trim())) {
     for (let box = element.parentElement, depth = 0; box && depth < 4; box = box.parentElement, depth++) {
       const ids = (box.getAttribute("aria-labelledby") || "").split(/\s+/).filter(Boolean);
@@ -285,8 +284,7 @@ export function fieldLabel(element: Control): string {
     }
   }
   // A Workday date's Month, Day and Year are named only so: the question is
-  // its field's legend ("What is your first available start date?", TSC,
-  // report e48a61a1, 2026-11-02).
+  // its field's legend ("What is your first available start date?", an employer).
   if (/^(month|day|year)$/i.test(own) && element.matches('[data-automation-id^="dateSection"]')) {
     const legend = labelText(element.closest('[data-automation-id^="formField-"]')?.querySelector("legend") || null);
     if (legend) return cleanLabel(`${legend}: ${own}`);
@@ -299,8 +297,8 @@ export function fieldLabel(element: Control): string {
 }
 
 // A label that only says to pick ("Make Selection Here") carries no question:
-// Westinghouse's SuccessFactors asks "Are you one of the following? U.S.
-// Citizen or National…" in a note above the list (report cc40f1fb).
+// one employer's SuccessFactors asks "Are you one of the following? U.S.
+// Citizen or National…" in a note above the list.
 const promptOnly = /^\W*(please )?(make (a )?selection( here)?|select( one| an option)?( here)?|choose( one| an option)?( here)?)\W*$/i;
 function questionAbove(element: Element): string {
   for (let node: Element | null = element, depth = 0; node && depth < 8; node = node.parentElement, depth++)
@@ -321,7 +319,7 @@ function questionAbove(element: Element): string {
 export function legacyLabels(element: Control): string[] {
   // A radio's own label is its option ("Yes"), which names no question: a
   // lock under ":0:yes" from one answer held every Yes/No question of the
-  // step (Tesla, report 64249b85, 2026-11-02).
+  // step (Tesla).
   const option = element.matches('input[type="radio"],[role="radio"]');
   const labels =
     !option && "labels" in element && element.labels
@@ -474,8 +472,7 @@ export function fileQuestion(element: Control): { kind: DocumentKind; text: stri
   }
   // Oracle's block names what goes in its one uploader, nine levels up, in
   // its title and instructions: "Additional Documents. Add any additional
-  // documents. E.g.: Cover Letter, Certificate, Reference letter." (Nokia,
-  // report 392583f7).
+  // documents. E.g.: Cover Letter, Certificate, Reference letter.".
   const block = element.closest(".apply-flow-block");
   if (block && block.querySelectorAll('input[type="file"]').length === 1)
     return named(
@@ -516,7 +513,7 @@ export function currentFileName(element: Control): string {
   const purpose = fileKind(element);
   for (const candidate of scope.querySelectorAll<HTMLElement>(
     // Amazon's saved resume: "Download Name.pdf" beside its Replace input,
-    // which Fill had used to upload the same resume again (report f686f6a0).
+    // which Fill had used to upload the same resume again.
     '[class*="CurrentFile" i],[class*="current-file" i],[class*="uploaded-file" i],[id$="_FileNameLabel"],[class*="file-name" i],[class*="filename" i],.document-block-title',
   )) {
     if (/NoDisplay|hidden/i.test(candidate.className)) continue;
@@ -548,8 +545,7 @@ export function uploadError(element: Control): string {
       continue;
     const text = (candidate.textContent || "").replace(/\s+/g, " ").trim();
     // An alert can announce success or progress too: Workday's "Resume.pdf
-    // successfully uploaded" and "Resume.pdf loading" read as failed uploads
-    // (Jabil, reports f062d50f and f0a42a0f, 2026-10-15).
+    // successfully uploaded" and "Resume.pdf loading" read as failed uploads.
     if (/\bsuccess(ful(ly)?)?\b|\b(has been|was) uploaded\b|\bupload(ed)? complete\b|\b(loading|uploading|processing|scanning)\b/i.test(text) &&
         !/\b(fail\w*|error|invalid|too (large|big)|not (allowed|supported|accepted)|unsupported|could not|couldn t|unable)\b/i.test(text.replace(/[’']/g, " ")))
       continue;
@@ -685,14 +681,13 @@ export function ownLabel(element: Control): string {
     if (labels.length === 1 && labelText(labels[0]))
       return labelText(labels[0]);
     // A Workday questionnaire's text answer is titled only by its fieldset's
-    // legend; read as its id, the draft took it for no question (AmFam,
-    // report 5730ee40).
+    // legend; read as its id, the draft took it for no question.
     const legend = wrapper.matches('[data-automation-id^="formField-"]') && !labels.length
       ? labelText(wrapper.querySelector("legend"))
       : "";
     if (legend) return legend;
   }
-  // A label whose "for" names no element (Epic Games' Greenhouse form:
+  // A label whose "for" names no element (one employer's Greenhouse form:
   // <label for="First Name">, its input with no id) belongs to the one
   // control beside it: the nearest block holding only that label and it.
   // (A dropdown's input sits several blocks below its label.)
@@ -756,10 +751,10 @@ export function placeholderOption(option: HTMLOptionElement): boolean {
   if (option.value === "") return true;
   // A blank choice ("<option value='0'></option>") selects nothing.
   if (!option.label.trim() && !option.text.trim()) return true;
-  // JazzHR's empty choice ("-- No answer --", Axtria, 2026-10-14) has a value
+  // JazzHR's empty choice ("-- No answer --", an employer) has a value
   // of its own; the dashes set it apart from a choice that answers "none".
   if (/^\s*[-—–]+\s*no (?:answer|selection)\s*[-—–]+\s*$/i.test(option.label)) return true;
-  // Without the dashes as a list's first choice (Elucid's citizenship list,
+  // Without the dashes as a list's first choice (one employer's citizenship list,
   // "No answer" with a value of 0, read as answered and left so).
   if (/^\s*no (?:answer|selection)\s*$/i.test(option.label) && option.index === 0) return true;
   const label = option.label
@@ -780,7 +775,7 @@ export function placeholderOption(option: HTMLOptionElement): boolean {
 export function writable(element: Control): boolean {
   // A read-only combobox naming its list is chosen from, not typed into:
   // Microsoft's careers form draws every list so, and its sponsorship
-  // question was refused as "no longer writable" (2026-11-07).
+  // question was refused as "no longer writable".
   const chosenFrom = element.getAttribute("role") === "combobox" && Boolean(element.getAttribute("aria-controls"));
   return (
     controlVisible(element) &&
@@ -809,7 +804,7 @@ export function sectionFor(element: Control): {
   }
   // Greenhouse's employment rows, as its education rows: without them each
   // job's "Current role" and end date were the same field asked three
-  // times, and all were left (Samsung Semiconductor, report c577407b).
+  // times, and all were left.
   const job = element.closest(".employment--form,.employment-form");
   if (job) {
     const root = element.getRootNode() as Document | ShadowRoot;
@@ -819,7 +814,7 @@ export function sectionFor(element: Control): {
   // whose top bar names it ("Work Experiences"). Without this every row's
   // "Country" is the same field, and one row's edit locks them all.
   // A date's input is inside its UI5 picker's shadow root: the row is
-  // found from the picker (L3Harris, report 56e13a52: every "From Date" was
+  // found from the picker (an employer: every "From Date" was
   // one field, and the site's own dates were never corrected).
   let sfRow: Element | null = null;
   for (let node: Element | null = element; node && !sfRow; ) {
@@ -845,7 +840,7 @@ export function sectionFor(element: Control): {
   // address parts repeat the applicant's own. Without a row they are all one
   // ambiguous field, refused as "another field has the same label", and every
   // school was answered from the first one.
-  // Greenhouse's own form on an employer's site (Epic Games, 2026-10-14):
+  // Greenhouse's own form on an employer's site:
   // each school is an .education-form-fields block repeating School, Degree
   // and the date boxes.
   const educationBlock = element.closest(".education-form-fields");
@@ -864,7 +859,7 @@ export function sectionFor(element: Control): {
   // named by the section's title ("Work experience"). Read as one section,
   // every row's End date and "Did you graduate?" was refused as "another
   // field has the same label", and one row's school locked the next's
-  // (Intuit, 2026-10-17). Its hidden sample row is not a row.
+  //. Its hidden sample row is not a row.
   const avatureRow = element.closest("fieldset.datasetField__row");
   const avatureGroup = avatureRow?.closest('[role="group"][aria-labelledby]');
   if (avatureRow && avatureGroup) {
@@ -877,7 +872,7 @@ export function sectionFor(element: Control): {
   // Workday: each job or school is a group labelled by its panel's heading
   // ("Work or Other Experience 2", an h5), and the first legend inside it is
   // a date's ("From"). Read as the section, every job's Location was one
-  // field, answered with the applicant's home (Jabil, 2026-10-16).
+  // field, answered with the applicant's home.
   const root = element.getRootNode() as Document | ShadowRoot;
   for (let panel = element.closest('[role="group"][aria-labelledby$="-panel"]'); panel; panel = panel.parentElement?.closest('[role="group"][aria-labelledby$="-panel"]') || null) {
     const id = panel.getAttribute("aria-labelledby") || "";
@@ -928,7 +923,7 @@ export function isRequired(element: Control): boolean {
   if (element.closest(".required-field")) return true;
   // Workday's question dropdowns: the button's own name ends "Required"
   // (" Select One Required"), and the question's legend carries the
-  // asterisk. KLA's OPT questions were listed as optional (2026-11-04).
+  // asterisk. one employer's OPT questions were listed as optional.
   if (/\brequired\s*$/i.test(element.getAttribute("aria-label") || "")) return true;
   const fieldset = element.closest("fieldset");
   const legend = fieldset?.querySelector(":scope > legend");
@@ -941,15 +936,15 @@ export function isRequired(element: Control): boolean {
   const ashby = element.closest('.ashby-application-form-field-entry,fieldset[class*="_fieldEntry_"]');
   const title = ashby?.querySelector(":scope > .ashby-application-form-question-title");
   // Each box of a checkbox question is as required as the question: its
-  // title carries the mark, and Notion's "locations you would relocate to"
-  // read as two optional boxes (2026-10-30).
+  // title carries the mark, and one employer's "locations you would relocate to"
+  // read as two optional boxes.
   const entryTitle = ashby?.querySelector(":scope > .ashby-application-form-question-title, :scope > legend");
   if (entryTitle && element instanceof HTMLInputElement && element.type === "checkbox" && ashby!.querySelectorAll('input[type="checkbox"]').length > 1)
     return /required/i.test(String(entryTitle.className)) || /[*✱]|\(required\)/i.test(entryTitle.textContent || "");
   if (title && ashby?.querySelectorAll(controlSelector).length === 1)
     return /required/i.test(String(title.className)) || /[*✱]|\(required\)/i.test(title.textContent || "");
   // A label of its own that ends in the mark (JazzHR's <i class="asterisk">,
-  // Elucid, 2026-10-30: its required questions were listed as optional).
+  // an employer: its required questions were listed as optional).
   const own = ("labels" in element && element.labels?.[0]?.textContent) || "";
   if (/(?:[*✱]|\(required\))\s*$/i.test(own.trim())) return true;
   // A question written as text above its options says so in that text.
@@ -984,7 +979,7 @@ export function validationState(
     const validity = "validity" in element ? (element as HTMLInputElement).validity : undefined;
     // A picker shows its answer beside its own input, which stays empty and
     // "required": missing a value it never holds is not a rejected answer
-    // (Paylocity's Country and State, report d421fc89).
+    // (Paylocity's Country and State).
     const pickerOnly = Boolean(validity?.valueMissing) && !(element as HTMLInputElement).value &&
       !(["badInput", "customError", "patternMismatch", "rangeOverflow", "rangeUnderflow", "stepMismatch", "tooLong", "tooShort", "typeMismatch"] as const)
         .some((fault) => validity![fault]);
@@ -1008,7 +1003,7 @@ export function selectedCustomValue(element: Control): string | undefined {
     const value = paylocity.parentElement?.querySelector(".input-select-input-single-value")?.textContent?.trim() || "";
     return /^(select|choose|--)/i.test(value) ? "" : value;
   }
-  // An older react-select (no combobox role; Epic Games' form) shows its
+  // An older react-select (no combobox role; one employer's form) shows its
   // choice as a "…-singleValue" block in its container. A flag drawn there
   // has a title, which is no part of the choice.
   if (element.matches('input[id^="react-select-"][aria-autocomplete="list"],.dropdown-autocomplete input[aria-autocomplete="list"]')) {

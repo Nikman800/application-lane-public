@@ -26,7 +26,7 @@ export function profileLanguages(lines: string[] = []): Language[] {
 }
 
 // The ways a form's list may word a level, nearest first. Workday numbers
-// its scale ("1 - Beginner" to "5 - Fluent", Jabil, report b5a71768).
+// its scale ("1 - Beginner" to "5 - Fluent", an employer).
 export function levelChoices(level: Language["level"]): string[] {
   return {
     native: ["Native", "5 - Fluent", "Native or bilingual", "Native speaker", "Bilingual", "Fluent", "Expert", "Advanced", "3 - High", "High", "5 - Complete Mastery", "Complete Mastery"],

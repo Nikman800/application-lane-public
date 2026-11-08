@@ -1,7 +1,7 @@
 // When and from which commit this extension was built (scripts/build.mjs).
 // The panel shows it, and says so when the backend's dist/ holds a newer
 // build than the one loaded: a forgotten reload of the extension was taken
-// for a fix that did not work (2026-10-14, "I definitely reloaded it").
+// for a fix that did not work ("I definitely reloaded it").
 
 export type BuildStamp = { builtAt: number; commit: string };
 declare const __BUILD__: BuildStamp | undefined;

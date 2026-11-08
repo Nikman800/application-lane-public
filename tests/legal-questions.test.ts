@@ -28,7 +28,7 @@ test("legal and eligibility questions are told apart from ordinary ones", () => 
     "Describe a time you terminated a project that was not working.",
     "Do you have experience in a multi-disciplinary team?",
     "LinkedIn Profile",
-    // Paylocity (Space Tango, report 44f8f45f, 2026-10-14): "related to this
+    // Paylocity: "related to this
     // role" is no relative; the question was neither drafted nor explained.
     "How many years of work experience do you have directly related to this role?",
     "Describe work you have done related to distributed systems.",
@@ -36,7 +36,7 @@ test("legal and eligibility questions are told apart from ordinary ones", () => 
     assert.equal(legalQuestion(label), false, label);
 });
 
-// L3Harris (report 9a11d03e, 2026-10-15): "Have you worked for a government
+// an employer: "Have you worked for a government
 // entity…" was left though the applicant saved "Never a government employee
 // or public official".
 test("a saved never-in-government statement answers a government-employment question", async () => {
@@ -55,7 +55,7 @@ test("a saved never-in-government statement answers a government-employment ques
   assert.equal(ask("Have you worked for a government entity currently or in the past?", "Worked at a state agency in 2021"), undefined);
 });
 
-// L3Harris, report ed248429 (2026-10-15): "Are you eligible to obtain a U.S.
+// an employer: "Are you eligible to obtain a U.S.
 // security clearance?" was left to the site, whose stored "No" stood. A U.S.
 // citizen with no convictions, by the saved details, is.
 test("a citizen with no convictions is eligible to obtain a security clearance", async () => {
@@ -79,7 +79,7 @@ test("a citizen with no convictions is eligible to obtain a security clearance",
   assert.equal(ask("Are you aware of anything that may prevent you from obtaining a government security clearance?", "US Citizen", "One misdemeanor conviction in 2019"), undefined);
 });
 
-// Report 17ac6723 (2026-10-15): preferences.md's "Do you hold an active
+//: preferences.md's "Do you hold an active
 // security clearance? No" was taken as the answer to every question naming a
 // security clearance, eligibility to obtain one included.
 test("a saved answer about holding a clearance does not answer whether one could be obtained", async () => {

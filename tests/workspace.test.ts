@@ -99,7 +99,7 @@ test("company names come from the job board path or title, not the board host", 
     "Klaviyo Campus",
   );
   assert.equal(companyFor("https://jobs.lever.co/acme-labs/123"), "Acme Labs");
-  // Greenhouse's embedded form names its board in "for" (2026-11-08).
+  // Greenhouse's embedded form names its board in "for".
   assert.equal(companyFor("https://job-boards.greenhouse.io/embed/job_app?for=acme&token=123"), "Acme");
   assert.equal(companyFor("https://acme.wd5.myworkdayjobs.com/x"), "acme");
   assert.equal(

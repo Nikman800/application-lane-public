@@ -12,7 +12,7 @@ import { createApp } from "../src/server/app";
 const run = promisify(execFile);
 
 // The command line queues links and reads the queue the extension mirrors
-// (2026-10-30): many links at once, how the applications stand, and which
+//: many links at once, how the applications stand, and which
 // fills failed, also as JSON for anyone monitoring a shared setup.
 test("the command line queues links and reports the queue and its failed fills", async () => {
   const directory = await mkdtemp(join(tmpdir(), "lane-cli-"));
@@ -80,7 +80,7 @@ test("the command line queues links and reports the queue and its failed fills",
   }
 });
 
-// The live line (2026-10-30): the command line's fill and switch reach the
+// The live line: the command line's fill and switch reach the
 // extension at once and its answer comes back. Only the paired extension and
 // the command line, with the token, may join.
 test("fill and switch go to the extension over the live line, and come back with its answer", async () => {
@@ -127,15 +127,15 @@ test("fill and switch go to the extension over the live line, and come back with
     await fetch(`${url}/v1/queue`, {
       method: "PUT",
       headers: { Authorization: `Bearer ${cfg.token}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ at: Date.now(), applications: [{ id: "f00dcafe-0000-4000-8000-000000000000", url: "https://jobs.example.test/notion", company: "Notion", title: "Software Engineer", status: "awaiting-user", stage: "applying", note: "Tracked.", needs: [], updatedAt: Date.now(), reports: 0 }] }),
+      body: JSON.stringify({ at: Date.now(), applications: [{ id: "f00dcafe-0000-4000-8000-000000000000", url: "https://jobs.example.test/acme", company: "Acme", title: "Software Engineer", status: "awaiting-user", stage: "applying", note: "Tracked.", needs: [], updatedAt: Date.now(), reports: 0 }] }),
     });
     const lane = (...args: string[]) =>
       run(process.execPath, ["--import", "tsx", "scripts/lane.ts", ...args], { env: { ...process.env, LANE_DATA_DIR: directory, LANE_URL: url } })
         .then(({ stdout }) => stdout, (error) => `${error.stdout}${error.stderr}`);
-    assert.match(await lane("fill", "notion"), /Notion — Software Engineer: did fill for f00dcafe-0000-4000-8000-000000000000/);
+    assert.match(await lane("fill", "acme"), /Acme — Software Engineer: did fill for f00dcafe-0000-4000-8000-000000000000/);
     assert.match(await lane("switch", "f00dca"), /did switch for f00dcafe/);
-    // Abandoned from the command line as the panel's Abandon (2026-11-02).
-    assert.match(await lane("abandon", "notion"), /Notion — Software Engineer: did abandon for f00dcafe/);
+    // Abandoned from the command line as the panel's Abandon.
+    assert.match(await lane("abandon", "acme"), /Acme — Software Engineer: did abandon for f00dcafe/);
     assert.match(await lane("fill", "nobody"), /No application matches "nobody"/);
     // A command line watching hears the extension's queue.
     const watcher = join_();
@@ -143,7 +143,7 @@ test("fill and switch go to the extension over the live line, and come back with
     extension.socket.send(JSON.stringify({ type: "queue", snapshot: { at: 1, applications: [] } }));
     await until(() => watcher.messages.some((message) => message.type === "queue" && message.snapshot.at === 1));
     // A link queued while the extension listens is picked up at once, not
-    // at its next minute's check (the applicant, 2026-10-31).
+    // at its next minute's check (the applicant).
     const queued = await (await fetch(`${url}/v1/inbox`, {
       method: "POST",
       headers: { Authorization: `Bearer ${cfg.token}`, "Content-Type": "application/json" },
@@ -154,14 +154,14 @@ test("fill and switch go to the extension over the live line, and come back with
     // With the extension gone, a command says so at once.
     extension.socket.close();
     await extension.closed;
-    assert.match(await lane("fill", "notion"), /extension is not connected/);
+    assert.match(await lane("fill", "acme"), /extension is not connected/);
     watcher.socket.close();
   } finally {
     server.close();
   }
 });
 
-// Finding jobs from the command line (2026-10-30): a search with the saved
+// Finding jobs from the command line: a search with the saved
 // settings or these, numbered openings, and queueing them by number. The
 // listings are served from the backend's cache, so nothing is fetched.
 test("the command line searches for openings and queues them by number", async () => {
@@ -200,7 +200,7 @@ test("the command line searches for openings and queues them by number", async (
     );
     assert.match(await lane("search", "add", "9"), /Give the numbers of openings to queue, 1 to 1/);
     // Tracked after the search ran, at its address with a query: the saved
-    // search marks it when read (2026-11-02: one from three days before
+    // search marks it when read (: one from three days before
     // marked none).
     const auth = { Authorization: `Bearer ${cfg.token}`, "Content-Type": "application/json" };
     const read = async () => (await (await fetch(`${url}/v1/search`, { headers: auth })).json()).listings.map((listing: { tracked?: boolean }) => Boolean(listing.tracked));
@@ -221,7 +221,7 @@ test("the command line searches for openings and queues them by number", async (
     const previewed = (await (await fetch(`${url}/v1/search`, { headers: auth })).json()).listings[0].preview;
     assert.deepEqual(previewed?.history?.company, { applications: 1, left: ["How did you hear about us?"] });
     // An application the fixer is correcting is shown apart, for the
-    // applicant to leave alone, until it is marked done (2026-11-07).
+    // applicant to leave alone, until it is marked done.
     assert.match(await lane("fixing", "f00dca", "retrying", "the", "upload"), /marked as being fixed/);
     const marked = await lane("status");
     assert.match(marked, /being fixed\s+1/);
@@ -240,7 +240,7 @@ test("the full-screen view's tabs and key hints fit a narrow pane, the selected 
   const labels = ["needs you", "in progress", "failed", "ready to review", "submitted", "all", "find jobs"].map((name, i) => ` ${name} (${i * 7}) `);
   // Wide enough: every tab, nothing marked as cut.
   assert.equal(plain(tabStrip(labels, 0, 200)), labels.join(" "));
-  // A half-width pane (the screenshot of 2026-11-02 had 80 columns): no
+  // A half-width pane (the screenshot of had 80 columns): no
   // line wraps, and the first tab is there when it is selected.
   for (const selected of [0, 3, 6]) {
     const strip = plain(tabStrip(labels, selected, 60));
@@ -258,7 +258,7 @@ test("the full-screen view's tabs and key hints fit a narrow pane, the selected 
   assert.equal(openingLine({ company: "Axon", title: "Software Engineer Intern", locations: ["Seattle, WA"] }, () => ""), "Axon — Software Engineer Intern · Seattle, WA");
 });
 
-// The command line's colours (2026-11-02): the extension's themes at the
+// The command line's colours: the extension's themes at the
 // depth the terminal has, and none when asked or piped. What it says stays
 // the same at every depth.
 test("the command line picks a colour depth and paints the same text at each", async () => {
@@ -315,7 +315,7 @@ test("the command line picks a colour depth and paints the same text at each", a
 });
 
 test("the full-screen view's live line opens again after the backend drops it", async () => {
-  // 2026-11-02: the backend restarted, and the view kept showing the queue of
+  //: the backend restarted, and the view kept showing the queue of
   // that moment, its applications filling unseen.
   const { liveLine } = await import("../scripts/lane-live");
   const { WebSocketServer } = await import("ws");

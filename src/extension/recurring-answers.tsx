@@ -12,7 +12,7 @@ async function command<T = any>(message: unknown): Promise<T> {
 
 // Answers the applicant keeps giving by hand, offered to save so later fills
 // give them: nobody adds "Military Status: No Military" to a profile
-// themselves (Expand Energy, 2026-10-30).
+// themselves.
 export function RecurringAnswers({
   profileRevision,
   onSaved,

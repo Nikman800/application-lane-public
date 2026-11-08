@@ -44,7 +44,7 @@ const choiceFields: { label: RegExp; field: ChoiceField; name: string }[] = [
 ];
 
 const months = ["january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november", "december"];
-// "December 13, 2027" as 2027-12, or with its day as 2027-12-13.
+// "December 13, 2027" as 2027-12, or with its day as.
 const monthYear = (text: string, withDay = false) => {
   const match = text.toLowerCase().match(/\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+(?:(\d{1,2}),?\s+)?(\d{4})\b/u);
   if (!match) return "";

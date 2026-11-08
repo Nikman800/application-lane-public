@@ -4,7 +4,7 @@
 // possible answers, and each question's button is named by the question's id.
 // Read from there, a question's choices are known before anything is opened,
 // and a question nobody could answer blind is answered from its real list
-// (NVIDIA's "…in that country?", 2026-11-04).
+// (one employer's "…in that country?").
 
 export type QuestionnaireAnswers = Map<string, string[]>;
 

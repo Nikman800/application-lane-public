@@ -378,8 +378,7 @@ export const fieldSchema = z.object({
   // For the AI pass: what the rest of this field's row of a repeated section
   // holds ("School Name: Michigan State University; Degree: Masters"), so a
   // school's or job's own question is answered from that entry. Without it,
-  // "Still Student?" was ticked for both schools (Applied Intuition, report
-  // 3fcbf55d, 2026-10-28).
+  // "Still Student?" was ticked for both schools.
   row: z.string().max(1000).optional(),
   // A date format the control itself shows ("DD/MM/YYYY" as its
   // placeholder, pattern or description), when it shows one.
@@ -459,7 +458,7 @@ export const generationSchema = z.object({
   postingUrl: z.string().url().max(3000).optional(),
   postingText: z.string().max(25000).optional(),
   // Asked for again by the applicant (Redraft documents): written anew, not
-  // taken from an earlier step's documents (2026-11-02).
+  // taken from an earlier step's documents.
   redraft: z.boolean().optional(),
   // Suggestions for legal and eligibility questions: from the applicant's
   // saved legal details alone (the default), or from any saved source.
@@ -685,7 +684,7 @@ export type Application = {
   aiFilled?: { label: string; value: string }[];
   // Questions the applicant answered by hand on this application, as last
   // seen: the same answer given on several applications is offered to save
-  // ("Military Status: No Military", Expand Energy, 2026-10-30).
+  // ("Military Status: No Military", an employer).
   handAnswers?: { question: string; answer: string; at: number }[];
   // Documents being drafted on request, with nothing filled on the page.
   draftJobId?: string;
@@ -762,7 +761,7 @@ export type Settings = {
   //   rules did not recognise are filled, and listed as filled by AI;
   // review: neither is filled; both are drafted for approval in the panel;
   // off: only what the profile rules match is filled.
-  // "written" is how it worked before 2026-10-11 (written answers filled,
+  // "written" is how it worked before (written answers filled,
   // suggestions on request); the test suite and offline eval pin it, and
   // Settings does not offer it.
   modelFill?: "auto" | "review" | "off" | "written";
@@ -914,7 +913,7 @@ export type FixerOverview = {
 // One problem the applicant's note names, and what came of it. A note often
 // lists several; the fixer once fixed a report's phone number, called the
 // report fixed, and its end dates, school, salary and citizenship problems
-// came back in the next report (63ee7aa5, cc40f1fb, 2026-10-27).
+// came back in the next report (63ee7aa5, cc40f1fb).
 export type FixerProblem = {
   problem: string;
   // "left": not reached in this run, so another run takes it up.

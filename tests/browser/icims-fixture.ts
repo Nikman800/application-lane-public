@@ -72,7 +72,7 @@ export function icimsCandidatePage(options: { schoolListed?: boolean; swapped?: 
     AddressState: ["Arizona", "California", "Texas"],
   };
   // Swapped: both schools shown exactly as listed, the other way round from
-  // the profile, as AMD's iCIMS redrew them (2026-11-07).
+  // the profile, as one employer's iCIMS redrew them.
   const rows = options.swapped
     ? educationRow("-1", 1) + educationRow("-2", 2)
     : educationRow("-3", 1) + educationRow("-1", 2) + educationRow("-2", 3);

@@ -64,11 +64,11 @@ test("documents are written per job, replaced by a redraft, and moved under Sent
 });
 
 test("a file under WSL is given by its Windows path, for the desktop's file chooser", () => {
-  // 2026-11-02: Copy resume path gave /mnt/c/…, which Chrome's chooser on
+  //: Copy resume path gave /mnt/c/…, which Chrome's chooser on
   // Windows does not take.
   assert.equal(
-    desktopPath("/mnt/c/Users/User1/Documents/Application Lane/LLNL – GIS Developer/Resume.pdf", true),
-    "C:\\Users\\User1\\Documents\\Application Lane\\LLNL – GIS Developer\\Resume.pdf",
+    desktopPath("/mnt/c/Users/User1/Documents/Application Lane/Acme – GIS Developer/Resume.pdf", true),
+    "C:\\Users\\User1\\Documents\\Application Lane\\Acme – GIS Developer\\Resume.pdf",
   );
   assert.equal(desktopPath("/mnt/d", true), "D:\\");
   // Outside WSL, or a Linux path, it is left as it is.

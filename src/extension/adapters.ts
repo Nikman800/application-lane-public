@@ -67,8 +67,7 @@ export const adapters: Adapter[] = [
   },
   {
     // Breezy's apply page shows only the job's title; the posting is in the
-    // position its page script reads (data-position) (report ba965f2e,
-    // 2026-10-17).
+    // position its page script reads (data-position).
     name: "General",
     matches: (u) => domain(u, "breezy.hr"),
     root: 'main, [role="main"], form',

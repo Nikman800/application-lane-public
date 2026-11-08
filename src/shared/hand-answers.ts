@@ -13,13 +13,13 @@ export function keptHandAnswer(field: { label: string; value: string; kind?: str
   if (/education|experience|employment|work/.test(normalize(field.section || ""))) return false;
   if (/signature|initials|password|captcha|^(first|last|middle|full|legal|preferred) name$|^name$|e ?mail|phone/.test(question)) return false;
   // A phone number's country code picker ("Search by country/region or
-  // code" = "+1", SyngentaGroup 2026-11-03).
+  // code" = "+1", an employer).
   if (/\b(country|region)\b.*\bcode\b|\b(dial|dialing|calling) code\b/.test(question) || /^\+\d{1,4}$/.test(answer)) return false;
   // A calendar's month heading read as the label ("November 2026" = "No",
-  // Tesla 2026-11-03), or any label that is only a date.
+  // Tesla), or any label that is only a date.
   if (/^((jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\s+)?\d{1,4}(\s+\d{1,4})*$/.test(question)) return false;
   // A list's hidden option value, not what the applicant picked: an id
-  // (Zoox's location "65f5e6fd-0ec6-…") or a code ("7_months_or_more", Tesla).
+  // (one employer's location "65f5e6fd-0ec6-…") or a code ("7_months_or_more", Tesla).
   if (machineValue(answer)) return false;
   return true;
 }

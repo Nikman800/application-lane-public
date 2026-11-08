@@ -1,6 +1,6 @@
 import type { Artifact, Profile } from "./model";
 
-// Which transcript a form's field is given (2026-11-08). A transcript is one
+// Which transcript a form's field is given. A transcript is one
 // degree's: the applicant attaches each to its education entry, and a field
 // that names a level ("…your undergraduate studies") gets that level's or
 // none. A field naming no level gets the most recent degree's. The graduate

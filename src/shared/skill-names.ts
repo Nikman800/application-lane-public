@@ -1,7 +1,6 @@
 // Workday's skill library names some skills its own way: a search for "C#"
 // answers "C Sharp (Programming Language)", "SQL" answers "Structured Query
-// Language (SQL)", "C++" answers "C++ Programming Language" (Axiom Space,
-// 2026-11-04). A skill is searched by the applicant's own name and picked
+// Language (SQL)", "C++" answers "C++ Programming Language". A skill is searched by the applicant's own name and picked
 // under any of these.
 const aliases: Record<string, string[]> = {
   "c#": ["C Sharp (Programming Language)", "C Sharp"],

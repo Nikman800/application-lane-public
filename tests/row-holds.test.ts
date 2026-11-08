@@ -20,11 +20,11 @@ const field = (label: string, value: string, index: number, extra: Partial<Field
   section: "Education", index, siteValue: true, ...extra,
 });
 
-// AMD's iCIMS (2026-11-07): filled again with every row already right, the
+// one employer's iCIMS: filled again with every row already right, the
 // rows were skipped whole and the review flagged what the site held: a
 // list's coded value ("28595" for "In Progress") and a date's day.
 test("a school row's graduation status and date day are read as the profile's", () => {
-  // The site lists the bachelor's first, as AMD's iCIMS redrew it.
+  // The site lists the bachelor's first, as one employer's iCIMS redrew it.
   const rows = [
     field("School", "Pennsylvania State University", 0, { kind: "combobox" }),
     field("Did You Graduate?", "28598", 0, { valueText: "Received" }),
@@ -46,7 +46,7 @@ test("a school row's graduation status and date day are read as the profile's", 
   assert.equal(rowHolds(wrong[2], wrong, profile), false);
 });
 
-// AMD's iCIMS (2026-11-07): the bachelor's row's "not listed" box held the
+// one employer's iCIMS: the bachelor's row's "not listed" box held the
 // master's school. The row is the bachelor's, by its own School field, and
 // the box is flagged.
 test("a row is known by its own school, not by a school typed in its 'not listed' box", () => {

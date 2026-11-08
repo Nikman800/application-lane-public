@@ -7,7 +7,7 @@ import type { Field, Profile } from "./model";
 
 export type DateFormat = "MM/DD/YYYY" | "DD/MM/YYYY" | "YYYY-MM-DD";
 
-// Today in the applicant's own time zone, "2026-11-03" (not UTC's, which
+// Today in the applicant's own time zone, "" (not UTC's, which
 // is tomorrow in the evening in the Americas).
 export function localDate(now = new Date()): string {
   const two = (n: number) => String(n).padStart(2, "0");
@@ -40,7 +40,7 @@ export function profileDateFormat(profile: Pick<Profile, "country"> & { locale?:
   return /^(us|usa|unitedstates|unitedstatesofamerica|america)$/.test(country) ? "MM/DD/YYYY" : "DD/MM/YYYY";
 }
 
-// An ISO date ("2027-05-10", "2027-05") in a format. A format with a day
+// An ISO date ("", "2027-05") in a format. A format with a day
 // gets the 1st for a date saved without one, as the profile editor says;
 // asDefault drops the day instead (a format the field did not ask for).
 export function formatDate(iso: string, format: string, asDefault = false): string | undefined {

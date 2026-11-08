@@ -6,7 +6,7 @@ import type { optionsSourceSchema } from "./schema";
 // (Workday's degrees and fields of study, Greenhouse's schools). Read before
 // the list is searched, it tells which of the profile's wordings the site
 // holds: Workday dropped a field of study typed in a wording it does not list
-// (25 forms, 2026-10-16), and each search that finds nothing costs about 20 s.
+// (25 forms), and each search that finds nothing costs about 20 s.
 export type OptionsSource = z.infer<typeof optionsSourceSchema>;
 
 // complete: the whole list, not one search's results, so a wording missing
@@ -84,9 +84,9 @@ export function readOptions(body: unknown, source: OptionsSource): string[] | un
     );
   const items = at(body, source.responseItemsPath);
   if (!Array.isArray(items)) return undefined;
-  // Folders of the list, not its entries: RTX's Workday answers its fields of
+  // Folders of the list, not its entries: one employer's Workday answers its fields of
   // study with "Partial List (First 500 Entries)" and "All", each a link to
-  // its own page, and "Data Science" was taken as unlisted (report 6e6db787).
+  // its own page, and "Data Science" was taken as unlisted.
   // Without the list, the rule searches as it always did.
   if (items.some((item) => item && typeof item === "object" && typeof (item as Record<string, unknown>).href === "string")) return undefined;
   return items

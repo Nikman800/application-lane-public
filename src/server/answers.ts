@@ -149,9 +149,9 @@ export function screenAnswer(
   return kept ? { text: kept } : { reason: "the draft answered with logistics the question did not ask for" };
 }
 
-// A one-line salary box takes a figure, never a sentence: Westinghouse's
+// A one-line salary box takes a figure, never a sentence: one employer's
 // SuccessFactors called "I accept the posted rate of $25.40 to $29.00 per
-// hour." an invalid number (report cc40f1fb), as L3Harris's did "$100,000 per
+// hour." an invalid number, as one employer's did "$100,000 per
 // year" (b5d63aeb). The first amount is the one given: a range's low end,
 // which is what accepting the posted rate means.
 export function salaryFigure(label: string, kind: string, text: string): string | undefined {
@@ -333,8 +333,8 @@ export async function writeAnswers(
     if (!drafted) { withhold(field, "no complete answer fit the field limits"); continue; }
     // An optional question asked only if something holds ("If you do require
     // sponsorship…, please list the type of support") is left empty when the
-    // draft says it does not hold: that is no answer to give (Pinterest's
-    // form, 2026-10-14).
+    // draft says it does not hold: that is no answer to give (one employer's
+    // form).
     if (
       !field.required &&
       /^\s*if (you|yes|so|applicable)\b/i.test(field.label) &&

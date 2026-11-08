@@ -146,8 +146,7 @@ function historyValue(
   if (key === "country") return row.country || undefined;
   if (key === "reason_for_leaving") return row.reasonForLeaving || undefined;
   // Stripped of what a site refuses: SmartRecruiters' experience Description
-  // says "This field cannot contain following characters: ;" (LLNL,
-  // 2026-11-02). A comma reads the same in a list of duties.
+  // says "This field cannot contain following characters: ;". A comma reads the same in a list of duties.
   if (key === "description_stripped") return row.details.replace(/\s*;\s*/g, ", ");
   if (/^(description|details|responsibilities)$/.test(key))
     return row.details;
@@ -175,7 +174,7 @@ function historyValue(
     return `${match[2]}/${match[3] || "01"}/${match[1]}`;
   if (/_slashes_mmyyyy$/i.test(key) && match[2])
     return `${match[2]}/${match[1]}`;
-  // As month and date inputs hold them ("2023-07", "2023-07-01"). Avature's
+  // As month and date inputs hold them ("2023-07", ""). Avature's
   // job rows ask for these; with no value they were left to a guess.
   if (/_dashes_yyyymm$/i.test(key) && match[2])
     return `${match[1]}-${match[2]}`;
@@ -335,9 +334,9 @@ export function canonicalValues(
   const choice = choiceKeys[key];
   if (choice) return unique([profileChoice(choice.field, profile)]);
   // A phone's type in the wordings lists use, the applicant's own first:
-  // NGC's Workday lists "Business Mobile" and "Personal Mobile", and a
-  // plain "Mobile" picked neither (report cfbf90ad, 2026-11-02). NVIDIA's
-  // lists "Home" and "Home Cellular", its word for a mobile (2026-11-04).
+  // one employer's Workday lists "Business Mobile" and "Personal Mobile", and a
+  // plain "Mobile" picked neither. one employer's
+  // lists "Home" and "Home Cellular", its word for a mobile.
   if (/^phone_(device_)?type$/.test(key) && values[key]) {
     const type = values[key]!.trim();
     const wordings: Record<string, string[]> = {
@@ -452,11 +451,11 @@ const declineWording = [
   "decline to state",
 ];
 const standardPhrases: Partial<Record<ChoiceField, Record<string, string[]>>> = {
-  // "Authorized" / "Not Authorized" for Yes and No (Axiom Space, 2026-11-04).
+  // "Authorized" / "Not Authorized" for Yes and No.
   workAuthorization: { Yes: ["authorized"], No: ["not authorized"] },
   veteranStatus: {
     Yes: ["i identify as one or more of the classifications of protected veteran", "identify as one or more of the classifications of protected veteran", "i am a protected veteran"],
-    // "Not Protected Veteran (OFCCP)" (L3Harris, 2026-11-07).
+    // "Not Protected Veteran (OFCCP)".
     No: ["i am not a protected veteran", "not a protected veteran", "not protected veteran"],
     Decline: [...declineWording, ...declineWording.map((phrase) => `i ${phrase}`)],
   },
@@ -539,9 +538,9 @@ export function fieldOfStudyWordings(field: string): string[] {
 }
 
 // Standard fields a site's fixed list may hold in place of the applicant's
-// own, closest first, for when none of its wordings is listed: Jabil's
+// own, closest first, for when none of its wordings is listed: one employer's
 // Workday has no "Data Science" among its 325 fields, and the applicant asked
-// for the nearest computing field instead (report 8c0659ee, 2026-10-16).
+// for the nearest computing field instead.
 // Only names that common Workday and college lists use. A pick from here is
 // the closest, not the applicant's own, and the fill says so.
 const relatedFields: [RegExp, string[]][] = [
@@ -589,8 +588,7 @@ export function selectorValues(
         ? (selector.values as Record<string, JsonValue>)
         : undefined;
     const choices = choiceValues(choiceKey, raw, mapping);
-    // "I am not a veteran" (Sonos's list, with no "protected" option,
-    // 2026-11-04) is true only of someone who never served: one who did may
+    // "I am not a veteran" (one employer's list, with no "protected" option) is true only of someone who never served: one who did may
     // still not be a protected veteran. The saved military answer says.
     if (choiceKeys[choiceKey].field === "veteranStatus" && canonicalAnswer("veteranStatus", raw) === "No" && neverServed(profile))
       return unique([...choices.filter((choice) => choice !== "No"), "i am not a veteran", "not a veteran", "No"]);
@@ -601,7 +599,7 @@ export function selectorValues(
       ? canonicalValues(selector.valueKey || key, profile, context)
       : ownSource(key, asString(selector.value), profile);
   // A school or job saved as "Tucson, AZ" names no country, but its state
-  // does: Westinghouse's school rows ask for one (report cc40f1fb).
+  // does: one employer's school rows ask for one.
   const row = context.collection === "education" || context.collection === "experience"
     ? (context.collection === "education" ? profile.education : profile.work)[context.index || 0]
     : undefined;
@@ -612,7 +610,7 @@ export function selectorValues(
   }
   // A field of study as the profile words it ("M.S. Data Science, Analytics
   // & Engineering (Applied Systems)") is found in no site's list;
-  // searched, its core is ("Data Science"). Jabil's Workday, 2026-10-16.
+  // searched, its core is ("Data Science"). one employer's Workday.
   // Only where the rule checks them against the site's own list of options
   // (Workday's): a rule that clicks through a list waits on each one, and
   // SuccessFactors' Major took long enough to delay the resume upload.
@@ -621,7 +619,7 @@ export function selectorValues(
   // A school saved with its campus ("Pennsylvania State University,
   // University Park") may be listed without it: Ashby's search offered
   // "Pennsylvania State University" first, and no spelling tried
-  // matched it (report 9027045f, 2026-10-28). The full name stays first, so
+  // matched it. The full name stays first, so
   // a list naming the campus gets that campus.
   if (selector.value === undefined && context.collection === "education" && /^(name|school)$/.test(selector.valueKey || key))
     values = unique([...values, ...values.map((value) => value.split(",")[0].trim()).filter((name) => name.split(/\s+/).length >= 2)]);
@@ -744,7 +742,7 @@ export function matchOption(
       return !degreeCode || values.some((candidate) => compact(candidate) === code);
     },
     // A list's own wording with a note after it: "Not Protected Veteran
-    // (OFCCP)" is "not protected veteran" (L3Harris, 2026-11-07).
+    // (OFCCP)" is "not protected veteran".
     (option, value) => {
       const bare = option.label.replace(/\s*\([^()]*\)\s*$/, "");
       return bare !== option.label && Boolean(normalize(value)) && normalize(bare) === normalize(value);
@@ -752,7 +750,7 @@ export function matchOption(
     // A binary answer may be worded as one sentence. Generic word
     // containment cannot establish a school, degree, country or status.
     // A list's empty choice is no sentence: "No Selection" begins with "No"
-    // and was taken for it (L3Harris's Veteran Status, 2026-11-07).
+    // and was taken for it (one employer's Veteran Status).
     (option, value) => /^(yes|no)$/i.test(value.trim()) &&
       !/^(no selection|none selected|no answer)$/i.test(normalize(option.label)) &&
       new RegExp(`^${value.trim()}\\b`, "i").test(option.label.trim()),

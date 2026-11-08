@@ -30,7 +30,7 @@ test("a degree's level is read from its title, and a field's from its question",
   assert.equal(askedLevel("Unofficial Transcript (no SSN)"), undefined);
 });
 
-// Databricks' Greenhouse form (2026-11-08): the graduate transcript, the
+// one employer's Greenhouse form: the graduate transcript, the
 // only file there was, went into the box asking for the undergraduate one.
 test("each degree's field gets that degree's transcript, and a plain one the most recent", () => {
   const tagged = [artifact("MSU.pdf", { education: 0, level: "graduate" }), artifact("PSU.pdf", { education: 1, level: "undergraduate" })];

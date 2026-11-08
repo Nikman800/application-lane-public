@@ -47,35 +47,33 @@ function elsewhere(question: string, profile: Pick<Profile, "country"> & { apply
 const topics: [Topic, RegExp][] = [
   // (The "Arms Export Control Act Debarred List" is a denied-parties list.)
   ["usPerson", /\bu s person\b|\bus person\b|\bexport control(?!s? act\b)|\bitar\b|\bear regulations\b/],
-  // ("What's your citizenship / employment eligibility?", Elucid's JazzHR
-  // form, 2026-10-30.)
+  // ("What's your citizenship / employment eligibility?", one employer's JazzHR
+  // form.)
   ["citizen", /\b(u s|us|united states|american) citizen(ship)?\b|\bare you an? [a-z]+( [a-z]+)? citizen\b|\bare you a (citizen|national) of\b|^citizenship( status)?$|^(what is |what s )?(your )?citizenship( status)? (and |or )?(employment|work) (eligibility|authori[sz]ation)$|\bare you a citizen of the (u s|us|united states)\b/],
   ["clearance", /\bsecurity clearance/],
   ["relocate", /\brelocat/],
   // Working in the job's area ("Are you available to work in the Greater
-  // Boston area for the duration of this internship?", Elucid, 2026-10-30):
+  // Boston area for the duration of this internship?", an employer):
   // one willing to relocate is; for anyone else it depends on where they live.
   ["workThere", /\b(available|able|willing|open)\b.*\bto (work|be based|live) (in|near) (the )?(greater )?[a-z]+( [a-z]+)?( metro(politan)?)? (area|region)\b/],
   // ("Are you able to commit to working from one of our offices on Anchor
-  // Days each week?", Notion, 2026-10-30. Commuting to a named office is
+  // Days each week?", an employer. Commuting to a named office is
   // another question: it depends on where that office is.)
   [
     "onsite",
     /\b(willing|able|comfortable|open|okay|ok|can you|commit|available)\b.*\b(on ?site|in (the |our )?office|in person|hybrid|work(ing)? (from|at|in) (one of )?(our|the) offices?)\b|\b(on ?site|in (the |our )?office|in person|hybrid)\b.*\b(willing|able|comfortable|open|okay|ok|can you|commit|meet this requirement)\b/,
   ],
-  // ("Wage Or Salary Required", L3Harris, report b5d63aeb, 2026-10-15.)
+  // ("Wage Or Salary Required", an employer.)
   ["salary", /\b(salary|compensation|pay|wage)\b.*\b(expect\w*|desired|requirements?|required|requested|target)\b|\b(desired|expected|target) (annual |base )?(salary|compensation|pay)\b/],
-  // "What date are you available to start work?" (Expand Energy, report
-  // 4d01710e, 2026-10-29) asks it too.
+  // "What date are you available to start work?" asks it too.
   ["start", /\b(earliest|soonest)\b.*\bstart\b|\bwhen (can|could|would) you (be able to )?start\b|\b(what|which) date (are|would|will) you (be )?available to (start|begin)\b|\bwhen (are|will|would) you (be )?available to (start|begin)\b|^(desired |available |earliest |preferred )?start date$|^date available$|^available start date$/],
   ["fullTime", /\b(available|able|willing|commit)\b.*\b(full time|monday( through| to| thru)? friday|40 hours)\b/],
   ["assessment", /\b(take home|coding (assessment|challenge|test)|technical assessment|online assessment)\b/],
   ["adult", /\b(at least|over|older than) (the age of )?18\b|\b18 years( of age)? (or older|and older|old or older)\b/],
-  // ("Have you worked for Westinghouse in the past 12 months?", report
-  // d57dca7e: the time comes after the employer.)
+  // ("Have you worked for an employer in the past 12 months?": the time comes after the employer.)
   ["priorEmployment", /\b(previously|ever|formerly|in the past)\b.*\b(worked|employed|been employed|an employee|a contractor)\b|\bformer employee\b|\bworked (for|at|with) us before\b|\b(worked|been employed) (for|at|by) .+ (in|within|during) the (past|last)\b/],
   // Asked on most SuccessFactors forms, and left to the applicant each time
-  // (Expand Energy, 2026-10-30): "Are you able to perform the essential job
+  //: "Are you able to perform the essential job
   // functions … with or without reasonable accommodation?", "Military
   // Status", "Have you ever interviewed with … before?".
   ["essentialFunctions", /\bessential (job )?(functions|duties)\b/],
@@ -83,12 +81,11 @@ const topics: [Topic, RegExp][] = [
   ["interviewed", /\b(have you|did you)\b.*\b(ever |previously )?interviewed (with|at|for)\b/],
   // ("To qualify for our program, interns must be actively enrolled in a
   // bachelor's, master's, or other degree-seeking program … If you qualify,
-  // please select yes.", JM Family, report 5494cdaa, 2026-11-04.) Which
+  // please select yes.", an employer.) Which
   // school one attends is another question, asked by name.
   ["enrolled", /^(?!(what|which|where|name|please (include|list|enter|provide))\b).*\b(are you|must be|be|currently|actively)\b( currently| actively)? enrolled\b.*\b(degree|program|college|university|school|student)\b/],
   // ("Are you related or have close personal friendships with any current
-  // L3Harris employees with whom you will be directly working…", report
-  // 726eafd7, 2026-11-07.)
+  // an employer employees with whom you will be directly working…".)
   ["relatedToEmployee", /\b(are you|do you have)\b.*\b(related|relatives?|family members?|close (personal )?friendships?|personal relationships?)\b.*\bemployees?\b/],
   ["referred", /\b(were|was) you referred\b|\breferred (to this (position|job|role) )?by (someone|anyone|an? (current )?(employee|associate|team member))\b/],
 ];
@@ -125,7 +122,7 @@ export function questionTopic(question: string): Topic | undefined {
   // A notice of why something is collected ("Amazon collects this information
   // solely for the purpose of complying with … export control laws") is not
   // what is asked: before "What is your full legal name:" it made the name a
-  // U.S. person question, answered Yes (Amazon.jobs, report 5ab89018). A
+  // U.S. person question, answered Yes (Amazon.jobs). A
   // label that is only the notice asks about it.
   const notice = /\b(collect\w*|use[sd]?|request\w*|ask\w*) (this|the following|the) information solely\b|\bsolely for the purpose of\b/;
   const asking = sentences(question).filter((sentence) => !notice.test(normalize(sentence)));
@@ -137,7 +134,7 @@ export function questionTopic(question: string): Topic | undefined {
     // Citizenship of an embargoed country is not what a U.S. person
     // answer says: a U.S. citizen may hold another. "Are you a citizen of, or
     // do you hold dual citizenship with any of these countries?" after
-    // Micron's export-control notice got Yes (report 224a1d60, 2026-11-02).
+    // one employer's export-control notice got Yes.
     if (/\b(cuba|iran|north korea|syria|crimea|embargoed|sanctioned)\b/.test(normalize(question))) return;
     const topic = topics.find(([, pattern]) => pattern.test(label))?.[0];
     // A saved figure is a yearly one; an hourly rate is another question.
@@ -145,17 +142,17 @@ export function questionTopic(question: string): Topic | undefined {
     // Holding a clearance is one question; whether one could be obtained,
     // or what might prevent it, are others. "Do you hold an active security
     // clearance? No" answered "Are you eligible to obtain a U.S. security
-    // clearance?" No (L3Harris, report 17ac6723, 2026-10-15).
+    // clearance?" No.
     if (topic === "clearance" && /\b(obtain\w*|get|getting|receiv\w*|acquir\w*|be granted|prevent\w*)\b/.test(label)) return;
     // Where one would move from is a place, not whether one would move:
     // "…please tell us the city, state, and zip code you'd be moving from"
-    // was answered "Yes" (Applied Materials, report 297590e2, 2026-11-08).
+    // was answered "Yes".
     if (topic === "relocate" && (/\bcity\b.*\bstate\b.*\b(zip|postal)\b/.test(normalize(question)) || /\b(moving|relocating) from\b/.test(normalize(question)))) return;
     return topic;
   };
   if (!asked) return of(question);
   // "Are you one of the following?" asks about the list after it, as "these"
-  // does about the text before (Westinghouse's citizenship list, cc40f1fb).
+  // does about the text before (one employer's citizenship list, cc40f1fb).
   return of(asked) ?? (/\b(this|these|that|those|the above|the following|such)\b/.test(normalize(asked)) ? of(question) : undefined);
 }
 
@@ -166,15 +163,15 @@ type Answer = Pick<Proposal, "value" | "choices" | "numeric">;
 function yesNo(answer: "Yes" | "No", field: Field): Answer {
   // A list's placeholder ("No Selection") is no way of saying No.
   const worded = field.options.filter((option) => new RegExp(`^${answer}\\b`, "i").test(option.trim()) && normalize(option) !== normalize(answer) && !/^no selection$/.test(normalize(option)));
-  // A list with no No says it as not applying: LinkedIn's "Do you currently
-  // or have you previously worked at LinkedIn or Microsoft? (Select all that
-  // apply)" offers "Not Applicable" beside each way one has (2026-11-04).
+  // A list with no No says it as not applying: one employer's "Do you currently
+  // or have you previously worked at an employer or Microsoft? (Select all that
+  // apply)" offers "Not Applicable" beside each way one has.
   const inapplicable = answer === "No" && !worded.length && !field.options.some((option) => normalize(option) === "no")
     ? field.options.filter((option) => /^(not applicable|n a|does not apply)$/.test(normalize(option)))
     : [];
   if (inapplicable.length) return { value: inapplicable[0], choices: inapplicable.slice(1) };
-  // Or as the sentence a No makes: Rubrik's "I have never been employed by
-  // Rubrik or contracted to provide services to Rubrik" (2026-11-07). One
+  // Or as the sentence a No makes: one employer's "I have never been employed by
+  // an employer or contracted to provide services to an employer". One
   // such option only; two would need telling apart.
   const never = answer === "No" && !worded.length && !field.options.some((option) => normalize(option) === "no")
     ? field.options.filter((option) => /^(i have never|i ve never|never|i have not|i haven t|i am not and have never)\b/.test(normalize(option)))
@@ -184,13 +181,13 @@ function yesNo(answer: "Yes" | "No", field: Field): Answer {
 }
 
 // The ways a list of statuses words a citizen. (JazzHR's own list puts
-// citizens and permanent residents together, Elucid, 2026-10-30.)
+// citizens and permanent residents together, an employer.)
 export const citizenWordings = ["U.S. Citizen", "US Citizen", "United States Citizen", "Citizen", "A citizen of the U.S.", "A citizen of the United States", "Citizen of the U.S.", "Citizen of the United States", "A U.S. citizen", "U.S. Citizen or National", "A United States citizen or national", "A U.S. citizen or national", "I am a U.S. Citizen/Permanent Resident", "U.S. Citizen/Permanent Resident", "U.S. Citizen or Permanent Resident"];
 
 const plainYesNo = (value: string): "Yes" | "No" | undefined =>
   /^\s*yes\b/i.test(value) ? "Yes" : /^\s*no(ne)?\b/i.test(value) ? "No" : undefined;
 
-// An employer's name without its legal form: "Westinghouse Electric
+// An employer's name without its legal form: "an employer Electric
 // Company, LLC" reads "westinghouse electric".
 const legalForm = /\b(inc|incorporated|llc|l l c|llp|ltd|limited|corp|corporation|company|co|group|plc|gmbh|ag|sa|s a|bv|nv|pty|holdings?|the)\b/g;
 const employerWords = (name: string) => normalize(name).replace(legalForm, " ").replace(/\s+/g, " ").trim();
@@ -279,7 +276,7 @@ export function standingAnswer(field: Field, profile: Profile): Answer | undefin
     if (/^(text|textarea|email|tel|number|url|date)$/.test(field.kind)) return;
     // A question naming one level of degree asks about that level: "Are you
     // currently enrolled in a Doctorate Degree program…?" was answered Yes
-    // for a master's student (Microsoft, 2026-11-07). A program under way at
+    // for a master's student (Microsoft). A program under way at
     // another level, No; at that level, as any enrollment. One naming several
     // ("a bachelor's, master's, or other degree-seeking program") asks any.
     const named = ([
@@ -301,9 +298,8 @@ export function standingAnswer(field: Field, profile: Profile): Answer | undefin
     return enrolledNow(profile) ? yesNo("Yes", field) : undefined;
   }
   // A box that asks for the details behind the question ("If you have
-  // previously worked at LinkedIn, please provide your approximate last date
-  // of employment (MM/DD/YYYY)") is not answered Yes or No: it got "No"
-  // (2026-11-04).
+  // previously worked at an employer, please provide your approximate last date
+  // of employment (MM/DD/YYYY)") is not answered Yes or No: it got "No".
   if ((topic === "priorEmployment" || topic === "referred" || topic === "interviewed") &&
     /^(text|email|tel|number|url|date|datepicker)$/.test(field.kind) &&
     (field.format || /\b(provide|enter|list|give|specify|include|share)\b.*\b(date|dates|email|name|names|address|id|number|title|details?|when|where|who)\b|\b(mm dd yyyy|mm yyyy|dd mm yyyy)\b/.test(label)))
@@ -316,11 +312,10 @@ export function standingAnswer(field: Field, profile: Profile): Answer | undefin
   if (topic !== "citizen" && topic !== "usPerson" && topic !== "referred" && elsewhere(field.label, profile)) return;
   // Referred by someone at the company the question names: the people who
   // vouch for the applicant are saved as references, each with where they
-  // work. None of them there, nobody there referred them (Westinghouse,
-  // report d57dca7e). One who might be, or a question naming no company,
+  // work. None of them there, nobody there referred them. One who might be, or a question naming no company,
   // is left for the applicant.
   if (topic === "referred" && !profile.answers.some((answer) => questionTopic(answer.question) === "referred")) {
-    // "…by someone at Westinghouse?": its first word, without "Electric
+    // "…by someone at an employer?": its first word, without "Electric
     // Company, LLC" after it.
     const company = label.match(/\b(?:at|from|of) ([a-z0-9&]+)(?: [a-z0-9&]+)*$/)?.[1];
     if (!company || /^(us|our|this|the|your|a|an)$/.test(company)) return;
@@ -376,7 +371,7 @@ export function standingAnswer(field: Field, profile: Profile): Answer | undefin
           ? (person ? "Yes" : "No")
           : // The applicant's citizenships, work authorization entries or
             // export-control statement saying so answer a citizenship
-            // question no saved answer words (Westinghouse, report cc40f1fb).
+            // question no saved answer words.
             topic === "citizen" && citizen !== undefined
             ? (citizen ? "Yes" : "No")
             : "");
@@ -385,7 +380,7 @@ export function standingAnswer(field: Field, profile: Profile): Answer | undefin
   // A Yes worded as living there already ("Yes, I am currently based in
   // Atlanta, GA") is the applicant's only where they live; willing to
   // relocate is the other Yes. Both read as Yes, and the first was taken for
-  // an applicant in their own city (CharterUP, 2026-11-07).
+  // an applicant in their own city.
   if ((topic === "relocate" || topic === "workThere") && yes === "Yes") {
     const answer = yesNo("Yes", field);
     const located = /\b(currently|already|presently)\b.*\b(based|located|living|live|reside|residing)\b|\b(i am|i m) local\b/;
@@ -419,13 +414,13 @@ export function standingAnswer(field: Field, profile: Profile): Answer | undefin
     // takes only a date gets today's: the date the applicant could start.
     // Another saved answer ("Two weeks' notice") is no date, and is left.
     // A date picker can read as a text box: "Date Available" on SuccessFactors
-    // got "Immediately" typed into it (L3Harris, report 5beb4b34).
+    // got "Immediately" typed into it.
     // A question asked in words ("What is your earliest start date?") still
     // takes "Immediately".
     if (/date/.test(field.kind) || (!field.options.length && /^(date available|available (start )?date|availability date|(earliest )?start date|date of availability)$/.test(label))) {
       if (!/^\s*(immediately|immediate|asap|right away|now)\b/i.test(saved)) return;
       // Amazon's picker names its format, "Date: Year-Month-Day", and calls
-      // "10/25/2026" the wrong one (report 4d8218b1). Without a format
+      // "10/25/2026" the wrong one. Without a format
       // shown or known, the date is left.
       const value = writtenDate(localDate(), field, profile);
       return value ? { value } : undefined;

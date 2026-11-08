@@ -42,7 +42,7 @@ const fetcher = (async (url: string | URL) => {
   return body ? new Response(JSON.stringify(body)) : new Response("missing", { status: 404 });
 }) as typeof fetch;
 
-// Finding jobs (2026-10-30): the applicant's roles and places, or the ones
+// Finding jobs: the applicant's roles and places, or the ones
 // their profile suggests, over SimplifyJobs and companies' own job boards.
 test("a job search finds the roles and places asked for, newest and closest first", async () => {
   const cacheDir = await mkdtemp(join(tmpdir(), "lane-search-"));
@@ -86,13 +86,12 @@ test("a search from the profile looks for its roles, where the applicant lives u
 test("a company's job board is named by its address or as ats:slug", () => {
   assert.deepEqual(boardFor("https://job-boards.greenhouse.io/acme"), { ats: "greenhouse", slug: "acme" });
   assert.deepEqual(boardFor("jobs.lever.co/acme/123"), { ats: "lever", slug: "acme" });
-  assert.deepEqual(boardFor("https://jobs.ashbyhq.com/notion"), { ats: "ashby", slug: "notion" });
-  assert.deepEqual(boardFor("ashby:notion"), { ats: "ashby", slug: "notion" });
+  assert.deepEqual(boardFor("https://jobs.ashbyhq.com/acme"), { ats: "ashby", slug: "acme" });
+  assert.deepEqual(boardFor("ashby:acme"), { ats: "ashby", slug: "acme" });
   assert.equal(boardFor("https://example.com/careers"), undefined);
 });
 
-// One Workday requisition queued twice from two of its addresses (KLA,
-// 2026-11-03): another career site of the tenant, "/apply", a posting suffix.
+// One Workday requisition queued twice from two of its addresses: another career site of the tenant, "/apply", a posting suffix.
 test("addresses of one Workday requisition are one opening, and other requisitions are not", () => {
   const search = "https://acme.wd1.myworkdayjobs.com/search/job/Springfield-IL/Software-Engineer-Intern_2642721-1";
   const apply = "https://acme.wd1.myworkdayjobs.com/en-US/Careers/job/Springfield%2C-IL/Software-Engineer-Intern_2642721/apply?ssoProvider=google";
@@ -111,7 +110,7 @@ test("addresses of one Workday requisition are one opening, and other requisitio
 
 // An application's address follows the tab through the apply flow (a
 // success page, Workday's "userHome", SmartRecruiters' one-click form), and
-// the day's submitted openings were not marked tracked (2026-11-07).
+// the day's submitted openings were not marked tracked.
 test("a listing is tracked by its application's job id or its company and title, wherever the application ended", () => {
   const known = [
     { url: "https://careers-acme.icims.com/jobs/93894/platform-engineer/job?mode=submit_apply", company: "acme", title: "Platform Engineer" },

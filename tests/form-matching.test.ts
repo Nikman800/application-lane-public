@@ -57,9 +57,8 @@ test("education aliases preserve degree level and specialization", () => {
   assert.deepEqual(proposals([field("Degree", { kind: "select", options: ["Bachelor of Arts", "Master's"] })], science), []);
   assert.equal(degreeAliases("BS").includes("Bachelor of Science"), true);
   assert.equal(degreeAliases("Unknown certificate").length, 0);
-  // A plural level ("Masters of Science") is the same degree: Cisco's
-  // Workday lists "Master of Science", and both Degree boxes stayed empty
-  // (2026-10-17).
+  // A plural level ("Masters of Science") is the same degree: one employer's
+  // Workday lists "Master of Science", and both Degree boxes stayed empty.
   assert.equal(degreeAliases("Masters of Science")[0], "Master of Science");
   assert.equal(degreeAliases("Bachelors of Science")[0], "Bachelor of Science");
   assert.equal(degreeAliases("Bachelors of Arts")[0], "Bachelor of Arts");
@@ -68,53 +67,52 @@ test("education aliases preserve degree level and specialization", () => {
   assert.equal(deterministicAnswer(field("School"), science), science.education[0].organization);
   assert.equal(deterministicAnswer(field("Current location"), science), science.city);
   assert.equal(deterministicAnswer(field("Where are you currently located?"), science), science.city);
-  // Reports, 2026-10-13 (Ashby): "(City, State)" got the country as well, and
+  // Reports (Ashby): "(City, State)" got the country as well, and
   // "Preferred Last Name" was left empty.
   assert.equal(proposals([field("Where are you currently located? (City, State)")], science)[0]?.value, [science.city, science.state].filter(Boolean).join(", "));
   assert.equal(proposals([field("Where are you currently located? (City, State, Country)")], science)[0]?.value, [science.city, science.state, science.country].filter(Boolean).join(", "));
   assert.equal(proposals([field("Preferred Last Name")], science)[0]?.value, science.lastName);
-  // A report, 2026-10-14 (Pinterest, Greenhouse): "…to work in the country in
+  // A report (an employer, Greenhouse): "…to work in the country in
   // which you are applying" names no country; the list was left empty.
   const sponsored = proposals([field("Will you now or in the future require employer sponsorship or other employer assistance to obtain, extend, or maintain authorization to work in the country in which you are applying for a position ?", { kind: "combobox" })], us(science, "", "No"))[0];
   assert.equal(sponsored?.value, "No");
   assert.equal(proposals([field("Will you require sponsorship to work in which country?", { kind: "combobox" })], us(science, "", "No"))[0], undefined);
-  // Citi's Workday, 2026-10-28: "the country or jurisdiction where the
+  // one employer's Workday: "the country or jurisdiction where the
   // position to which you are applying is located" names none either.
-  const citi = us(science, "Yes", "No");
-  assert.equal(proposals([field("Will you, now or in the future, require sponsorship for employment in the country or jurisdiction where the position to which you are applying is located?", { kind: "combobox" })], citi)[0]?.value, "No");
-  assert.equal(proposals([field("Are you legally authorized to work in the country or jurisdiction where the position to which you are applying is located?", { kind: "combobox" })], citi)[0]?.value, "Yes");
-  // NVIDIA's Workday asks the job's country, then "that country" (report
-  // 8ca807c1, 2026-11-04), its options unread until the list opens.
-  assert.equal(proposals([field("Will you require employer support to obtain or maintain authorization to work in that country? e.g. (work permit)", { kind: "combobox" })], citi)[0]?.value, "No");
-  // Axiom Space's Workday lists "Authorized" and "Not Authorized" (report 0197354d).
-  assert.equal(proposals([field("Are you legally authorized to work in the United States?", { kind: "combobox", options: ["Authorized", "Not Authorized"] })], citi)[0]?.value, "Authorized");
-  // Microsoft's careers site words it "country/region" (report ae0e9ee8).
-  assert.equal(proposals([field("Are you legally authorized to work in the country/region you are applying for?", { kind: "combobox" })], citi)[0]?.value, "Yes");
+  const bank = us(science, "Yes", "No");
+  assert.equal(proposals([field("Will you, now or in the future, require sponsorship for employment in the country or jurisdiction where the position to which you are applying is located?", { kind: "combobox" })], bank)[0]?.value, "No");
+  assert.equal(proposals([field("Are you legally authorized to work in the country or jurisdiction where the position to which you are applying is located?", { kind: "combobox" })], bank)[0]?.value, "Yes");
+  // one employer's Workday asks the job's country, then "that country", its options unread until the list opens.
+  assert.equal(proposals([field("Will you require employer support to obtain or maintain authorization to work in that country? e.g. (work permit)", { kind: "combobox" })], bank)[0]?.value, "No");
+  // one employer's Workday lists "Authorized" and "Not Authorized".
+  assert.equal(proposals([field("Are you legally authorized to work in the United States?", { kind: "combobox", options: ["Authorized", "Not Authorized"] })], bank)[0]?.value, "Authorized");
+  // Microsoft's careers site words it "country/region".
+  assert.equal(proposals([field("Are you legally authorized to work in the country/region you are applying for?", { kind: "combobox" })], bank)[0]?.value, "Yes");
   // Being authorized does not say the applicant can produce the documents.
-  assert.equal(proposals([field("Can you, within the time period prescribed by law, submit verification of both your identity and authorization to work in the country or jurisdiction where the position to which you are applying is located? (Proof will be required)", { kind: "combobox" })], citi)[0], undefined);
-  // Epic Games' form, 2026-10-14: "the location associated with this job
+  assert.equal(proposals([field("Can you, within the time period prescribed by law, submit verification of both your identity and authorization to work in the country or jurisdiction where the position to which you are applying is located? (Proof will be required)", { kind: "combobox" })], bank)[0], undefined);
+  // one employer's form: "the location associated with this job
   // posting" names no place, and "legal authorization to work" is asked.
   const epic = us(science, "Yes", "No");
   assert.equal(proposals([field("Do you now, or will you in the future, require sponsorship for employment authorization in order to legally work in the location associated with this job posting?", { kind: "combobox" })], epic)[0]?.value, "No");
   assert.equal(proposals([field("Do you have legal authorization to work in the geographic region specified for the internship?", { kind: "combobox" })], epic)[0]?.value, "Yes");
   assert.equal(proposals([field("Are you willing to work in the location of this role?", { kind: "combobox" })], epic)[0], undefined);
-  // A report, 2026-10-13 (Greenhouse): the race list loads its options only
+  // A report (Greenhouse): the race list loads its options only
   // when opened, and was left empty.
   const race = proposals([field("Please identify your race", { kind: "combobox", required: false })], { ...science, ethnicity: "South Asian" })[0]!;
   assert.equal(pickListOption(race, ["American Indian or Alaskan Native", "Asian", "Black or African American", "White"], (option) => option), "Asian");
   assert.equal(pickListOption(race, ["Asian", "South Asian", "White"], (option) => option), "South Asian");
   assert.equal(proposals([field("Please identify your race", { kind: "combobox", required: false })], { ...science, ethnicity: "" })[0], undefined);
-  // A report, 2026-10-13 (Greenhouse): a question about one project, with its
+  // A report (Greenhouse): a question about one project, with its
   // description and challenges, was answered with the GitHub profile.
   const linked = { ...science, github: "github.com/example" };
   assert.equal(proposals([field("Can you provide a link to a recent project you’ve worked on? Please include a brief description of the project, any challenges you faced, and the link to it.", { kind: "textarea" })], linked)[0]?.value, undefined);
   assert.equal(proposals([field("Please share a link to your projects or GitHub")], linked)[0]?.value, "https://github.com/example");
-  // A report, 2026-10-13 (Greenhouse): the phone country list says "United
+  // A report (Greenhouse): the phone country list says "United
   // States +1"; the profile says "United States of America".
   const american = { ...science, country: "United States of America" };
   const phoneCountry = proposals([field("Country", { kind: "select", options: ["Canada +1", "United States +1", "United Kingdom +44"] })], american)[0]!;
   assert.equal(pickListOption(phoneCountry, ["Canada +1", "United States +1", "United Kingdom +44"], (option) => option), "United States +1");
-  // Amazon asks it as a question (report f686f6a0, 2026-10-25).
+  // Amazon asks it as a question.
   const located = proposals([field("What country/region are you currently located?", { kind: "select", options: ["Canada", "United States"] })], american)[0]!;
   assert.equal(pickListOption(located, ["Canada", "United States"], (option) => option), "United States");
   assert.equal(deterministicAnswer(field("Desired location"), science), undefined);
@@ -155,7 +153,7 @@ const field = (label: string, overrides: Partial<Field> = {}): Field => ({
   ...overrides,
 });
 
-// PageUp (report 98d686e3) labels its address fields "Postcode/ZIP:" and
+// PageUp labels its address fields "Postcode/ZIP:" and
 // "State / District:"; neither was answered from the profile.
 test("a postcode and a state asked for under their regional names are answered from the profile", () => {
   for (const label of ["Postcode/ZIP:", "Postcode", "Post code", "ZIP / Postal code"])
@@ -165,7 +163,7 @@ test("a postcode and a state asked for under their regional names are answered f
   assert.equal(deterministicAnswer(field("Postcode of your school"), profile), undefined);
 });
 
-// PageUp (report 645e8cca) pre-fills "Home address line two" from the
+// PageUp pre-fills "Home address line two" from the
 // account's older address; the profile's address has no second line.
 test("a second address line the site kept from another address is emptied, or replaced with the profile's", () => {
   const stale = (label: string, overrides: Partial<Field> = {}) =>
@@ -189,7 +187,7 @@ test("a second address line the site kept from another address is emptied, or re
   assert.deepEqual(proposals([stale("Middle name")], profile), []);
 });
 
-// AMD's iCIMS (report d9900f7d, 2026-11-07): the site's parser put
+// one employer's iCIMS: the site's parser put
 // "Hyderabad" under a job the profile says was remote.
 test("a place the site parsed for a remote job is emptied", () => {
   const remote = profileSchema.parse({
@@ -210,7 +208,7 @@ test("a place the site parsed for a remote job is emptied", () => {
   assert.deepEqual(proposals([parsed("City", 1, { section: "Education" })], remote), []);
 });
 
-// SuccessFactors (Westinghouse, report 63ee7aa5) pre-fills "Home/Area Code"
+// SuccessFactors (Contoso) pre-fills "Home/Area Code"
 // and "Home Phone #" from the account's older number; neither was replaced
 // with the profile's.
 test("a home phone and area code the site kept from an older number are replaced with the profile's", () => {
@@ -227,7 +225,7 @@ test("a home phone and area code the site kept from an older number are replaced
   assert.equal(deterministicAnswer(field("Area Code"), profile), undefined);
 });
 
-// PageUp (report b040f06f) pre-fills "Education status:" with "Completed"
+// PageUp pre-fills "Education status:" with "Completed"
 // from the resume; a degree still under way was never corrected.
 test("an education status is answered from the degree's end date, and a wrong pre-filled one is replaced", () => {
   const status = (overrides: Partial<Field> = {}) =>
@@ -724,7 +722,7 @@ test("demographic choices come from the profile, matched to each portal's option
   ];
   assert.equal(pick("Veteran Status", veteran), "I am not a protected veteran");
   assert.equal(pick("Veteran Status", veteran, { ...applicant, veteranStatus: "Yes" }), veteran[0]);
-  // PageUp's VEVRAA question (issue report 2026-10-03) says only "veterans",
+  // PageUp's VEVRAA question (issue report) says only "veterans",
   // and its decline is spelled with a Unicode hyphen.
   const vevraa =
     "If you believe you belong to any of the categories of protected veterans listed above, please indicate by checking the appropriate box below. As a Government contractor subject to VEVRAA, we request this information.";
@@ -739,7 +737,7 @@ test("demographic choices come from the profile, matched to each portal's option
   ];
   assert.equal(pick("Disability Status", disability), disability[1]);
   assert.equal(pick("Disability Status", disability, { ...applicant, disabilityStatus: "Decline" }), "I do not want to answer");
-  // PageUp's copy of the form (issue report 2026-10-03) asks only "Please
+  // PageUp's copy of the form (issue report) asks only "Please
   // check one of the boxes below:"; its options say what is being asked.
   const boxes = "Please check one of the boxes below:";
   const pageUp = [disability[0], "No, I don't have a disability", "I don't wish to answer"];
@@ -761,7 +759,7 @@ test("demographic choices come from the profile, matched to each portal's option
   assert.equal(pick("Ethnicity", ["Asian", "Other ethnic group (Prefer not to say or self-describe)"], decliner), undefined);
   // A decline that only repeats the question's words still counts.
   assert.equal(pick("Veteran Status", veteran, { ...applicant, veteranStatus: "Decline" }), veteran[2]);
-  // Groups listed with their definitions (PageUp, issue report 2026-10-03):
+  // Groups listed with their definitions (PageUp, issue report):
   // a definition names other groups' places, and is not what the option says.
   const defined = [
     "Hispanic or Latino A person of Cuban, Mexican, Puerto Rican, South or Central American, or other Spanish culture or origin, regardless of race.",
@@ -795,7 +793,7 @@ test("demographic choices come from the profile, matched to each portal's option
   assert.equal(pick("Gender", ["Male", "Female"], profileSchema.parse({ ...applicant, gender: "" })), undefined);
 });
 
-// Bank of America / TalNet, report 6527a0ce: a previous degree must not be
+// Bank of America / TalNet: a previous degree must not be
 // denied when both current and previous education are in the profile.
 test("previous university education is confirmed by multiple education entries", () => {
   const question = field("Do you have any previous university education?", {
@@ -816,7 +814,7 @@ test("previous university education is confirmed by multiple education entries",
   })), "No");
 });
 
-// Greenhouse (Anduril, task e90ed1a9, 2026-10-17): the export-control
+// Greenhouse (an employer, task e90ed1a9): the export-control
 // question lists the kinds of U.S. person instead of Yes and No. The
 // applicant's citizenship is in the profile's export-control statement, not
 // in a saved answer, and the question was left empty.
@@ -841,15 +839,15 @@ test("a citizen's export-control statement picks the citizen from a list of U.S.
   assert.equal(pick(legal("")), undefined);
   // A Yes/No version takes Yes from the statement.
   assert.equal(pick(legal("U.S. person (permanent resident)"), ["Yes", "No"]), "Yes");
-  // NGC's words a citizen "A citizen of the U.S." (report b80c92a2).
+  // one employer's words a citizen "A citizen of the U.S.".
   assert.equal(pick(legal("U.S. citizen (a U.S. person under ITAR and EAR)"), ["A citizen of the U.S.", "A lawful permanent resident of the U.S.", "None of the above"]), "A citizen of the U.S.");
   // Citizenship of an embargoed country is another question, the applicant's
-  // to answer (Micron, report 224a1d60): it got "Yes".
-  const embargo = "All Micron sites must observe U.S. export control rules that control information that may be provided to persons from Cuba, Iran, North Korea, and Syria. Are you a citizen of, or do you hold dual citizenship with any of these countries?";
+  // to answer: it got "Yes".
+  const embargo = "All Acme sites must observe U.S. export control rules that control information that may be provided to persons from Cuba, Iran, North Korea, and Syria. Are you a citizen of, or do you hold dual citizenship with any of these countries?";
   assert.deepEqual(proposals([field(embargo, { kind: "combobox", options: [] })], legal("U.S. citizen (a U.S. person under ITAR and EAR)")), []);
 });
 
-// Amazon.jobs (report 5ab89018, 2026-10-25) opens several export-control
+// Amazon.jobs opens several export-control
 // questions with the same notice. The applicant's full legal name, the
 // denied-persons question (its "Arms Export Control Act" list) and the dual
 // citizenship box were each answered Yes as if they asked about U.S. person
@@ -900,12 +898,11 @@ test("a saved answer covers the same standing question in other words, and no ot
   assert.equal(value("Citizenship Status", { kind: "select", options: ["U.S. Citizen", "Permanent Resident", "Other"] }), "U.S. Citizen");
   assert.equal(value("This position is subject to export control laws. Are you a U.S. person?", { kind: "select", options: ["Yes", "No"] }), undefined);
   assert.equal(value("This role requires being in the office 5 days a week. Are you able to meet this requirement?", { kind: "select", options: ["Yes", "No"] }), "Yes");
-  // Notion (2026-10-30): working from one of its offices on set days.
+  // an employer: working from one of its offices on set days.
   assert.equal(value("We work from our offices on Mondays, Tuesdays, and Thursdays (Anchor Days). If you need an accommodation, we’ll partner with you and explore reasonable options consistent with applicable law. Are you able to commit to working from one of our offices on Anchor Days each week?", { kind: "radio", options: ["Yes", "No"] }), "Yes");
   assert.equal(value("What is your earliest start date?"), "Immediately");
   assert.equal(value("Have you previously worked at Acme?", { kind: "select", options: ["Yes", "No"] }), "No");
-  // A box that takes only a date gets today's for "Immediately" (a report,
-  // 2026-10-13: Ashby's date picker dropped the word, and the applicant
+  // A box that takes only a date gets today's for "Immediately" (a report: Ashby's date picker dropped the word, and the applicant
   // entered the day themselves), in the box's own format.
   const today = new Date();
   const two = (n: number) => String(n).padStart(2, "0");
@@ -1054,7 +1051,7 @@ test("an abbreviation inside a question does not cut it, and Yes or No reach a s
   // Two "Yes…" options are two answers: neither is chosen.
   assert.throws(() => pick("Yes", ["Yes, as a citizen", "Yes, on a visa", "No"]));
   assert.equal(pick("Yes", ["Yesterday", "Never"]), undefined);
-  // A report, 2026-10-13 (Greenhouse): one school listed twice, with a hyphen
+  // A report (Greenhouse): one school listed twice, with a hyphen
   // and with a long dash. That is one answer; the same text twice is not.
   const school = "Pennsylvania State University - University Park";
   const dashed = "Pennsylvania State University — University Park";
@@ -1178,7 +1175,7 @@ test("late dropdown options cannot add visa or future facts to a bare saved bina
   assert.equal(pickOption({ value: "No" }, ["No, I do not require sponsorship"], option => option), "No, I do not require sponsorship");
 });
 
-// Reports on two Ashby forms, 2026-10-13.
+// Reports on two Ashby forms.
 test("one box of a checkbox question is ticked only when it is the profile's answer to that question", () => {
   const applicant = profileSchema.parse({
     ...profile,
@@ -1220,8 +1217,8 @@ test("a graduation date box gets the whole date, and a season its term", () => {
   assert.equal(pick("Anticipated graduation season", { kind: "radio", options: ["Spring 2099", "Fall 2099"] }, december), "Fall 2099");
   // A season with no year the list offers is left alone.
   assert.equal(pick("Anticipated graduation season", { kind: "radio", options: ["Spring 2098", "Fall 2098"] }), undefined);
-  // A list of spans takes the one holding the month (American Express's
-  // Oracle form, 2026-10-25), and a list read only when opened can match it.
+  // A list of spans takes the one holding the month (one employer's
+  // Oracle form), and a list read only when opened can match it.
   const quarters = { kind: "select", options: ["January - March 2099", "April - June 2099", "July - September 2099", "October - December 2099", "January - March 2100"] };
   assert.equal(pick("What is your expected graduation date:", quarters, december), "October - December 2099");
   assert.equal(pick("What is your expected graduation date:", quarters), "April - June 2099");
@@ -1254,7 +1251,7 @@ test("name pronunciation, transgender and age come from the profile, and stay em
     assert.equal(pick(label, overrides, profile), undefined, label);
 });
 
-// JazzHR (Axtria, report 0c460367, 2026-10-14) asks for the school, major
+// JazzHR asks for the school, major
 // and degree of one level of study, and for the highest degree's date.
 test("a question naming a level of study is answered from the education row at that level", () => {
   const applicant = profileSchema.parse({
@@ -1283,7 +1280,7 @@ test("a question naming a level of study is answered from the education row at t
   assert.equal(proposals([field("Name of the School: Graduate/MBA/PhD Degree")], twice).length, 0);
 });
 
-// JazzHR (Axtria, report 0c460367, 2026-10-14) draws a yes/no question as
+// JazzHR draws a yes/no question as
 // one checkbox per answer, the question carried by each box.
 test("Yes and No drawn as boxes of a sponsorship question tick the profile's answer", () => {
   const applicant = profileSchema.parse({ ...profile, workAuthorization: "Yes", sponsorship: "No" });
@@ -1301,7 +1298,7 @@ test("Yes and No drawn as boxes of a sponsorship question tick the profile's ans
   assert.equal(proposals(abroad, applicant).length, 0);
 });
 
-// The applicant asked, 2026-10-14: forms that ask for a full legal name did
+// The applicant asked: forms that ask for a full legal name did
 // not get the middle name. It is its own profile value now.
 test("a legal name includes the middle name, an everyday full name does not", () => {
   const named = profileSchema.parse({ confirmed: true, firstName: "Alex", middleName: "Jordan", lastName: "Rivera", email: "alex@example.test", facts: [], work: [], education: [], skills: [], answers: [] });
@@ -1320,7 +1317,7 @@ test("a legal name includes the middle name, an everyday full name does not", ()
   assert.equal(proposals([field("Middle name")], plain)[0], undefined);
 });
 
-// JazzHR (Axtria, report 14eb9da9, 2026-10-14): the school lists lacked the
+// JazzHR: the school lists lacked the
 // applicant's schools, and each was followed by a box for the name of one
 // chosen as "Other"; the applicant asked for Other and the name.
 test("a school list without the school picks its Other, and the box after it gets the name", () => {
@@ -1359,19 +1356,19 @@ test("a school list without the school picks its Other, and the box after it get
   assert.equal(answers(lists(["Other (US Based Schools)"]).filter((f) => !/Name$/.test(f.id))).under, undefined);
 });
 
-// SuccessFactors (WEC Energy Group, report 624039b6, 2026-10-14) asks about
+// SuccessFactors (Contoso Energy Group) asks about
 // sponsorship without the word: "…commence an immigration case in order to
 // employ you? (e.g. H-1B…)". Its list loads only when opened.
 test("asking an employer to commence an immigration case is a sponsorship question", () => {
   const applicant = profileSchema.parse({ ...profile, workAuthorization: "Yes", sponsorship: "No" });
   const ask = (label: string) => proposals([field(label, { kind: "combobox" })], applicant)[0]?.value;
-  assert.equal(ask("Will you now or in the future ask WEC Energy Group or any of our subsidiaries to commence an immigration case in order to employ you? (e.g. H-1B or other immigration cases)"), "No");
+  assert.equal(ask("Will you now or in the future ask Contoso Energy Group or any of our subsidiaries to commence an immigration case in order to employ you? (e.g. H-1B or other immigration cases)"), "No");
   assert.equal(ask("Will you now or in the future ask Acme to file an immigration petition on your behalf?"), "No");
   // Another country's case is not the profile's to answer.
   assert.equal(ask("Will you ask Acme to commence an immigration case to work in Canada?"), undefined);
 });
 
-// Ashby (Applied Intuition, 2026-10-28) asks "Do you currently have an
+// Ashby asks "Do you currently have an
 // active immigration case (ex H-1B extension, green card)?" and it was left
 // to the applicant. A U.S. citizen has none; anyone else might.
 test("a citizen has no active immigration case", () => {
@@ -1383,7 +1380,7 @@ test("a citizen has no active immigration case", () => {
   assert.equal(ask("Yes"), undefined);
 });
 
-// L3Harris's SuccessFactors form (report 5beb4b34, 2026-10-15) asks these as
+// one employer's SuccessFactors form asks these as
 // sentences: the highest level completed is the finished degree; the major
 // is the program studied now (the model gave the finished degree's); and
 // "Date Available" is a date picker that reads as a text box.
@@ -1404,7 +1401,7 @@ test("SuccessFactors' education sentences and its availability date are answered
   assert.equal(ask("Date Available"), `${two(today.getMonth() + 1)}/${two(today.getDate())}/${today.getFullYear()}`);
 });
 
-// Amazon's internship form (report 4d8218b1, 2026-10-25) names its date
+// Amazon's internship form names its date
 // format in the label, and "10/25/2026" was "not in the correct format".
 test("a start-date picker whose label names Year-Month-Day gets today's date in that format", () => {
   const applicant = profileSchema.parse({ ...profile, answers: [{ question: "When can you start?", answer: "Immediately" }] });
@@ -1416,7 +1413,7 @@ test("a start-date picker whose label names Year-Month-Day gets today's date in 
   assert.equal(value, `${today.getFullYear()}-${two(today.getMonth() + 1)}-${two(today.getDate())}`);
 });
 
-// L3Harris's SuccessFactors profile (2026-10-15): "Degree Conferred" is a
+// one employer's SuccessFactors profile: "Degree Conferred" is a
 // date, and the model wrote "Bachelors of Science" into it. A finished
 // degree gives its end date. One in progress is conferred on its expected
 // date but not yet received.
@@ -1435,7 +1432,7 @@ test("a degree-conferred box gets the degree's date, expected for one in progres
   assert.equal(ask(0, "Degree Received"), undefined);
 });
 
-// L3Harris (report 17ac6723, 2026-10-15) asks "What year did you or, if you
+// an employer asks "What year did you or, if you
 // have not graduated, will you receive your degree?" twice: once in a text
 // box, which takes the year, and once in a date picker, where "2027" was
 // invalid: it takes the whole expected date.
@@ -1452,7 +1449,7 @@ test("a will-you-receive-your-degree question gets the year in a text box and th
   assert.equal(ask("What year did you or if you have not graduated will you receive your degree?", "datepicker"), "05/10/2099");
 });
 
-// L3Harris (2026-10-16) asks "Please indicate your current year of study in
+// an employer asks "Please indicate your current year of study in
 // college." as a list and as a text box. An M.S. begun more than a year ago
 // is in its second year: a graduate student, never an undergraduate class.
 test("the current year of study is counted from the program under way", () => {
@@ -1481,7 +1478,7 @@ test("the current year of study is counted from the program under way", () => {
   assert.equal(ask(bachelor, "text")?.value, "Third year (Junior)");
 });
 
-// Jabil's Workday form (2026-10-16): the site's "Masters" from the resume is
+// one employer's Workday form: the site's "Masters" from the resume is
 // the profile's "Masters of Science" in another wording, and was replaced
 // anyway, opening the list again.
 test("a value the site filled in one of the answer's wordings is left as it is", () => {
@@ -1494,7 +1491,7 @@ test("a value the site filled in one of the answer's wordings is left as it is",
   assert.equal(degree("Bachelors")[0]?.value, "Masters of Science");
 });
 
-// Westinghouse's SuccessFactors (report cc40f1fb): "Are you one of the
+// Northwind's SuccessFactors: "Are you one of the
 // following? U.S. Citizen or National, U.S. Lawful Permanent Resident…" and
 // then the countries of citizenship, the latest first as "Country 1 Name".
 test("a citizen answers which of the following they are, and names the United States first", () => {
@@ -1510,7 +1507,7 @@ test("a citizen answers which of the following they are, and names the United St
   assert.deepEqual(proposals([field(question, { kind: "combobox", options: ["No", "Yes"] }), field("Country 1 Name", { kind: "combobox" })], profile), []);
 });
 
-// Westinghouse's SuccessFactors (report cc40f1fb, 2026-10-27): beside "Country 1
+// Northwind's SuccessFactors: beside "Country 1
 // Name" is a required "Type of Status 1", which was left empty for a citizen.
 test("a citizen's first country of citizenship is held as a citizen", () => {
   const citizen = profileSchema.parse({ ...profile, workAuthorization: "US Citizen" });
@@ -1523,9 +1520,9 @@ test("a citizen's first country of citizenship is held as a citizen", () => {
   assert.deepEqual(proposals([field("Type of Status 1", { kind: "combobox" })], profile), []);
 });
 
-// Westinghouse's SuccessFactors (report d57dca7e, 2026-10-28): "Have you
-// worked for Westinghouse in the past 12 months?" and "Were you referred by
-// someone at Westinghouse?" were left empty, both required.
+// Northwind's SuccessFactors: "Have you
+// worked for Contoso in the past 12 months?" and "Were you referred by
+// someone at Contoso?" were left empty, both required.
 test("working there recently and a referral from someone there are answered from the profile", () => {
   const applicant = profileSchema.parse({
     ...profile,
@@ -1534,9 +1531,9 @@ test("working there recently and a referral from someone there are answered from
     references: [{ name: "Jordan Lee", relationship: "Director of Northwind Labs", phone: "", email: "jordan@example.com" }],
   });
   const answer = (label: string, who = applicant) => proposals([field(label, { kind: "combobox" })], who)[0]?.value;
-  assert.equal(answer("Have you worked for Westinghouse in the past 12 months?"), "No");
-  assert.equal(answer("Were you referred by someone at Westinghouse?"), "No");
-  assert.equal(answer("Were you referred by someone at Westinghouse Electric Company, LLC?"), "No");
+  assert.equal(answer("Have you worked for Contoso in the past 12 months?"), "No");
+  assert.equal(answer("Were you referred by someone at Contoso?"), "No");
+  assert.equal(answer("Were you referred by someone at Contoso Electric Company, LLC?"), "No");
   // Someone who vouches for the applicant works there, or the question is
   // about the applicant's own employer, or names no company: left alone.
   assert.equal(answer("Were you referred by someone at Northwind Labs?"), undefined);
@@ -1544,10 +1541,10 @@ test("working there recently and a referral from someone there are answered from
   assert.equal(answer("Were you referred by someone?"), undefined);
   // A saved answer to the question is used instead.
   const saved = profileSchema.parse({ ...applicant, answers: [{ question: "Were you referred by an employee?", answer: "Yes" }] });
-  assert.equal(answer("Were you referred by someone at Westinghouse?", saved), "Yes");
+  assert.equal(answer("Were you referred by someone at Contoso?", saved), "Yes");
 });
 
-// Expand Energy's SuccessFactors (report a248361b, 2026-10-29) asks each
+// one employer's SuccessFactors asks each
 // school's Country, State and City. Penn State's got the applicant's home,
 // Arizona, and the school list that follows the State then held no Penn State.
 test("a school's or job's City, State and Country are its own, not the applicant's home", () => {
@@ -1576,7 +1573,7 @@ test("a school's or job's City, State and Country are its own, not the applicant
   assert.equal(proposals([field("State", { kind: "combobox" })], applicant)[0]?.value, "Arizona");
 });
 
-// Expand Energy's SuccessFactors (2026-10-29) asks "* City" in a text box;
+// one employer's SuccessFactors asks "* City" in a text box;
 // "Tucson" there became "Tucson, Arizona".
 test("a text box asking only for the city gets only the city", () => {
   const applicant = profileSchema.parse({ ...profile, city: "Tucson", state: "Arizona", country: "United States" });
@@ -1586,7 +1583,7 @@ test("a text box asking only for the city gets only the city", () => {
   assert.equal(proposals([field("Where are you currently located? (City, State)")], applicant)[0]?.value, "Tucson, Arizona");
 });
 
-// Expand Energy's SuccessFactors (report 4d01710e, 2026-10-29): each school's
+// one employer's SuccessFactors: each school's
 // "Education Type" (College, GED, High School, Junior College, Trade School)
 // and "What date are you available to start work?" were left empty.
 test("a school's education type comes from its degree, and a start date is asked as a date", () => {
@@ -1610,7 +1607,7 @@ test("a school's education type comes from its degree, and a start date is asked
   assert.equal(proposals([field("What date are you available to start work?", { kind: "datepicker" })], profileSchema.parse({ ...profile, answers: [] }))[0]?.value, undefined);
 });
 
-// Expand Energy's SuccessFactors (2026-10-30) asked three questions most
+// one employer's SuccessFactors asked three questions most
 // forms ask in some wording, and each was left to the applicant; one saved
 // answer now covers every wording.
 test("essential job functions, military status and earlier interviews are answered from saved answers", () => {
@@ -1628,12 +1625,12 @@ test("essential job functions, military status and earlier interviews are answer
   assert.equal(ask("Military Status", ["No Selection", "Active Guard", "Active Reserve", "No Military", "Not Indicated"])?.value, "No Military");
   assert.ok(ask("Military Status")?.choices?.includes("No Military"));
   assert.equal(ask("Are you serving, or have you ever served in the Armed Forces?", ["Yes", "No"])?.value, "No");
-  assert.equal(ask("Have you ever interviewed with Chesapeake Energy, Southwestern Energy, or Expand Energy before?", ["Yes", "No"])?.value, "No");
+  assert.equal(ask("Have you ever interviewed with Alpha Energy, Beta Energy, or Gamma Energy before?", ["Yes", "No"])?.value, "No");
   // Without saved answers, nothing is assumed.
   assert.equal(proposals([field("Military Status", { kind: "combobox" })], profileSchema.parse({ ...profile, answers: [] }))[0]?.value, undefined);
 });
 
-// Notion's Ashby form (2026-10-30): "Please indicate all of the locations
+// one employer's Ashby form: "Please indicate all of the locations
 // that you would be interested in relocating to for this position", one box
 // per city. Willing to relocate, every one is ticked; otherwise none is.
 test("a relocation question listing its locations as boxes is answered from the relocation answer", () => {
@@ -1646,7 +1643,7 @@ test("a relocation question listing its locations as boxes is answered from the 
   assert.deepEqual(proposals([box("New York, NY")], profileSchema.parse({ ...profile, answers: [] })), []);
 });
 
-// Elucid's JazzHR form (capture c11a168d, 2026-10-30): "What's your
+// one employer's JazzHR form: "What's your
 // citizenship / employment eligibility?" lists statuses under each country,
 // and "Are you available to work in the Greater Boston area for the duration
 // of this internship?" asks the relocation question of one place.
@@ -1667,7 +1664,7 @@ test("a citizen picks their status from a list of eligibilities, and one willing
 });
 
 test("a minimum-GPA question is answered by comparing the saved GPA, on the same scale only", () => {
-  // Nokia's Oracle form, report 1f68e4f9.
+  // one employer's Oracle form.
   const yesNo = { kind: "radio" as const, options: ["Yes", "No"] };
   const asked = field("Do you meet the minimum GPA requirement of 3.0?", yesNo);
   assert.equal(proposals([asked], withGPA(profile, "3.84"))[0]?.value, "Yes");
@@ -1683,37 +1680,35 @@ test("a minimum-GPA question is answered by comparing the saved GPA, on the same
   const tenPoint = field("Do you have a CGPA of at least 7.5 out of 10?", yesNo);
   assert.equal(proposals([tenPoint], withGPA(profile, "8.7", "10"))[0]?.value, "Yes");
   assert.deepEqual(proposals([tenPoint], withGPA(profile, "3.84")), []);
-  // A Workday list, its options not read until opened (Morningstar, report
-  // f502e2b5): still a yes/no, never the GPA itself.
+  // A Workday list, its options not read until opened (Morningstar): still a yes/no, never the GPA itself.
   assert.equal(proposals([field("Do you have a 3.0 gpa or higher?", { kind: "combobox", options: [] })], withGPA(profile, "3.84"))[0]?.value, "Yes");
 });
 
 test("a graduation date split in three after its question gets each part", () => {
-  // Nokia's Oracle form, report 1f68e4f9: each box got "May 2027" or "2027".
+  // one employer's Oracle form: each box got "May 2027" or "2027".
   const dated = { ...profile, education: [{ ...profile.education[0], endDate: "2099-12-13" }] };
   const part = (name: string) => proposals([field(`What is your expected year of graduation? ${name}`, { kind: "combobox" })], dated)[0]?.value;
   assert.equal(part("Month"), "December");
   assert.equal(part("Day"), "13");
   assert.equal(part("Year"), "2099");
-  // Workday's parts carry their question with a colon (report c875e6c5).
+  // Workday's parts carry their question with a colon.
   const workday = (name: string) => proposals([field(`What is your projected/approximate graduation date?: ${name}`, { kind: "text" })], dated)[0];
   assert.equal(workday("Month")?.value, "December");
   assert.ok(workday("Month")?.choices?.includes("12"));
   assert.equal(workday("Year")?.value, "2099");
-  // After a sentence, and the 1st where the question says to use it (NGC,
-  // report b80c92a2): the profile holds only May 2027.
+  // After a sentence, and the 1st where the question says to use it: the profile holds only May 2027.
   const monthOnly = { ...profile, education: [{ ...profile.education[0], endDate: "2099-05" }] };
-  const ngc = (name: string) => proposals([field(`What is your (estimated or actual) graduation date? If you do not know your graduation day, input the first of the month.: ${name}`, { kind: "text" })], monthOnly)[0]?.value;
-  assert.equal(ngc("Month"), "May");
-  assert.equal(ngc("Day"), "1");
-  assert.equal(ngc("Year"), "2099");
+  const nested = (name: string) => proposals([field(`What is your (estimated or actual) graduation date? If you do not know your graduation day, input the first of the month.: ${name}`, { kind: "text" })], monthOnly)[0]?.value;
+  assert.equal(nested("Month"), "May");
+  assert.equal(nested("Day"), "1");
+  assert.equal(nested("Year"), "2099");
 });
 
 test("Workday's degree codes and country-suffixed race options are matched", () => {
-  // WEX's Workday (report 6a57344f) and RTX's (2026-10-31).
+  // one employer's Workday and one employer's.
   assert.equal(pickListOption({ value: "Masters of Science", choices: degreeAliases("Masters of Science") },
     ["Master of Arts (M.A)", "Master of Science (M.S)", "Master of Business Administration (MBA)"], (option) => option), "Master of Science (M.S)");
-  // HPE's: each degree explained in brackets (report 451b9877).
+  // one employer's: each degree explained in brackets.
   assert.equal(pickListOption({ value: "Masters of Science", choices: degreeAliases("Masters of Science") },
     ["Bachelors (±16 years of education)", "Masters (±18 years of education)", "Doctorate (over 19 years of education)"], (option) => option), "Masters (±18 years of education)");
   const race = proposals([field("What is your race / ethnicity?", { kind: "combobox" })], { ...profile, ethnicity: "South Asian" })[0];
@@ -1722,7 +1717,7 @@ test("Workday's degree codes and country-suffixed race options are matched", () 
 });
 
 test("salary expectations are given for the period asked, in the applicant's currency only", () => {
-  // WEX's Workday asked "What is your salary expectation?" (2026-10-31).
+  // one employer's Workday asked "What is your salary expectation?".
   const yearly = { ...profile, salary: { min: 95000, currency: "$", period: "year" as const } };
   const hourly = { ...profile, salary: { min: 35, currency: "", period: "hour" as const } };
   const answer = (label: string, saved: typeof profile, overrides: Partial<Field> = {}) => proposals([field(label, overrides)], saved)[0]?.value;
@@ -1743,25 +1738,25 @@ test("salary expectations are given for the period asked, in the applicant's cur
 });
 
 test("an application page's posting is guessed as the same address without /apply", () => {
-  // NeuroHire's Workable page, 2026-10-31.
-  assert.equal(postingGuess("https://apply.workable.com/neurohire-dot-a-i/j/DE75CD20B8/apply"), "https://apply.workable.com/neurohire-dot-a-i/j/DE75CD20B8");
+  // one employer's Workable page.
+  assert.equal(postingGuess("https://apply.workable.com/acme-dot-a-i/j/DE75CD20B8/apply"), "https://apply.workable.com/acme-dot-a-i/j/DE75CD20B8");
   assert.equal(postingGuess("https://jobs.lever.co/tri/f8c9ed26-4574-4ad2-954b-b7f5ec365495/apply?lever-source=x"), "https://jobs.lever.co/tri/f8c9ed26-4574-4ad2-954b-b7f5ec365495");
   assert.equal(postingGuess("https://jobs.ashbyhq.com/acme/1234/application"), "https://jobs.ashbyhq.com/acme/1234");
-  // Microsoft's careers site applies at ?pid= and shows the job at /careers/job/<id> (report bce03da9).
+  // Microsoft's careers site applies at ?pid= and shows the job at /careers/job/<id>.
   assert.equal(postingGuess("https://apply.careers.microsoft.com/careers/apply?pid=1970393557049981"), "https://apply.careers.microsoft.com/careers/job/1970393557049981");
   assert.equal(postingGuess("https://example.com/careers/engineer"), undefined);
   assert.equal(postingGuess("https://example.com/apply"), undefined);
 });
 
 test("a LinkedIn or GitHub link asked as a request with instructions is still the profile's", () => {
-  // Micron's Workday (report 88608f31, 2026-11-02).
+  // one employer's Workday.
   const asked = field("Please provide your LinkedIn Profile url. Instruction: Navigate to your LinkedIn Profile page, copy the url and paste here.", { kind: "text" });
   assert.match(proposals([asked], { ...profile, linkedin: "linkedin.com/in/example" })[0]?.value || "", /linkedin\.com\/in\/example$/);
-  // A question about LinkedIn that asks for something else is not the link.
+  // A question about an employer that asks for something else is not the link.
   assert.deepEqual(proposals([field("How did you hear about us on LinkedIn?", { kind: "text" })], { ...profile, linkedin: "linkedin.com/in/example" }).map((p) => p.value).filter((v) => /linkedin\.com/.test(v)), []);
 });
 
-// JM Family's Workday (report 5494cdaa, 2026-11-04): "interns must be
+// one employer's Workday: "interns must be
 // actively enrolled in a … degree-seeking program … If you qualify, please
 // select yes." was left for an applicant midway through a master's.
 test("a current student answers Yes to being enrolled, and nobody else is answered for", () => {
@@ -1786,7 +1781,7 @@ test("a current student answers Yes to being enrolled, and nobody else is answer
   assert.equal(pick(student, "Please include the university you are currently enrolled in", { kind: "text" }), "Michigan State University");
 });
 
-// Philips' Workday (2026-11-04): a U.S. citizen was asked whether they hold
+// one employer's Workday: a U.S. citizen was asked whether they hold
 // temporary authorization (OPT, CPT) and, if on OPT, whether they could
 // extend it, and both were left. A citizen holds none and is not on OPT;
 // anyone else is left to answer.
@@ -1806,7 +1801,7 @@ test("OPT and CPT questions are answered for a citizen and left for anyone else"
   assert.equal(ask(extension, ["Yes", "No", "N/A"], student), undefined);
 });
 
-// Philips' Workday (report 2d320e91, 2026-11-04): "I am a veteran but do not
+// one employer's Workday: "I am a veteran but do not
 // fall under the protected classifications" was chosen for someone who never
 // served, and "I have no military experience" read as a veteran's answer.
 test("a veteran list that words service apart is answered by the saved military answer", () => {
@@ -1824,7 +1819,7 @@ test("a veteran list that words service apart is answered by the saved military 
   assert.equal(canonicalAnswer("veteranStatus", "I have no military experience"), "No");
 });
 
-// A SmartRecruiters screening page (2026-11-04): its graduation month list
+// A SmartRecruiters screening page: its graduation month list
 // holds only months, its past-employment list says No as "Not Applicable",
 // and the date box after it asks for the details, not Yes or No.
 test("a months-only list takes the month, a list without No takes Not Applicable, and a details box after a past-employer question is left", () => {
@@ -1841,7 +1836,7 @@ test("a months-only list takes the month, a list without No takes Not Applicable
 });
 
 // The same page's degree type list and its "Today's Date" box beside the
-// typed name were left unanswered (2026-11-05).
+// typed name were left unanswered.
 test("a degree type list takes the degree under way, and a Today's Date box today's date", () => {
   const applicant = profileSchema.parse({ ...profile, education: [
     { organization: "Virginia Tech", title: "Bachelor of Science", startDate: "2018-08-20", endDate: "2022-05-10" },
@@ -1853,7 +1848,7 @@ test("a degree type list takes the degree under way, and a Today's Date box toda
   assert.equal(answer("Today's Date"), `${String(today.getMonth() + 1).padStart(2, "0")}/${String(today.getDate()).padStart(2, "0")}/${today.getFullYear()}`);
 });
 
-// LinkedIn's Race/Ethnicity (2026-11-05): its label defines each category
+// one employer's Race/Ethnicity: its label defines each category
 // after its name, "Hispanic or Latino" first, and names places ("China,
 // India, Japan") the U.S. definitions use. It was read as the Hispanic
 // question, then as another country's, and left.
@@ -1868,15 +1863,15 @@ test("a race list whose label carries the U.S. category definitions takes the ra
 
 // A SmartRecruiters pass types and picks each title, company, school and
 // place with real keys: at 60 s it was cut off in the second school
-// (LinkedIn, 2026-11-05). It gets the time Workday's does.
+//. It gets the time Workday's does.
 test("a site rule's pass gets the longer time on sites whose picks are slow", () => {
   assert.equal(configPassTimeout("jobs.smartrecruiters.com"), 150_000);
   assert.equal(configPassTimeout("acme.wd1.myworkdayjobs.com"), 150_000);
   assert.equal(configPassTimeout("jobs.lever.co"), 60_000);
 });
 
-// L3Harris (report 726eafd7, 2026-11-07): "Are you related or have close
-// personal friendships with any current L3Harris employees…" was left at No
+// an employer: "Are you related or have close
+// personal friendships with any current an employer employees…" was left at No
 // Selection. As with a referral: none of the applicant's references or jobs
 // there, No; one there, theirs to say.
 test("a related-to-an-employee question is No unless a reference or a job is at the company", () => {
@@ -1887,7 +1882,7 @@ test("a related-to-an-employee question is No unless a reference or a job is at 
   assert.equal(ask(profileSchema.parse({ ...profile, references: [{ name: "Sam Lee", relationship: "Manager at Acme", email: "sam@acme.example" }] })), undefined);
 });
 
-// Microsoft (2026-11-07): "Are you currently enrolled in a Doctorate Degree
+// Microsoft: "Are you currently enrolled in a Doctorate Degree
 // program in Computer Science…?" was answered Yes for a master's student.
 // A question naming a level asks about that level.
 test("an enrollment question naming a degree level is answered for that level", () => {
@@ -1901,7 +1896,7 @@ test("an enrollment question naming a degree level is answered for that level", 
   assert.equal(ask("Are you currently enrolled in a Bachelor's degree program?"), "No");
 });
 
-// CharterUP and Rubrik on Greenhouse (2026-11-07): "1–2 years" with its unit
+// an employer and an employer on Greenhouse: "1–2 years" with its unit
 // read as no option for one year; "Yes, I am currently based in Atlanta, GA"
 // was taken for an applicant elsewhere who will relocate; "What is your
 // Legal Name?" was left.
@@ -1917,7 +1912,7 @@ test("a range with its unit, the relocating Yes, and a legal name asked as a que
   assert.equal(proposals([field("What is your Legal Name?")], applicant)[0]?.value, `${profile.firstName} ${profile.lastName}`);
 });
 
-// AMD's iCIMS screening page (report 4933eec7, 2026-11-07): years with one
+// one employer's iCIMS screening page: years with one
 // skill or kind of work are never more than all the applicant's work, so a
 // "less than N years" choice is answered when all of it is under N, and
 // nothing else is guessed.
@@ -1952,7 +1947,7 @@ test("a skill's years take a list's 'less than' choice only when all work is und
   assert.equal(proposals([cpp], fresh)[0]?.value, "I have less than 1 year with this skill");
 });
 
-// Applied Materials (report 297590e2, 2026-11-08): asked where the applicant
+// an employer: asked where the applicant
 // would move from, the relocation question's "Yes" was given.
 test("a question asking the city, state and zip one would move from gets the applicant's place", () => {
   // As the applicant's: willing to relocate, which answered it before.
@@ -1961,7 +1956,7 @@ test("a question asking the city, state and zip one would move from gets the app
   assert.equal(proposals([asked], placed)[0]?.value, "Lansing, Michigan 48910");
 });
 
-// Leidos's Workday questions (2026-11-08): the highest degree asked after a
+// one employer's Workday questions: the highest degree asked after a
 // preamble naming "your most recent graduation date" was given that date,
 // and "Expected degree completion date" was left.
 test("a highest-degree question after a preamble, and an expected completion date, are answered", () => {
@@ -1972,7 +1967,7 @@ test("a highest-degree question after a preamble, and an expected completion dat
       { organization: "Penn State", title: "Bachelor of Science", fieldOfStudy: "Computer Science", startDate: "2020-09-13", endDate: "2024-06-15", location: "", details: "" },
     ],
   });
-  const highest = field("4. If hired by Leidos, we will verify your most recent graduation date and the highest degree or diploma received. What is the highest level of education you've received?", { kind: "combobox" });
+  const highest = field("4. If hired by Acme, we will verify your most recent graduation date and the highest degree or diploma received. What is the highest level of education you've received?", { kind: "combobox" });
   assert.match(proposals([highest], studying)[0]?.value || "", /^Bachelor/);
   const part = (name: string) => proposals([field(`5a. Expected degree completion date.: ${name}`, { kind: "spinbutton" })], studying)[0]?.value;
   assert.equal(part("Month"), "May");
@@ -1980,7 +1975,7 @@ test("a highest-degree question after a preamble, and an expected completion dat
   assert.equal(part("Year"), "2099");
 });
 
-// Leidos (report bb699b7d, 2026-11-08): "Did you obtain this degree in the
+// an employer: "Did you obtain this degree in the
 // last 24 months?" after the highest degree received: that degree's end.
 test("a degree obtained within so many months is read from the highest finished degree's end", () => {
   const ago = (months: number) => {
@@ -2001,7 +1996,7 @@ test("a degree obtained within so many months is read from the highest finished 
   assert.equal(proposals([asked], graduated(ago(10)))[0]?.value, "Yes");
 });
 
-// Databricks' Greenhouse form (report b3cb8c2b, 2026-11-08): its sanctions
+// one employer's Greenhouse form: its sanctions
 // list had "Ordinarily a resident of Russia or Belarus and not willing to
 // relocate…" ticked as a relocation answer, and its follow-up's "U.S.
 // citizen" as citizenship. Read as what they ask, an applicant tied to no
@@ -2016,7 +2011,7 @@ test("a sanctions list and its follow-up are answered as what they ask", () => {
   // empty one is left empty.
   const clears = (question: string, option: string) =>
     proposals([{ ...box(question, option), value: "Yes", siteValue: true }], american)[0]?.value;
-  assert.equal(clears(sanctions, "Ordinarily a resident of Russia or Belarus and not willing to relocate for a Databricks role"), "No");
+  assert.equal(clears(sanctions, "Ordinarily a resident of Russia or Belarus and not willing to relocate for an Acme role"), "No");
   assert.equal(ticked(sanctions, "Citizen or permanent resident of Cuba, Iran, North Korea, or Syria"), undefined);
   assert.equal(ticked(sanctions, "None of the above"), "Yes");
   assert.equal(clears(followUp, "U.S. citizen"), "No");

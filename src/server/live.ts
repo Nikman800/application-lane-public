@@ -1,7 +1,7 @@
 // A live line between the extension and the command line (scripts/lane.ts):
 // the command line's "fill this step" and "switch to its tab" reach the
 // extension at once, and the extension's queue reaches the command line as
-// it changes (2026-10-30). The extension holds its end open, which also keeps
+// it changes. The extension holds its end open, which also keeps
 // Chrome from putting its background worker to sleep, so nothing waits for a
 // 30-second wake-up.
 //

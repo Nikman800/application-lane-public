@@ -10,7 +10,7 @@ const questionShaped =
 // attestations. Legal and eligibility questions are a separate, adjustable
 // rule (legalQuestion below).
 // (A "Degree Conferred" box takes a date the model can only guess at; it
-// wrote a degree's name there, L3Harris, 2026-10-15.)
+// wrote a degree's name there, an employer.)
 const manualOnly =
   /password|passcode|captcha|verification code|one.time|signature|sign here|initials|\bconsent\b|\bagree\b|certif|social security|\bssn\b|tax id|bank account|\b(degree|diploma) (conferred|received|awarded)\b/i;
 export const logisticsQuestion =
@@ -62,16 +62,16 @@ export function structuredFallbackField(field: Field, legalToo = false): boolean
     return false;
   // A box that adds one choice per search ("Type to Add Skills", Workday)
   // holds no written answer: a list typed into it was the model's, in the
-  // wrong form (Jabil, 2026-10-16). Its site rule picks each one.
+  // wrong form. Its site rule picks each one.
   if (/^(type to (add|search)|search( for)?)\b/i.test(field.label.trim())) return false;
   // A job's or school's dates are the profile's, row by row: one it leaves
   // empty (an end date for a job still held) stays empty. The model, told
   // only "End Date" under "Previous employment", gave a current job another
-  // job's end date (SuccessFactors, report 7810d2d5, 2026-10-15).
+  // job's end date (SuccessFactors).
   // Only an entry's own short date label in a section that names it:
   // Workday titles each question's section with the question itself, and
-  // Leidos's "Do you now, or did you … in the past 24 months, serve as an
-  // official or employee of the DoD?" read as a job's date (2026-11-08).
+  // one employer's "Do you now, or did you … in the past 24 months, serve as an
+  // official or employee of the DoD?" read as a job's date.
   if (
     (field.section || "").length <= 80 &&
     /education|academic|school|work|employment|experience/i.test(field.section || "") &&
@@ -80,7 +80,7 @@ export function structuredFallbackField(field: Field, legalToo = false): boolean
   )
     return false;
   // So is a school's GPA: one the profile leaves out is left out on purpose.
-  // The model put one school's GPA on another (Workday, report e63ffa89).
+  // The model put one school's GPA on another (Workday).
   if (/\b(c?gpa|grade point)\b/i.test(field.label)) return false;
   return Boolean(field.label.trim() && field.label !== "Unlabelled field");
 }

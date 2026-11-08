@@ -374,7 +374,7 @@ async function ui() {
         detail.push(colors.on ? last.replace("last fill:", colors.muted("last fill:")) : last);
       }
       // Each question left on a line of its own, under whether the form
-      // needs it (the questions run together on one cut-off line, 2026-10-30).
+      // needs it (the questions run together on one cut-off line).
       for (const [items, heading, color] of [
         [app.needs, "Required — the form needs these", colors.on ? `\x1b[1m${sgrOf(theme.danger)}` : "\x1b[1;31m"],
         [app.optional || [], "Optional", colors.on ? sgrOf(theme.warning) : "\x1b[33m"],
@@ -554,7 +554,7 @@ if (!run) {
 An application is named by the short id status shows, or by part of its company or title.
 search uses the settings saved on the dashboard's Find jobs page; for this search only:
   --role "software engineer,machine learning"  --place "Toronto,Remote"  --country Canada
-  --company https://jobs.ashbyhq.com/notion  --days 14  --internships  --profile | --no-profile
+  --company https://jobs.ashbyhq.com/acme  --days 14  --internships  --profile | --no-profile
   --save keeps them for later searches.`);
 } else {
   run().catch((error) => {

@@ -5,7 +5,7 @@
 // (content.ts, pause), but a site's do: SuccessFactors asks for a dropdown's
 // choices from a timer, so in a minimized window each list came a minute or
 // more after its click, the fill gave up on it, and it opened over the form
-// later (L3Harris, report 92f363c7, 2026-10-15).
+// later.
 //
 // installPageTimers runs in the page's own world. Each timer the page sets
 // while it is on is also kept here with the time it is due; the content

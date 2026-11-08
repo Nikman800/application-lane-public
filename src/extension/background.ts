@@ -86,7 +86,7 @@ const backoff = new Map<string, number>();
 // backend as it changes, since it lives here. A change after a quiet spell
 // goes at once, then at most one every two seconds: never two seconds after
 // the last change, since a fill saves its progress more often than that and
-// the command line saw "Tracked" until it stopped (2026-10-30).
+// the command line saw "Tracked" until it stopped.
 let syncTimer: ReturnType<typeof setTimeout> | undefined;
 let syncAgain = false;
 function syncQueueSoon() {
@@ -183,7 +183,7 @@ function connectLive() {
 // injected again into each of its frames, where it takes over from the old
 // copy. Nothing is reloaded, so nothing entered is lost; reloading a page a
 // form posted to asked "Confirm Form Resubmission", and opening its address
-// again showed L3Harris's SuccessFactors only an error (2026-11-07).
+// again showed one employer's SuccessFactors only an error.
 async function refreshPast(tabId: number) {
   const frames = (await chrome.webNavigation.getAllFrames({ tabId }).catch(() => undefined)) || [{ frameId: 0, url: "" }];
   for (const frame of frames) {
@@ -200,7 +200,7 @@ async function liveCommand(message: { action?: string; applicationId?: string })
     await pickUpInbox();
     return;
   }
-  // The fixer's reload (lane reload, 2026-11-07): a new build without a trip
+  // The fixer's reload (lane reload): a new build without a trip
   // to chrome://extensions. Never under a fill, which it would cut off.
   if (message.action === "reload") {
     const busy = state.applications.filter((candidate) => ["inspecting", "preparing", "filling"].includes(candidate.status));
@@ -494,7 +494,7 @@ async function pageTimers(tabId: number, on: boolean) {
 
 // The passes that fill answers after the main fill (the model's, the
 // reviewed ones) also run in a hidden tab: a list one of them opened on
-// L3Harris's form came 8.5 seconds late (report ebfd5371, 2026-10-15).
+// one employer's form came 8.5 seconds late.
 async function withPageTimers<T>(app: Application, tabId: number | undefined, work: () => Promise<T>): Promise<T> {
   if (tabId !== undefined) await pageTimers(tabId, true);
   try {
@@ -546,8 +546,8 @@ async function applyFrame(app: Application, frame: Frame, proposed: Proposal[], 
 }
 // The fields left empty, each checkbox question once: its boxes are one
 // answer, given when any is ticked, and named by the question, not by a box
-// ("New York, NY"). Notion's required "locations you would relocate to" was
-// listed as two optional boxes (2026-10-30).
+// ("New York, NY"). one employer's required "locations you would relocate to" was
+// listed as two optional boxes.
 function emptyFields(fields: Field[]): Field[] {
   const questionOf = (field: Field) => (field.kind === "checkbox" && field.question ? `${field.section || ""}|${field.index ?? 0}|${field.question}` : "");
   const answered = new Set(fields.filter((field) => field.value && questionOf(field)).map(questionOf));
@@ -586,7 +586,7 @@ async function digest(data: string): Promise<string> {
 }
 // Frames that verify the visitor or report to the site's own analytics. None
 // holds a form, and a bot check is not the extension's to read: access to
-// them is never asked for (LinkedIn's li.protechts.net, 2026-10-10).
+// them is never asked for (one employer's li.protechts.net).
 function captchaFrame(url: string) {
   const { hostname, pathname } = new URL(url);
   return (
@@ -596,7 +596,7 @@ function captchaFrame(url: string) {
     // A tag manager's service-worker frame (sgtm.indeed.com).
     /\/service_worker\/[^/]+\/sw_iframe\.html$/.test(pathname) ||
     // A draft-only site's widget inside another site's form ("Apply with
-    // LinkedIn" on Lever): never a fill target, and it must not stop the
+    // an employer" on Lever): never a fill target, and it must not stop the
     // fill of the page around it.
     draftOnlySite(url)
   );
@@ -1050,10 +1050,10 @@ async function checkFit(app: Application) {
   const captured = app.tabId !== undefined ? await inspectTab(app.tabId).catch(() => undefined) : undefined;
   const frames = captured?.frames || [];
   // A posting the backend is refused (Tesla's), open in a tab: its words
-  // from there (2026-11-02: the fit had nothing to go on, link or not).
+  // from there (: the fit had nothing to go on, link or not).
   // Also whenever the backend has read no posting for it, whatever the page
   // gave: Tesla's apply page read as enough for a "partial" fit, and its
-  // posting was never looked for (2026-11-02).
+  // posting was never looked for.
   if ((wordCount(app.sourceDescription) < 80 || !app.posting) && !app.postingText) {
     const reread = await postingFromOwnTab(app, frames[0]?.observation, true).catch(() => undefined);
     // Its words only: a changed link would make this check stale (below).
@@ -1278,7 +1278,7 @@ const interactedNote = (cause: unknown) =>
 // An application moves to a stage: by the applicant's choice, or because
 // the site showed its confirmation (siteSubmitted).
 const submittedNote = "The site confirmed this application was submitted. Change its stage if that is wrong.";
-// A form framed in an employer's page (Greenhouse on Pinterest's and
+// A form framed in an employer's page (Greenhouse on one employer's and
 // Roblox's careers sites) shows its confirmation as a new document in that
 // frame, with no page script in it: one is put there, in an application's
 // tab still being applied to, so it can say whether that is what it is.
@@ -1329,7 +1329,7 @@ async function syncSubmissions() {
   submissionsSynced = true;
 }
 // A finished application has nothing left to fill: the note asking for
-// Fill this step (left by a profile change, 2026-10-16) is replaced.
+// Fill this step (left by a profile change) is replaced.
 const finishedStages: Application["workflowStage"][] = ["submitted", "blocked", "abandoned"];
 const finishedNote = (app: Application) =>
   app.workflowStage === "submitted"
@@ -1430,7 +1430,7 @@ function fallbackProblems(
       ),
     );
     // A list the fill answered (one box of it ticked) is not left: the
-    // sanctions list given "None of the above" was still listed (2026-11-08).
+    // sanctions list given "None of the above" was still listed.
     const answeredLists = new Set(
       frame.observation.fields
         .filter((field) => field.question && (planned.has(field.id) || listAnswered(field, profile)))
@@ -1485,7 +1485,7 @@ async function unresolvedFields(
     applicationForTab(tabId)?.id !== app.id ||
     app.tabId !== tabId ||
     !attempted ||
-    // Paused by the applicant's own click (Amazon, 2026-10-25): the fill is
+    // Paused by the applicant's own click (Amazon): the fill is
     // over, and what it left is still theirs to review.
     !["awaiting-user", "ready", "paused"].includes(app.status)
   )
@@ -1846,7 +1846,7 @@ async function readListOptions(app: Application, frame: { frameId: number; obser
     fieldIds: unread.map((field) => field.id),
     // Only list buttons (Workday's) during a fill: opening a SuccessFactors
     // or react-select list then got in the way of its own fill, which picks
-    // from the open list anyway (suite, 2026-11-04).
+    // from the open list anyway (suite).
     listButtonsOnly: true,
   }).catch(() => []);
   for (const { id, options } of Array.isArray(read) ? read : []) {
@@ -1859,7 +1859,7 @@ async function run(app: Application, operation: number) {
   if (!app.startedAt) app.startedAt = Date.now();
   // Each look at whether its documents are ready runs this again: one still
   // tailoring stays "Tailoring" rather than flicking to "Reading form" and
-  // back every few seconds (2026-11-04).
+  // back every few seconds.
   if (app.status !== "preparing") {
     touch(app, "inspecting", "Reading application fields…");
     await persist();
@@ -2012,7 +2012,7 @@ async function run(app: Application, operation: number) {
   );
   if (!totalFields) {
     // A posting with no form: its Apply leads to the form, and this request
-    // carries on there (Amazon's posting, 2026-10-31). Used once per
+    // carries on there (Amazon's posting). Used once per
     // posting, so a page that leads back here is never pressed again.
     if (!accessOrigins.length && (primary.observation.description.match(/\S+/g)?.length || 0) >= 40 &&
         app.tabId !== undefined && !app.applyUsed?.from.includes(canonicalURL(app.url)) && (app.applyUsed?.from.length || 0) < 3) {
@@ -2104,8 +2104,8 @@ async function run(app: Application, operation: number) {
     }
     // Dropdowns that list their answers only once opened are read first, so
     // an answer is chosen from the site's own list rather than guessed:
-    // NVIDIA's "…in that country?" was held back for want of one, and its
-    // phone type was guessed as "Mobile" against "Home Cellular" (2026-11-04).
+    // one employer's "…in that country?" was held back for want of one, and its
+    // phone type was guessed as "Mobile" against "Home Cellular".
     await readListOptions(app, frame);
     if (!alive(app, operation)) return;
     const plan = proposals(frame.observation.fields, profile);
@@ -2178,7 +2178,7 @@ async function run(app: Application, operation: number) {
   }
   // Tracked from a posting its site draws by script, read before it was
   // drawn, and filled in the tab its Apply opened: the posting's own tab,
-  // still open, is read again for its words (Tesla, 2026-11-02: the backend
+  // still open, is read again for its words (Tesla: the backend
   // is refused the page, and the letter said nothing about the job).
   if (!app.jobId && wordCount(app.sourceDescription) < 80) {
     const reread = await postingFromOwnTab(app, frames[0]?.observation).catch(() => undefined);
@@ -2386,11 +2386,11 @@ async function run(app: Application, operation: number) {
     // The document kinds this page has a file field for, as the step began:
     // a site that swaps an uploaded file's input for its name (Greenhouse's
     // job boards) has none afterwards, and the dialog upload below must not
-    // then remove that upload to make its own (issue report, 2026-10-02).
+    // then remove that upload to make its own (issue report).
     const fileKind = (f: Field) => f.documentKind || documentKind(f.label);
     const fieldKinds = new Set(frame.observation.fields.filter((f) => f.kind === "file").map(fileKind));
     // A resume the site held before this extension (Amazon keeps the
-    // account's, 2026-10-31) gives way to this application's own, as answers
+    // account's) gives way to this application's own, as answers
     // the site filled in do, or when the applicant asks for it. Never one
     // this application uploaded: a site that rewrites the form from it
     // (iCIMS) reloads before the upload is confirmed, and shows it as its own.
@@ -2451,7 +2451,7 @@ async function run(app: Application, operation: number) {
         app.uploadedDocuments?.[memo] === fingerprint) continue;
       // Workday empties its file input once the upload is done and lists the
       // file beside it: the same document already shown there is not sent
-      // again on a second fill (Jabil, report f0a42a0f).
+      // again on a second fill.
       if (app.uploadedDocuments?.[memo] === fingerprint &&
         (await frameCall(app, frame.frameId, { type: "ATTACHED", name: artifact.name }).catch(() => undefined))?.attached) continue;
       if (!alive(app, operation)) return;
@@ -2466,8 +2466,7 @@ async function run(app: Application, operation: number) {
       // The field as the page now reads, not as the step began: an upload
       // before it redraws its group (Workday's shared uploader, where the
       // resume goes first), and the cover letter sent with the revision read
-      // before that was refused as stale and never uploaded (Leidos, report
-      // 7dd8aa83, 2026-11-07).
+      // before that was refused as stale and never uploaded.
       const now = frame.observation.fields.find((f) => f.id === field.id) ||
         frame.observation.fields.find((f) => f.kind === "file" && fileKind(f) === kind && f.label === field.label);
       if (!now) {
@@ -2516,12 +2515,11 @@ async function run(app: Application, operation: number) {
     // kind on the page goes through the site config's upload steps instead.
     // Not in an embedded frame with nothing in it: Microsoft's near-empty
     // profile export frame, gone by then, turned the rule's uploads into a
-    // résumé and cover letter reported as failed while the résumé was in
-    // (2026-11-07).
+    // résumé and cover letter reported as failed while the résumé was in.
     if (configEngineEnabled && !resumeFirst && (frame.frameId === 0 || frame.observation.fields.length)) {
       for (const field of frame.observation.fields.filter((f) => f.kind === "file")) fieldKinds.add(fileKind(field));
       // One document at a time: SuccessFactors saves an upload and then
-      // reloads the whole form from its server (recording, 2026-10-01),
+      // reloads the whole form from its server (recording),
       // dropping whatever was filled and not yet saved, and an upload still
       // under way when that happens is lost.
       let uploaded = false;
@@ -2612,8 +2610,7 @@ async function run(app: Application, operation: number) {
     }).catch(async (error: Error) => {
       // An embedded frame with nothing to fill that the page has since
       // removed (Microsoft's sign-in helpers come and go) is no part of the
-      // form: it ended the whole fill with "Receiving end does not exist"
-      // (report a563a4f0, 2026-11-04).
+      // form: it ended the whole fill with "Receiving end does not exist".
       if (frame.frameId !== 0 && !frame.observation.fields.length && /receiving end does not exist|no frame with id \d+/i.test(error.message))
         return frame.observation;
       const fresh = await reinspectNavigation(app, frame.frameId, frame.observation.documentId, operation, error, frame.observation.url);
@@ -2699,7 +2696,7 @@ async function run(app: Application, operation: number) {
             (!f.attachmentId ||
               !job.artifacts.some((a) => a.id === f.attachmentId)) &&
             // What this application uploaded, shown again on a later page
-            // (Amazon's next step, 2026-10-31), is its own document.
+            // (Amazon's next step), is its own document.
             !(Object.keys(app.uploadedDocuments || {}).some((key) => key.split(":")[0] === (f.documentKind || documentKind(f.label) || "resume")) &&
               job.artifacts.some((a) => a.kind === (f.documentKind || documentKind(f.label)) && a.name === f.value)),
         )
@@ -2727,7 +2724,7 @@ async function run(app: Application, operation: number) {
       ]
     : [...new Set(issues)];
   // Whole questions: a long one's ask comes last ("If you qualify, please
-  // select yes."), and cut at 350 it was gone (JM Family, 2026-11-04), as was
+  // select yes."), and cut at 350 it was gone, as was
   // the match that clears it once answered. Labels are already clipped at
   // 1000 where they are read.
   app.missing = unresolved.slice(0, 60).map((issue) => issue.slice(0, 1100));
@@ -2745,7 +2742,7 @@ async function run(app: Application, operation: number) {
   if (!resumeFirst) {
     // A value in a job's or school's row that the profile's own row holds,
     // though no rule answers it: a Workday job's Month and Year, its
-    // description, whether it is current (Jabil, 2026-10-16). The site's
+    // description, whether it is current. The site's
     // reading of the resume got it right.
     // Pre-filled education or work details the profile could not correct.
     for (const frame of frames)
@@ -2758,7 +2755,7 @@ async function run(app: Application, operation: number) {
           !/^(?:please )?(?:select|choose)(?: an?| one)?(?: option)?\.{0,3}$/i.test(field.value.trim()) &&
           !rowHolds(field, frame.observation.fields, profile) &&
           // What the site parsed is already the profile's answer (a GPA of
-          // 3.84 with the profile's 3.84, Jabil, 2026-10-16): confirmed, so
+          // 3.84 with the profile's 3.84, an employer): confirmed, so
           // nothing was written and nothing needs checking.
           !proposals([{ ...field, value: "", siteValue: false, protected: false }], profile).some(
             (answer) => normalize(answer.value) === normalize(field.value) ||
@@ -2777,7 +2774,7 @@ async function run(app: Application, operation: number) {
   if (app.steps >= 12)
     app.missing.push("Step limit reached. Continue manually.");
   // The model's part comes next: marked as running before the status reads
-  // as finished, so nothing shows "needs you" in between (2026-11-02).
+  // as finished, so nothing shows "needs you" in between.
   const assisted = !resumeFirst && app.tabId !== undefined && modelFills().assist;
   if (assisted) app.assisting = true;
   touch(
@@ -2973,7 +2970,7 @@ async function assist(app: Application, tabId: number) {
 }
 // A posting's own Apply link or button: "Apply", "Apply now", "Apply for
 // this job", "Start application". One that applies through another site or
-// a stored profile (LinkedIn, Indeed, "Apply with…", Easy Apply) is not it.
+// a stored profile (an employer, Indeed, "Apply with…", Easy Apply) is not it.
 // A link goes in this tab, never a new one, so the application keeps its
 // tab; a button is clicked, and a form it shows in place is filled after.
 async function useApply(app: Application, tabId: number, operation: number): Promise<string | undefined> {
@@ -3146,7 +3143,7 @@ async function trackTab(tabId: number) {
     throw new Error("Open an HTTP(S) job or application page first.");
   // The same opening reached by another address (a Workday requisition on
   // another career site) whose own tab is gone takes this tab instead of
-  // becoming a second application (KLA, 2026-11-03).
+  // becoming a second application.
   const twin = state.applications.find(
     (app) =>
       app.status !== "cancelled" &&
@@ -3172,7 +3169,7 @@ async function trackTab(tabId: number) {
   }
   // A page with a job's description and no form is the posting itself: what
   // opened it is a list of jobs (Simplify's on GitHub opened Amazon's posting,
-  // tracked there, and the list was read as the posting, 2026-10-25).
+  // tracked there, and the list was read as the posting).
   if (!app.postingUrl && !app.postingText && !app.postingSought && context.observation &&
       !context.observation.fields.length && (context.observation.description.match(/\S+/g)?.length || 0) >= 40) {
     app.postingSought = true;
@@ -3195,8 +3192,7 @@ async function trackTab(tabId: number) {
 // from its posting), else the page the browser says led to it (Paylocity's
 // Apply after its Details). Its address becomes the application's posting
 // link, which the card shows and the applicant can change, and its words
-// are read when that tab is still open (reports 2f35c7c3, d421fc89 and
-// b4fef18b, 2026-10-14).
+// are read when that tab is still open.
 async function leadingPage(tab: chrome.tabs.Tab, observation?: Observation, app?: Application): Promise<{ url: string; description?: string } | undefined> {
   // A page of the application itself (step 1 is the referrer of step 2) is
   // not where it was reached from.
@@ -3210,7 +3206,7 @@ async function leadingPage(tab: chrome.tabs.Tab, observation?: Observation, app?
   };
   // The tab that opened this one led to the tab's first page, not to a page
   // reached in it since: Simplify's list on GitHub opened Oracle's posting,
-  // which led to its form, and the list was read as the posting (2026-10-24).
+  // which led to its form, and the list was read as the posting.
   const before = tab.id !== undefined && tab.url ? (await visitedPages(tab.id)).filter((url) => canonicalURL(url) !== canonicalURL(tab.url!)) : [];
   if (tab.openerTabId !== undefined && !before.length) {
     const opener = await chrome.tabs.get(tab.openerTabId).catch(() => undefined);
@@ -3220,8 +3216,8 @@ async function leadingPage(tab: chrome.tabs.Tab, observation?: Observation, app?
     }
   }
   // The same tab, before it reached this site: a cross-site referrer names
-  // only the other site (L3Harris's posting on jobs.l3harris.com, its form
-  // on ns2cloud.com, 2026-10-15), but the tab's own pages say which.
+  // only the other site (one employer's posting on jobs.l3harris.com, its form
+  // on ns2cloud.com), but the tab's own pages say which.
   if (tab.id !== undefined && tab.url) {
     const host = new URL(tab.url).hostname;
     const earlier = (await visitedPages(tab.id)).filter((url) => usable(url) && new URL(url).hostname !== host).at(-1);
@@ -3269,7 +3265,7 @@ const wordCount = (text?: string) => text?.match(/\S+/g)?.length || 0;
 // more of the posting than was read from it: its words and address.
 // Whether the posting's address is to be guessed from the form's: none yet,
 // or one an earlier guess made that the guess now makes better (Microsoft's
-// form at /careers/apply?pid= was taken to post at /careers, 2026-11-04).
+// form at /careers/apply?pid= was taken to post at /careers).
 function guessedAgain(app: Application): boolean {
   if (!app.postingUrl) return true;
   const guess = postingGuess(app.url);
@@ -3297,8 +3293,7 @@ async function postingFromOwnTab(app: Application, filling?: Observation, open =
   }
   // The posting's link, given but not open: read in a tab of its own, out of
   // view, once its script has drawn it, then closed. Tesla refuses the
-  // backend its pages, so a pasted link alone gave the fit nothing to go on
-  // (2026-11-02).
+  // backend its pages, so a pasted link alone gave the fit nothing to go on.
   // Or the page it was tracked from, when the form is elsewhere.
   const link = app.postingUrl || (app.sourceUrl && canonicalURL(app.sourceUrl) !== canonicalURL(app.url) ? app.sourceUrl : undefined);
   if (!open || !link || !/^https?:/.test(link)) return;
@@ -4486,7 +4481,7 @@ chrome.tabs.onRemoved.addListener((tabId) => {
   });
 });
 // A link tracked before its tab had loaded is named by its address
-// ("jobs.ashbyhq.com"), from the command line most of all (2026-10-30). The
+// ("jobs.ashbyhq.com"), from the command line most of all. The
 // page's own title replaces that stand-in as soon as the tab has one, and
 // names the employer when only the address did; a title the applicant or a
 // fill gave is kept.

@@ -1,9 +1,9 @@
 import { configs } from "../engine/config/catalog";
 
 // Which site an opening is applied on, and whether a site rule covers it,
-// known before the applicant opens it (2026-11-04): Microsoft's careers site
+// known before the applicant opens it: Microsoft's careers site
 // had no rule and was found out one failed fill at a time. A company's own
-// careers page often hands its form to an ATS (Rubrik's to Greenhouse, AMD's
+// careers page often hands its form to an ATS (one employer's to Greenhouse, one employer's
 // to iCIMS, Paccar's to SuccessFactors); the page is read for where it leads.
 export type SiteCheck = {
   // The rule's ATS name ("Workday"), or none when no rule covers it.

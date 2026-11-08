@@ -64,7 +64,7 @@ const posted = (at?: number) => {
   return days < 1 ? "today" : days === 1 ? "yesterday" : `${days} days ago`;
 };
 
-// Finding jobs to apply for (2026-10-30): what to look for, from the
+// Finding jobs to apply for: what to look for, from the
 // applicant and, if they like, their profile; where (SimplifyJobs' lists and
 // companies' own Greenhouse, Lever and Ashby boards); and the openings found,
 // each tracked in one click. The command line has the same (lane search).
@@ -173,7 +173,7 @@ export function FindJobs({ onState }: { onState: (state: QueueState) => void }) 
           <label className="check-line"><input type="checkbox" checked={settings.sources.boards} onChange={() => toggle("boards")} /> These companies' job boards</label>
           <label>
             Companies (Greenhouse, Lever or Ashby board links, one per line)
-            <textarea rows={3} value={companies} onChange={(event) => setCompanies(event.target.value)} placeholder="https://jobs.ashbyhq.com/notion&#10;https://boards.greenhouse.io/anthropic" />
+            <textarea rows={3} value={companies} onChange={(event) => setCompanies(event.target.value)} placeholder="https://jobs.ashbyhq.com/acme&#10;https://boards.greenhouse.io/anthropic" />
           </label>
         </fieldset>
         <div className="row">
@@ -196,16 +196,16 @@ export function FindJobs({ onState }: { onState: (state: QueueState) => void }) 
           {result.listings.map((listing) => (
             <div className="history-row" key={listing.id}>
               <span>
-                <strong>{listing.company} — {listing.title}</strong>
-                <small>
+                <strong style={{ display: "block" }}>{listing.company} — {listing.title}</strong>
+                <small style={{ display: "block" }}>
                   {listing.locations.slice(0, 3).join("; ")}
                   {listing.postedAt ? ` · posted ${posted(listing.postedAt)}` : ""} · {listing.source} · for {listing.matched.join(" in ")}
                 </small>
                 {listing.site && (
                   listing.site.ats ? (
-                    <small title={listing.site.via ? `Applied on ${listing.site.via}` : undefined}>Applies on {listing.site.ats}</small>
+                    <small style={{ display: "block" }} title={listing.site.via ? `Applied on ${listing.site.via}` : undefined}>Applies on {listing.site.ats}</small>
                   ) : (
-                    <small className="warning-text" title="No site rule covers where this opening is applied, so only the general fill runs there.">No site rule for this site</small>
+                    <small className="warning-text" style={{ display: "block" }} title="No site rule covers where this opening is applied, so only the general fill runs there.">No site rule for this site</small>
                   )
                 )}
                 {listing.preview?.questions && (

@@ -125,8 +125,8 @@ export function rankOption(
   const choice = (proposal.choices || []).findIndex((c) => norm(c) === text);
   if (choice >= 0) return 1 + choice;
   // A list that prefixes or suffixes its own short code: "CS - Computer
-  // Science", "Computer Science (CS)", "Master of Science (M.S)" (WEX's
-  // Workday, report 6a57344f). The rest must be the whole answer.
+  // Science", "Computer Science (CS)", "Master of Science (M.S)" (one employer's
+  // Workday). The rest must be the whole answer.
   // Likewise a phone-country list, which appends each dial code:
   // "United States +1".
   const coded =
@@ -139,25 +139,24 @@ export function rankOption(
   const codedChoice = coded ? (proposal.choices || []).findIndex((c) => norm(c) === norm(coded)) : -1;
   if (codedChoice >= 0) return 41 + codedChoice / 100;
   // Or one explained in brackets after it: "Masters (±18 years of
-  // education)" (HPE's Workday, report 451b9877), "Asian (United States of
-  // America)" (TSC's). The rest must be the whole answer, or one of its names.
+  // education)" (one employer's Workday), "Asian (United States of
+  // America)". The rest must be the whole answer, or one of its names.
   const explained = optionText.match(/^(.+?)\s*\([^()]*\)\s*$/)?.[1];
   if (explained && norm(explained) === norm(proposal.value)) return 42;
   const explainedChoice = explained ? (proposal.choices || []).findIndex((c) => norm(c) === norm(explained)) : -1;
   if (explainedChoice >= 0) return 43 + explainedChoice / 100;
-  // A degree named with "Degree" after it: Argonne's Workday lists "Master
-  // of Science Degree" for the profile's "Master of Science" (report
-  // 2845e1d5, 2026-11-02).
+  // A degree named with "Degree" after it: one employer's Workday lists "Master
+  // of Science Degree" for the profile's "Master of Science".
   const named = optionText.match(/^(.+?)\s+degree(?:\s+or\s+equivalent)?\s*$/i)?.[1];
   if (named) {
     const at = [proposal.value, ...(proposal.choices || [])].findIndex((wording) => norm(wording) === norm(named));
     if (at >= 0) return 44.5 + at / 100;
   }
-  // A degree listed only by its level: Micron's "Master's Level Degree" and
-  // "Bachelor's Level Degree" (report 88608f31, 2026-11-02).
-  // Or by the bare level: RTX's "What is your Current Degree Program?"
+  // A degree listed only by its level: one employer's "Master's Level Degree" and
+  // "Bachelor's Level Degree".
+  // Or by the bare level: one employer's "What is your Current Degree Program?"
   // lists Associates, Bachelors, Masters and Ph.D., and "M.S. Data Science,
-  // Analytics & Engineering" matched none (report 273de71c, 2026-11-02).
+  // Analytics & Engineering" matched none.
   const levelOnly = (
     norm(optionText).match(/\b(associate|bachelor|master|doctor(?:ate)?)(?: s|s)? level degree$/)?.[1] ||
     norm(optionText).match(/^(associate|bachelor|master|doctor(?:ate)?)(?: s|s)?( degree)?$/)?.[1] ||
@@ -173,8 +172,8 @@ export function rankOption(
     if (at >= 0) return 44.7 + at / 100;
   }
   // A degree listed with the subjects it covers: "Masters of Arts or Science
-  // or Business Administration (Masters)" is a Master of Science (KLA's
-  // Workday, 2026-11-02). Same level, and the answer's subject is one named.
+  // or Business Administration (Masters)" is a Master of Science (one employer's
+  // Workday). Same level, and the answer's subject is one named.
   const listed = degreeSubjects(optionText);
   if (listed) {
     const wanted = [proposal.value, ...(proposal.choices || [])]
@@ -189,8 +188,8 @@ export function rankOption(
       !Object.values(qualifiedBinarySentences).some(sentences => sentences.some(sentence => norm(sentence) === text)) &&
       new RegExp(`^${proposal.value.trim()}\\b`, "i").test(optionText.trim())) return 45;
   if (proposal.decline && declines.test(text)) return 50;
-  // A date as a list's academic season (Databricks' "Spring 2027" for a May
-  // 2027 graduation, 2026-11-08): January to May is spring, June to August
+  // A date as a list's academic season (one employer's "Spring 2027" for a May
+  // 2027 graduation): January to May is spring, June to August
   // summer, September to December fall; "Earlier than Fall 2026" and "Later
   // than Summer 2027" by the same reckoning.
   const seasonal = seasonOption(proposal.value, optionText);
@@ -200,12 +199,12 @@ export function rankOption(
     // A note of the scale after it, "3.6 or above (out of 4.0)": a GPA is
     // answered on 4 (matching.ts), so only that scale's note is set aside.
     optionText = optionText.replace(/\s*\(\s*out of 4(?:\.0+)?\s*\)\s*$/i, "");
-    // With its unit after it or not: CharterUP's "1–2 years", "Less than 1
-    // year" and "5+ years" read as no option for 1 (2026-11-07).
+    // With its unit after it or not: one employer's "1–2 years", "Less than 1
+    // year" and "5+ years" read as no option for 1.
     const unit = "(?:\\s*(?:years?|yrs?|months?|hours?|hrs?)(?:\\s+of\\s+experience)?)?";
     const range = optionText.match(new RegExp(`^\\s*(\\d+(?:\\.\\d+)?)\\s*(?:-|–|—|to)\\s*(\\d+(?:\\.\\d+)?)${unit}\\s*$`, "i"));
     // From its start, short of its end: two years is "2 - 3", not also
-    // "1 - 2" (a tie, and no choice, on Rubrik's list, 2026-11-07). A value
+    // "1 - 2" (a tie, and no choice, on one employer's list). A value
     // at a list's top ("4.0" in "3.5-4.0") still falls in, scored lower.
     if (range && n >= Number(range[1]) && n < Number(range[2])) return 60;
     if (range && n >= Number(range[1]) && n <= Number(range[2]) + 0.005) return 59.5;
@@ -213,7 +212,7 @@ export function rankOption(
     if (below && n < Number(below[1])) return 61;
     const above = optionText.match(new RegExp(`^\\s*(\\d+(?:\\.\\d+)?)\\s*(?:\\+|or (?:above|higher|more|greater|older|over))${unit}\\s*(?:or (?:more|above))?\\s*$`, "i"));
     if (above && n >= Number(above[1])) return 61;
-    // "2.4 or below" (Databricks' GPA list).
+    // "2.4 or below" (one employer's GPA list).
     const atMost = optionText.match(new RegExp(`^\\s*(\\d+(?:\\.\\d+)?)\\s*or (?:below|less|lower|under|fewer)${unit}\\s*$`, "i"));
     if (atMost && n <= Number(atMost[1])) return 61;
   }
@@ -238,7 +237,7 @@ export function pickOption<T>(
   if (tied.length > 1) {
     // The same name written twice, differing only in punctuation ("Pennsylvania
     // State University - University Park" and the same with a
-    // long dash; a Greenhouse school list, 2026-10-13), is one answer: the
+    // long dash; a Greenhouse school list), is one answer: the
     // one written as the answer is, else the first. Different names tie, and
     // so do options written exactly alike: nothing on the page tells them
     // apart, so they may be two different things.
@@ -353,7 +352,7 @@ export function canonicalAnswer(field: ChoiceField, raw: string | undefined): st
   if (field === "sponsorship" && /\b(citizen|permanent resident|green card|lawful permanent)\b/.test(text))
     return "No";
   // "I have no military experience" is not a veteran; read by its "I have",
-  // it was taken as one (Philips' Workday, report 2d320e91, 2026-11-04).
+  // it was taken as one (one employer's Workday).
   if (field === "veteranStatus" && /\b(no (prior )?military|never served|not a veteran|have not served|no service)\b/.test(text)) return "No";
   // Yes/No families, checked after declines so "I do not wish…" is Decline.
   if (/^(no|n|false|none|never)\b|\b(not|do not|don t|dont|am not|have not|i m not)\b/.test(text)) return "No";

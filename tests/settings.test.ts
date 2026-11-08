@@ -49,7 +49,7 @@ test("the dashboard reads and edits drafting providers, the endpoint and folders
         { id: "codex", provider: "codex-cli", model: "gpt-5-codex", effort: "low" },
         { id: "http", provider: "http", model: "gemma" },
       ],
-      // Who checks, in an order of its own (2026-11-02).
+      // Who checks, in an order of its own.
       checkProviders: [
         { id: "checker", provider: "codex-cli", model: "codex-checker-model", effort: "low" },
         { id: "http", provider: "http", model: "gemma" },

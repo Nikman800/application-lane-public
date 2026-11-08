@@ -129,7 +129,7 @@ export async function transcriptArtifacts(
 export function letterBody(profile: Profile, narrative: Narrative): string[] {
   return [
     ...narrative.coverLetter.map((p) => p.text),
-    // A letter that ended on the bare name read as cut off (2026-10-17).
+    // A letter that ended on the bare name read as cut off.
     "Sincerely,",
     `${profile.firstName} ${profile.lastName}`.trim(),
   ];

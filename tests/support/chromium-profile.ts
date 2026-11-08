@@ -6,7 +6,7 @@ import { dirname, join } from "node:path";
 // blank by signing the account in with an empty password, and Windows counts
 // that as a wrong password. Every test and replay starts a fresh profile, so
 // a browser suite cost one bad password per test, and the 10-in-10-minutes
-// lockout policy locked the applicant out of their own computer (2026-10-26).
+// lockout policy locked the applicant out of their own computer.
 // Chromium keeps the answer in the profile's Local State and does not ask
 // again while it holds one, so the answer is kept here and handed to each
 // fresh profile. A changed password costs one check, then the answer updates.

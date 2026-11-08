@@ -66,11 +66,10 @@ import {
 
 // Chrome runs a hidden tab's chained timers about once a minute after five
 // minutes out of sight, so a fill left in a background tab took a minute for
-// each wait inside a dropdown or an upload (a 25-minute Greenhouse fill,
-// 2026-10-13). A wait is also ended by the extension's background, whose
+// each wait inside a dropdown or an upload (a 25-minute Greenhouse fill). A wait is also ended by the extension's background, whose
 // timers are not the page's: whichever comes first.
 // An older react-select's input has no combobox role: its own id, or the
-// container class a site gives it (Epic Games' "dropdown-autocomplete").
+// container class a site gives it (one employer's "dropdown-autocomplete").
 // A read-only box whose value comes from a picker opened by the button
 // beside it (a calendar).
 const pickerBox = (element: Element) =>
@@ -204,8 +203,7 @@ declare global {
 // A copy left by an earlier build (the extension reloaded since, its own
 // line to the extension cut) gives way to this one, so a page need not be
 // reloaded to take the new build: reloading lost unsaved entries, and on
-// L3Harris's SuccessFactors its one-time address showed only an error
-// (2026-11-07).
+// one employer's SuccessFactors its one-time address showed only an error.
 if (window.__applicationLane && window.__applicationLane.version !== CONTENT_VERSION) window.__applicationLane = undefined;
 if (!window.__applicationLane) {
   const documentId = crypto.randomUUID();
@@ -252,8 +250,8 @@ if (!window.__applicationLane) {
   let trustedWrite: Element | undefined;
   // A search box our real Enter searched: the site answers on its own a
   // moment later, moving focus into its results, and the box's trusted
-  // input or change that follows is still ours (KLA's field of study paused
-  // the fill as the applicant's edit, 2026-11-03). Only those two events,
+  // input or change that follows is still ours (one employer's field of study paused
+  // the fill as the applicant's edit). Only those two events,
   // only on that box, only briefly, and never while the applicant is active.
   let searchSettle: { element: Element; until: number } | undefined;
   // The applicant is using the page while their last click or key on it is
@@ -284,7 +282,7 @@ if (!window.__applicationLane) {
   // A key's release is not counted: Workday moves focus to Year as soon as
   // Month holds two digits, so the last key's release lands there, as it does
   // for the applicant. Counted, the month was retyped and then assigned, and
-  // Workday dropped the assigned month (Citi, report df423ef2, 2026-10-28).
+  // Workday dropped the assigned month.
   let misdirected = false;
   for (const type of ["keydown", "keypress", "beforeinput"])
     window.addEventListener(
@@ -313,7 +311,7 @@ if (!window.__applicationLane) {
     s.replace(/\s+/g, " ").trim().slice(0, max);
   // The words a block holds, without its scripts and styles: SuccessFactors
   // keeps inline scripts inside its content region, and their code filled
-  // the whole page description (report 974d6858, 2026-10-14).
+  // the whole page description.
   const readableText = (root: Element | null) => {
     if (!root) return "";
     const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
@@ -364,7 +362,7 @@ if (!window.__applicationLane) {
     return element instanceof HTMLInputElement && Boolean(first && isToggleChoice(first));
   };
   // The site's own job search and language menu, in the header of a posting
-  // (Amazon's, 2026-10-31: the posting read as a form of three fields, its
+  // (Amazon's: the posting read as a form of three fields, its
   // search boxes listed as optional questions, and Fill filled nothing).
   const siteChrome = (element: Control) => {
     if (element.closest('[role="search"],search') || element.matches('[role="combobox"][aria-haspopup="menu"]')) return true;
@@ -408,7 +406,7 @@ if (!window.__applicationLane) {
       element.value === ownedAutocompleteSearches.get(element)) return "";
     // A SuccessFactors list where "No Selection" was picked holds nothing:
     // read as an answer, it stayed locked as the applicant's, and Unlock
-    // empty fields could not release it (Expand Energy, 2026-10-29).
+    // empty fields could not release it.
     if (element instanceof HTMLInputElement && element.classList.contains("rcmpaginatedselectinput") &&
       /^no selection$/i.test(element.value.trim())) return "";
     const file = fileControls.get(element);
@@ -508,7 +506,7 @@ if (!window.__applicationLane) {
     result.push(...[...fileControls.keys()].filter((element) => !result.includes(element)));
     const tracked = result.filter(isTrackableControl);
     // A modal dialog is the whole form while it is open: what lies behind
-    // it cannot be reached (LinkedIn's search filters behind Easy Apply).
+    // it cannot be reached (one employer's search filters behind Easy Apply).
     const modal = openModal(tracked);
     return modal ? tracked.filter((element) => modal.contains(element)) : tracked;
   }
@@ -580,7 +578,7 @@ if (!window.__applicationLane) {
       // A group drawn in its component's own shadow root with the choices
       // slotted into it (SmartRecruiters' spl-radio-group): each Yes and No
       // read as a question of its own, both refused as "another field has
-      // the same label" (LinkedIn's screening questions, 2026-11-04).
+      // the same label" (one employer's screening questions).
       const parent = element.parentElement;
       if (parent && element.assignedSlot?.closest('[role="radiogroup"]'))
         return [...parent.children].filter((child): child is Control => child.getAttribute("role") === "radio");
@@ -641,8 +639,7 @@ if (!window.__applicationLane) {
     const section = sectionFor(element);
     // A key with no label names no field: SmartRecruiters' <label>s hold
     // only whitespace around a slot, every field read ":0:" under its older
-    // label, and one lock under it left a whole screening step unfilled
-    // (LinkedIn, 2026-11-05).
+    // label, and one lock under it left a whole screening step unfilled.
     return keysFor(element, label, section).filter((key) => !/:$/.test(key));
   };
   const keysFor = (element: Control, label: string, section: ReturnType<typeof sectionFor>) => {
@@ -654,8 +651,8 @@ if (!window.__applicationLane) {
       // A list's placeholder, which every list of the row shows, names only
       // a list holding an answer: one lock under "No Selection" kept Expand
       // Energy's empty Education Type, Country, Degree and Status empty
-      // (report a248361b), and without it the applicant's own picks there
-      // (Brightline's "State of Andhra Pradesh") were filled over (2026-10-29).
+      //, and without it the applicant's own picks there
+      // (Brightline's "State of Andhra Pradesh") were filled over.
       ...legacyLabels(element).filter((legacy) => !listPlaceholder.test(normalize(legacy)) || Boolean(valueOf(element))).flatMap((legacy) => [
         lockKey({ label: legacy, ...section }),
         ...(section.section ? [] : [lockKey({ label: legacy, section: "", index: 0 })]),
@@ -672,7 +669,7 @@ if (!window.__applicationLane) {
   // what is typed there is a search, and the site drops it unless something
   // is picked. The answer is the pick. With none, an applicant's typing
   // protects nothing, and a lock from it kept both fields empty in every
-  // later fill (Jabil, 2026-10-16: "python" and "Data Science" typed to show
+  // later fill (an employer: "python" and "Data Science" typed to show
   // the site's search, then cleared by it).
   const searchWithoutPick = (element: Element) => {
     const box = element.matches('input[data-uxi-widget-type="selectinput"]')
@@ -682,8 +679,7 @@ if (!window.__applicationLane) {
   };
   // What a list of picks holds is its picks, not its search box: Workday
   // picks a phone code itself once the country is set, and an empty box
-  // reported it as a required field left empty (GE Vernova, Jabil,
-  // 2026-10-16). Only for what is reported: the record, and what it
+  // reported it as a required field left empty (GE Vernova, an employer). Only for what is reported: the record, and what it
   // protects, still go by the box.
   const picksOf = (element: Element) => {
     const box = element.matches('input[data-uxi-widget-type="selectinput"]')
@@ -691,7 +687,7 @@ if (!window.__applicationLane) {
       : null;
     // Microsoft's careers form shows a multiselect's picks as pills beside
     // its read-only box ("United States, Washington, Redmond"): read as
-    // empty, a chosen location was reported as missing (2026-11-07).
+    // empty, a chosen location was reported as missing.
     const pills = element.matches('input[class*="select-module_select-input"]')
       ? [...(element.closest('[class*="select-module_select-wrapper"]')?.querySelectorAll('[class*="select-module_multi-select-pill"] [class*="pills-module_label"]') || [])]
       : [];
@@ -704,7 +700,7 @@ if (!window.__applicationLane) {
   // A SmartRecruiters multiselect keeps its picks as its own value, the ids
   // of the entries chosen; its box stays empty. Read as empty, a list already
   // holding "Not Applicable" was picked again, and the second pick undid
-  // the first (LinkedIn, 2026-11-05).
+  // the first.
   const splChosen = (element: Element): string[] => {
     let host = (element.getRootNode() as ShadowRoot).host as Element | undefined;
     for (let depth = 0; host && depth < 4 && !host.matches("spl-multiselect-autocomplete"); depth++)
@@ -735,7 +731,7 @@ if (!window.__applicationLane) {
       : "edit lock";
   };
   // A placeholder a site writes where its resume parser found nothing
-  // ("UNSPECIFIED" as a company, L3Harris, report 56e13a52) is no answer to
+  // ("UNSPECIFIED" as a company, an employer) is no answer to
   // keep, whatever the setting for site values.
   const placeholder = (value: string) =>
     /^\s*(unspecified|not specified|unknown|n\/?a|none|null|undefined|-+|\.+)\s*$/i.test(value);
@@ -796,7 +792,7 @@ if (!window.__applicationLane) {
     // A checkbox or radio a rule sets is clicked too (mainWorld.ts), and the
     // browser reports that click's input and change as trusted: unclaimed,
     // they read as the applicant's edit and paused every fill (Workday's
-    // "I am fluent", report 94389676, 2026-10-15).
+    // "I am fluent").
     const writesChoice =
       // (Every method that writes a value: Workday's default is "react".)
       ["selectCheckboxOrRadio", "checkOption", "default", "defaultWithoutBlur", "react", "dijit", "jQuery", "setValue", "setValueOnly"].includes(method) &&
@@ -826,11 +822,11 @@ if (!window.__applicationLane) {
     for (const element of controls()) {
       // A read-only box filled from its own picker (Tesla's start date) is a
       // question all the same: listed, so an empty one is said to need you
-      // (report d207d4aa, 2026-11-02). Only a picker writes it.
+      //. Only a picker writes it.
       if (!writable(element) && !(pickerBox(element) && controlVisible(element))) continue;
       // A read-only combobox naming its list is a list, picker button or not:
       // Microsoft's careers form read its sponsorship and location lists as
-      // date pickers, and their options were never read (2026-11-07).
+      // date pickers, and their options were never read.
       const listBox = element.getAttribute("role") === "combobox" && Boolean(element.getAttribute("aria-controls")) && !calendarBox(element);
       const kind =
         pickerBox(element) && !listBox
@@ -846,7 +842,7 @@ if (!window.__applicationLane) {
           // leaving it, the picker drops anything else ("Immediately").
           // (SuccessFactors' UI5 date picker's input calls itself a "Date
           // Input": "What year…will you receive your degree?" there takes a
-          // date, report 17ac6723.)
+          // date.)
           // Amazon's is a combobox opening a calendar dialog, "YYYY-MM-DD":
           // as a list, it was opened and waited on for options it never has.
           : element instanceof HTMLInputElement && element.type === "text" &&
@@ -854,17 +850,17 @@ if (!window.__applicationLane) {
                 element.getAttribute("aria-roledescription") === "Date Input" ||
                 calendarBox(element))
           ? "datepicker"
-          // A native list is one whatever role it is given: AMD's iCIMS
+          // A native list is one whatever role it is given: one employer's iCIMS
           // screening questions are <select role="combobox"> naming a
           // listbox that never appears, and were waited on as custom lists
-          // until "Dropdown options were not available" (2026-11-07).
+          // until "Dropdown options were not available".
           : element instanceof HTMLSelectElement
           ? "select"
           : element.getAttribute("role")
           ? element.getAttribute("role")!
           // A type the browser does not know reads as "text": SuccessFactors'
           // "currency" box takes a number only ("Invalid number." for
-          // "$100,000 per year.", L3Harris, report b5d63aeb).
+          // "$100,000 per year.", an employer).
           : element instanceof HTMLInputElement && /^(currency|decimal|integer)$/i.test(element.getAttribute("type") || "")
             ? "number"
           : element instanceof HTMLInputElement
@@ -937,7 +933,7 @@ if (!window.__applicationLane) {
           // were: SuccessFactors, saving an uploaded resume, wrote back what
           // it parsed from it ("UNSPECIFIED" for a company, the 1st and the
           // 30th for dates) and those were then kept as if the applicant had
-          // chosen them (L3Harris, report 9a11d03e, 2026-10-15). No one typed
+          // chosen them. No one typed
           // there: it is the site's value, and the next fill corrects it.
           record.protected = false;
           record.protectedBy = undefined;
@@ -1012,11 +1008,10 @@ if (!window.__applicationLane) {
           // Workday's Autofill with Resume does the same, as its page loads
           // and before any fill: its parser set Phone Device Type to
           // Landline after the page was read, and the profile's Mobile was
-          // never written (TSC, report 117fa197).
+          // never written.
           // SuccessFactors puts back an answer it stored ("No" to clearance
           // eligibility) whenever another field of its form changes, and that
-          // was locked as the applicant's (L3Harris, report ebfd5371,
-          // 2026-10-15). Nobody touched the page, and an applicant's change
+          // was locked as the applicant's. Nobody touched the page, and an applicant's change
           // comes with their own click or keys: it is the site's value, for
           // the profile to correct. (Elsewhere a change nobody can account for
           // is kept, as it may be the applicant's own tool's.)
@@ -1028,8 +1023,7 @@ if (!window.__applicationLane) {
           // The site answering a write of ours in the same small group of
           // fields: Ashby puts this year in a date's empty Year once its Month is
           // picked. Locked as the applicant's, the saved year was never
-          // written, and the end date, kept after the start, followed it
-          // (Applied Intuition, report 3fcbf55d, 2026-10-28).
+          // written, and the end date, kept after the start, followed it.
           record.siteValue = true;
           record.confirmed = false;
         }
@@ -1082,7 +1076,7 @@ if (!window.__applicationLane) {
         // An entry editor SmartRecruiters has open is its site rule's to
         // fill (the rule still writes there): its fields name no school or
         // job, and the general fill wrote one school's major and degree into
-        // another's (LinkedIn, report a8c856cd, 2026-11-05).
+        // another's.
         protected:
           record.protected ||
           /password/.test(kind) ||
@@ -1123,8 +1117,8 @@ if (!window.__applicationLane) {
     // A repeated text/upload control still has an ambiguous purpose. Radio
     // groups with their own options remain independently answerable.
     // The same list asked twice with the same choices is one question, both
-    // answered alike: Rubrik's form repeats "Are you currently or have you
-    // ever been employed by Rubrik…", and both were held back (2026-11-07).
+    // answered alike: one employer's form repeats "Are you currently or have you
+    // ever been employed by an employer…", and both were held back.
     const sameList = (field: Field) => {
       if (!/select|combobox/.test(field.kind) || !field.options.length) return false;
       const twins = fields.filter((other) => `${lockKey(other)}:${other.kind}` === `${lockKey(field)}:${field.kind}`);
@@ -1135,8 +1129,8 @@ if (!window.__applicationLane) {
         field.protected = true;
         field.protectedReason ||= "another field has the same label";
       }
-    // A page without a main region whose root is only its form (Epic Games'
-    // careers page, 2026-10-14) keeps the posting outside that form: the
+    // A page without a main region whose root is only its form (one employer's
+    // careers page) keeps the posting outside that form: the
     // whole page is read, or the answers and documents never see the job.
     const matchedRoot = document.querySelector(ats.root);
     const pageRoot = !matchedRoot || matchedRoot.matches("form") ? document.body : matchedRoot;
@@ -1215,8 +1209,8 @@ if (!window.__applicationLane) {
       ...(paused && pausedBy ? { pausedBy } : {}),
       blockers,
       // SuccessFactors' Resume and Cover Letter are attachment widgets with
-      // no file box: named here so a letter is drafted for its slot (L3Harris
-      // drafted none, report a43e721f, 2026-11-04).
+      // no file box: named here so a letter is drafted for its slot (an employer
+      // drafted none).
       ...((slots) => (slots.length ? { documentSlots: slots } : {}))([...new Set([...document.querySelectorAll(".attachmentField label")]
         .map((label) => /cover\s*letter/i.test(label.textContent || "") ? "cover" : /\b(resume|cv)\b/i.test(label.textContent || "") ? "resume" : "")
         .filter(Boolean))]),
@@ -1418,14 +1412,14 @@ if (!window.__applicationLane) {
     if (record.protected) return { reason: "The field is protected from automatic changes." };
     // Only the same answer: one planned before the list's options were read
     // ("No", "December 2027") failed, and its corrected one ("Not
-    // Applicable", "December") was then never tried (LinkedIn, 2026-11-04).
+    // Applicable", "December") was then never tried.
     if (record.failedOperation === operation && (!("value" in proposal) || (proposal as { value?: string }).value === record.failedValue))
       return { reason: "The field already failed in this fill." };
     if (record.revision !== proposal.revision) return { reason: "The field revision changed since inspection." };
     if (valueOf(record.element) !== proposal.expectedValue) return { reason: "The field value changed since inspection." };
     // Focus our own typing moved there is not the applicant's: Workday moves
     // a date's focus from its Month to its Day as the Month is typed, and the
-    // Day was refused, the date left half typed (Leidos, 2026-11-08).
+    // Day was refused, the date left half typed.
     const ourFocus = performance.now() - lastEngineWrite < 3000 && performance.now() - lastApplicantInput > 2000;
     if (document.activeElement === record.element && !ourFocus) return { reason: "The field currently has focus." };
     return { record };
@@ -1532,13 +1526,13 @@ if (!window.__applicationLane) {
   const ripplingSelect = (element: Element) =>
     element.matches('[role="combobox"][aria-haspopup="listbox"]') && Boolean(element.closest('[data-testid="select-controller"]'));
   // SuccessFactors' picklists open on a click, not on a press, and draw each
-  // option as one menu item link inside it (report 624039b6, 2026-10-14).
+  // option as one menu item link inside it.
   const successFactorsPicklist = (element: Element) =>
     element.matches('input.rcmpaginatedselectinput[role="combobox"]');
   const pressOutside = () => document.body.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, button: 0, view: window }));
   // SuccessFactors marks a picklist closed on its Escape but leaves the list
   // drawn over the form; a press elsewhere on the page takes it away, as the
-  // applicant's own click did (L3Harris recordings, 2026-10-15: of 556
+  // applicant's own click did (an employer recordings: of 556
   // Escapes sent while a list showed, none took it away).
   let lastLanePicklistClick = 0;
   let lastApplicantPicklistUse = 0;
@@ -1555,7 +1549,7 @@ if (!window.__applicationLane) {
   }
   // The list a combobox names, found in its own root or in the roots of the
   // components around it: SmartRecruiters' box sits in an spl-input inside
-  // the spl-autocomplete whose shadow root holds the menu (2026-11-04).
+  // the spl-autocomplete whose shadow root holds the menu.
   function controlledList(element: Element): HTMLElement | null {
     const id = element.getAttribute("aria-controls") || element.getAttribute("aria-owns") || "";
     if (!id || /\s/.test(id)) return null;
@@ -1596,8 +1590,7 @@ if (!window.__applicationLane) {
     const own = [...list.querySelectorAll<HTMLElement>('[role="option"]')];
     // An option component draws its role="option" only once its list has
     // been opened: SmartRecruiters' Gender, Race and Veteran lists, never
-    // opened, read as none, and Veteran went unanswered (report 52645691,
-    // 2026-11-05). Its own element, named for an option, is one.
+    // opened, read as none, and Veteran went unanswered. Its own element, named for an option, is one.
     const drawn = own.length ? own : shadowedOptions(list);
     const options = drawn.length ? drawn : [...list.children].filter((child): child is HTMLElement =>
       child instanceof HTMLElement && /-option$/i.test(child.tagName) && !child.matches("[hidden]"));
@@ -1616,7 +1609,7 @@ if (!window.__applicationLane) {
     writing = false; // Never suppress trusted edits while awaiting site options.
     // A link with no address goes nowhere: iCIMS draws every list as an
     // <a role="combobox"> without one, and each job's Country and State were
-    // refused as able to navigate (AMD, 2026-11-07).
+    // refused as able to navigate.
     if (
       (element instanceof HTMLButtonElement && element.type !== "button") ||
       element.closest("a[href]")
@@ -1691,7 +1684,7 @@ if (!window.__applicationLane) {
       }
     }
     // An iCIMS list shows a first page until searched: India was not on it,
-    // and a job's Country stayed empty (AMD, 2026-11-07). Its own search box
+    // and a job's Country stayed empty. Its own search box
     // is used, as its site rule does for schools.
     if (element.matches('a[id$="_icimsDropdown"]')) {
       writing = true;
@@ -1731,8 +1724,7 @@ if (!window.__applicationLane) {
       document.addEventListener(type, interruptOpeningFocus, true);
     // A SuccessFactors picklist can say it is open with no list drawn (one
     // opened and closed earlier, or before a refresh): taken at its word,
-    // its list was waited on for 15 s and never came (L3Harris, report
-    // 726eafd7, 2026-11-07). It is opened as a closed one.
+    // its list was waited on for 15 s and never came. It is opened as a closed one.
     const staleOpen = () => {
       if (!successFactorsPicklist(element) || element.getAttribute("aria-expanded") !== "true") return false;
       const owned = document.getElementById((element.getAttribute("aria-owns") || "").split(/\s+/)[0]);
@@ -1750,14 +1742,13 @@ if (!window.__applicationLane) {
           // Ashby's dropdowns list their options only from their arrow.
           if (toggle) toggle.click();
           // Clicked, then focused, as its site rule does: a click alone
-          // marks it open and loads nothing (L3Harris, report 5beb4b34).
+          // marks it open and loads nothing.
           else if (successFactorsPicklist(element)) {
             element.click();
             element.focus({ preventScroll: true });
           }
           // An iCIMS list opens on a mousedown; a click alone does nothing,
-          // and each job's Country waited 5 s on a list never opened (AMD,
-          // 2026-11-07).
+          // and each job's Country waited 5 s on a list never opened.
           else if (element instanceof HTMLInputElement || element.matches('a[id$="_icimsDropdown"]'))
             element.dispatchEvent(
               new MouseEvent("mousedown", {
@@ -1798,7 +1789,7 @@ if (!window.__applicationLane) {
         acquireOpenedFocus();
         assertSafe("Custom selection paused or superseded.");
         // Oracle's lists open from their own arrow button, not a press on
-        // the box (Nokia's graduation date, report 1f68e4f9). A click opens
+        // the box (one employer's graduation date). A click opens
         // them in a page out of view too, where focus comes with no event.
         const listId = element.getAttribute("aria-controls")!;
         const arrow = element.getAttribute("aria-expanded") !== "true"
@@ -1826,8 +1817,7 @@ if (!window.__applicationLane) {
         }
         // Still closed: a whole click on the box, then the arrow drawn beside
         // it (hidden from assistive tech, naming no list). Microsoft's
-        // careers form opens neither on a press nor on focus (report
-        // cb45d0c9, 2026-11-04). Only a list that stayed shut gets these.
+        // careers form opens neither on a press nor on focus. Only a list that stayed shut gets these.
         for (const press of [
           () => element,
           () => element.parentElement?.querySelector<HTMLButtonElement>('button[aria-hidden="true"][tabindex="-1"]:not([aria-label*="clear" i])') || undefined,
@@ -1848,7 +1838,7 @@ if (!window.__applicationLane) {
         }
       }
       // A SuccessFactors list comes from the site's server, 2.5 to 3 seconds
-      // on L3Harris's (report 6ee7e4d6, 2026-10-15): it gets 15.
+      // on one employer's: it gets 15.
       const deadline = Date.now() + (successFactorsPicklist(element) ? 15000 : 5000);
       if (ashbyLocation && proposal.value.trim()) {
         assertSafe("Custom selection paused or superseded.");
@@ -1910,7 +1900,7 @@ if (!window.__applicationLane) {
         // are, and neither is taken.
         const openLists = () => [...document.querySelectorAll<HTMLElement>('[role="listbox"]')].filter(rendered);
         // iCIMS' lists name none: theirs is in the "_ctnr" box drawn beside
-        // the link (each job's Country on AMD's form, 2026-11-07).
+        // the link (each job's Country on one employer's form).
         const icimsList = () => element.matches('a[id$="_icimsDropdown"]')
           ? document.getElementById(`${element.id}_ctnr`)?.querySelector<HTMLElement>('[role="listbox"]') || null
           : null;
@@ -1924,8 +1914,8 @@ if (!window.__applicationLane) {
           element.getAttribute("aria-expanded") === "true" &&
           list.getAttribute("aria-busy") !== "true"
         ) {
-          // Oracle's lists are grids of one cell per choice (Nokia's
-          // graduation date, report 1f68e4f9).
+          // Oracle's lists are grids of one cell per choice (one employer's
+          // graduation date).
           const grid = list.matches('[role="grid"]') || element.getAttribute("aria-haspopup") === "grid";
           const roled = [
             ...list.querySelectorAll<HTMLElement>(grid ? '[role="option"],[role="gridcell"]' : '[role="option"]'),
@@ -1942,14 +1932,14 @@ if (!window.__applicationLane) {
           };
           // A list showing only its placeholder is still loading: Workday
           // opens with "Select One" and adds its answers a moment later, and
-          // a pick read at once found nothing (2026-11-04).
+          // a pick read at once found nothing.
           if (options.length && options.every((o) => /^\s*(select one|select|select\.\.\.|choose one|please select|no selection)\s*$/i.test(optionText(o)))) {
             await pause(50);
             continue;
           }
           // "Select "Other" if it is not in list": the question's own rule,
           // for an answer the list does not hold; its follow-up asks for the
-          // name (DraftKings' school, report c875e6c5, 2026-11-02).
+          // name (one employer's school).
           const otherAsked = /\bselect\s*["“']?other["”']?\s*if\b[^.?]*\bnot\b[^.?]*\blist/i.test(record.label);
           const option = pickOption(proposal, options, optionText) ||
             (otherAsked ? options.find((candidate) => /^other\b/i.test(optionText(candidate).trim())) : undefined);
@@ -1958,11 +1948,11 @@ if (!window.__applicationLane) {
             // An option component (SmartRecruiters' spl-select-option)
             // ignores a script's click, as its location menu did: the box is
             // focused and real Down keys reach the option, then Enter takes it
-            // (LinkedIn's screening lists, 2026-11-04).
+            // (one employer's screening lists).
             // Microsoft's careers lists: a click on an option only lights it
             // (aria-activedescendant), the list stays open and nothing is
             // kept, and the applicant's next click on the box emptied it
-            // (2026-11-07). Real Down keys until the box names the option as
+            //. Real Down keys until the box names the option as
             // its active one, then Enter, as the applicant would.
             if (!shadowed.length && element.matches('input[class*="select-module_select-input"]') && option.id && !userAttention()) {
               const keys = new AbortController();
@@ -1985,7 +1975,7 @@ if (!window.__applicationLane) {
                   await requestTrustedType(element, { applicationId, operation, documentId }, "", 0, keys.signal, allowed, true, 0);
                 else if (window === window.top && allowed()) {
                   // Down moved nothing on the live list: a real click on the
-                  // option, as the applicant would (2026-11-07).
+                  // option, as the applicant would.
                   option.scrollIntoView({ block: "nearest" });
                   await pause(100);
                   const box = option.getBoundingClientRect();
@@ -2028,9 +2018,9 @@ if (!window.__applicationLane) {
                 (element as HTMLElement).focus({ preventScroll: true });
                 acquireOpenedFocus();
                 // One Down at a time, reading which entry is lit, and Enter
-                // once it is the one: LinkedIn's lists open with their first
+                // once it is the one: one employer's lists open with their first
                 // entry lit, so a count of Downs from the box overshot by one
-                // (Graduation Year 2028 for 2027, 2026-11-04).
+                // (Graduation Year 2028 for 2027).
                 const lit = () => shadowed.findIndex((candidate) => {
                   const inner = deepOption(candidate);
                   return Boolean(inner && (inner.classList.contains("active") || (inner.getRootNode() as ShadowRoot).activeElement === inner));
@@ -2058,8 +2048,8 @@ if (!window.__applicationLane) {
                 // The entry lit as the list opened was never reached by a key:
                 // an Enter then took nothing, in the box (it closed a
                 // multiselect) or on the entry focused by a script (the list
-                // kept its own place), and LinkedIn's "Not Applicable", first
-                // in its lists, stayed empty (report 7fd79357, 2026-11-05).
+                // kept its own place), and one employer's "Not Applicable", first
+                // in its lists, stayed empty.
                 // Down and back Up reach it as the applicant would.
                 if (!moved && lit() === target && shadowed.length > 1) {
                   await step(1);
@@ -2068,8 +2058,7 @@ if (!window.__applicationLane) {
                 if (lit() === target)
                   await requestTrustedType(element, { applicationId, operation, documentId }, "", 0, keys.signal, allowed, true, 0);
                 else {
-                  // Down lit nothing (Intuitive's screening Gender and Race,
-                  // 2026-11-07): a real click on the entry instead.
+                  // Down lit nothing (one employer's screening Gender and Race): a real click on the entry instead.
                   const entry = deepOption(shadowed[target]) || shadowed[target];
                   entry.scrollIntoView({ block: "nearest" });
                   await pause(100);
@@ -2148,7 +2137,7 @@ if (!window.__applicationLane) {
               picked = true;
               // A SuccessFactors list still loading its next page when the
               // pick was made opens itself again once the page arrives (a
-              // Country list of 100, WEC Energy Group, 2026-10-15): it is
+              // Country list of 100, an employer): it is
               // waited for and closed.
               if (successFactorsPicklist(element)) {
                 const listId = element.getAttribute("aria-owns") || "";
@@ -2219,11 +2208,10 @@ if (!window.__applicationLane) {
       }
       // A SuccessFactors picklist this selection opened stays over the form
       // when nothing in it was picked (no option matched, or none came): its
-      // own Escape and a press elsewhere close it (L3Harris's profile,
-      // 2026-10-15, lists stacked open after a fill).
-      // Its page may still arrive after that (2.5 to 3 seconds on L3Harris's
+      // own Escape and a press elsewhere close it (one employer's profile, lists stacked open after a fill).
+      // Its page may still arrive after that (2.5 to 3 seconds on one employer's
       // server) and open it again; it is watched for a moment and closed
-      // again (report f5b57962, lists left open over the form).
+      // again (lists left open over the form).
       if (successFactorsPicklist(element) && openingRequested && !picked && !openingInterrupted && element.isConnected) {
         const listId = element.getAttribute("aria-owns") || "";
         for (let waited = 0; waited <= 3000; waited += 250) {
@@ -2249,8 +2237,7 @@ if (!window.__applicationLane) {
           element.getAttribute("aria-expanded") === "true") pressOutside();
       // A Workday list this selection opened and picked nothing from is
       // closed, not left over the form: its own Escape, then a press on the
-      // page as the site's rules make (NGC's Phone Device Type, report
-      // cfbf90ad, 2026-11-02, with no exact option to pick).
+      // page as the site's rules make (one employer's Phone Device Type, with no exact option to pick).
       if (listButton(element) && openingRequested && !picked && !openingInterrupted && valid(command) && element.isConnected) {
         const shownLists = () => [...document.querySelectorAll<HTMLElement>('[role="listbox"]')].filter(rendered);
         if (shownLists().length) {
@@ -2280,7 +2267,7 @@ if (!window.__applicationLane) {
   // aren't taken for the applicant's edit.
   // A box ticked or cleared with a real click, as the applicant would: a
   // script's click changed Greenhouse's box on screen but not its own
-  // state, which drew "U.S. citizen" ticked again (Databricks, 2026-11-08).
+  // state, which drew "U.S. citizen" ticked again.
   // A script's click where real ones cannot be made (an embedded frame, no
   // debugger permission).
   async function clickBox(control: HTMLInputElement, checked: boolean, command: Command): Promise<boolean> {
@@ -2331,7 +2318,7 @@ if (!window.__applicationLane) {
   // keys alike; Workday's date sections are the reason this path exists.
   // Where in the menu a typed box opened the entry naming a value sits,
   // counted from 1, not the box's own "fill manually" entry: SmartRecruiters'
-  // "Lansing, MI, US" for "Lansing, MI" (2026-11-04). A script's click on it was
+  // "Lansing, MI, US" for "Lansing, MI". A script's click on it was
   // ignored, so it is reached with the keys the applicant uses. Its menu may
   // sit in the component's nested shadow roots. 0: none listed (after up to
   // 2.5 s for the menu).
@@ -2340,7 +2327,7 @@ if (!window.__applicationLane) {
   function menuEntries(element: Element): HTMLElement[] {
     // The component around the box, not the box: an input that is itself a
     // combobox naming its list matched at once, and its menu (in the
-    // component's shadow root) was never searched (LinkedIn, 2026-11-05).
+    // component's shadow root) was never searched.
     let host: Element | undefined = ((element.getRootNode() as ShadowRoot).host as Element | undefined) || undefined;
     for (let depth = 0; host && depth < 4 && !host.matches("spl-autocomplete,spl-multiselect-autocomplete"); depth++)
       host = ((host.getRootNode() as ShadowRoot).host as Element | undefined) || undefined;
@@ -2412,7 +2399,7 @@ if (!window.__applicationLane) {
     misdirected = false;
     // A longer value than the Backspaces would reach is selected, and the
     // keys typed replace it: sixteen Backspaces left the start of an earlier
-    // address in front of the new one (Microsoft, 2026-11-07).
+    // address in front of the new one (Microsoft).
     const held = ((element as HTMLInputElement).value || "").length;
     const selectAll = held > 16 && element instanceof HTMLInputElement && /^(text|search|email|tel|url)$/.test(element.type);
     if (selectAll) (element as HTMLInputElement).select();
@@ -2425,7 +2412,7 @@ if (!window.__applicationLane) {
         // steps into the neighbouring date section and clears that. A
         // Workday date section empties on a single Backspace, and its "2005"
         // took two: the second sent focus back to the Day, and the year was
-        // never typed (Leidos, 2026-11-08).
+        // never typed.
         selectAll ? 0 : element.matches('input[role="spinbutton"][data-automation-id^="dateSection"]') ? Math.min(1, held) : Math.min(16, held),
         signal,
         () => safe() && !userAttention() && focused(),
@@ -2501,16 +2488,15 @@ if (!window.__applicationLane) {
         )
           throw new Error("Requires manual input.");
         // Text typed in a list of picks' search box is a search the site
-        // drops: typed there, RTX's Field of Study was empty again at each
-        // look and typed again every two seconds (report 6e6db787). Its
+        // drops: typed there, one employer's Field of Study was empty again at each
+        // look and typed again every two seconds. Its
         // site rule picks from it; what that leaves is the applicant's.
         if (element.matches('[data-automation-id="multiSelectContainer"] input[data-uxi-widget-type="selectinput"]'))
           throw new Error("Pick it from the site's list; typed text there is only a search.");
         // A Workday list is a button that opens it (button[aria-haspopup]):
         // an answer no site rule wrote is picked from it like any other list.
-        // It failed as "a custom control" instead (Citi's KPMG question,
-        // 2026-10-28).
-        // Not a native list given the role (AMD's iCIMS screening questions):
+        // It failed as "a custom control" instead (one employer's KPMG question).
+        // Not a native list given the role (one employer's iCIMS screening questions):
         // it is set as a select.
         if ((element.getAttribute("role") === "combobox" && !(element instanceof HTMLSelectElement) && !calendarBox(element)) || element.closest(".pcty-input-select__input") || element.matches(legacyReactSelect) || listButton(element)) {
           await selectCustom(command, proposal, record);
@@ -2592,8 +2578,7 @@ if (!window.__applicationLane) {
           )!.set!.call(element, option.value);
         } else if (element instanceof HTMLInputElement && element.matches('input[role="spinbutton"][data-automation-id^="dateSection"]')) {
           // A Workday date's Month, Day or Year keeps only what is typed:
-          // set, DraftKings' graduation Month and Day read back empty (report
-          // c875e6c5, 2026-11-02). Typed as the site's rules type them.
+          // set, one employer's graduation Month and Day read back empty. Typed as the site's rules type them.
           writing = true;
           try {
             // Its sections take numbers: December is typed as 12.
@@ -2605,7 +2590,7 @@ if (!window.__applicationLane) {
             // moves focus on to the Day and the Year as each is typed, and a
             // Day or Year typed on its own after that had focus taken back to
             // the Month, the date left half typed and its year made 2005
-            // (Leidos, 2026-11-08). Parts this fill does not answer keep what
+            //. Parts this fill does not answer keep what
             // they hold.
             const wrapper = element.closest('[data-automation-id="dateInputWrapper"],[role="group"]');
             const part = (name: string) => wrapper?.querySelector<HTMLInputElement>(`input[data-automation-id="dateSection${name}-input"]`) || undefined;
@@ -2649,7 +2634,7 @@ if (!window.__applicationLane) {
                   throw new Error("Site did not retain the value.");
                 // Every part typed is this fill's at once: the Year's change,
                 // seen before its own proposal came up, was taken for the
-                // applicant's edit and locked (Leidos, 2026-11-08).
+                // applicant's edit and locked.
                 for (const input of [month, day, year]) {
                   if (!input) continue;
                   const typedRecord = nodeRecords.get(input);
@@ -2694,8 +2679,7 @@ if (!window.__applicationLane) {
           record.automationWritten = true;
         } else changed(record);
         // Left as when typed into: Amazon's text questions keep their answer
-        // only on blur, and showed it while Continue still called it required
-        // (report 71e8bf05, 2026-10-25).
+        // only on blur, and showed it while Continue still called it required.
         if (
           !typedDate && (
           element instanceof HTMLTextAreaElement ||
@@ -2736,7 +2720,7 @@ if (!window.__applicationLane) {
     }
     // Boxes a site's own list redraws: Greenhouse's put "U.S. citizen" back
     // when the next box of its list was ticked, after it had been unticked
-    // (Databricks, 2026-11-08). Each box this batch set is read again once
+    //. Each box this batch set is read again once
     // the page has redrawn, and set again where it drifted; one still wrong
     // is reported, never left as done.
     const drifted = () => [...boxesSet.values()].some((box) => box.element.isConnected && box.element.checked !== box.wanted);
@@ -2808,10 +2792,10 @@ if (!window.__applicationLane) {
           // Workday's is "Delete".
           /^\s*(remove|delete)\b/i.test(text || ""),
         );
-      // Only a file the applicant can see is attached: Nokia's Oracle keeps
+      // Only a file the applicant can see is attached: one employer's Oracle keeps
       // the cover letter and its "Remove Cover Letter" button in a part of
       // the page that is not shown, and it was taken for the one in
-      // Additional Documents, which stayed empty (reports c446817c, 4cc220fa).
+      // Additional Documents, which stayed empty.
       const shown = (element: Element) =>
         (element as HTMLElement).getClientRects().length > 0 &&
         (element as HTMLElement).checkVisibility({ visibilityProperty: true, opacityProperty: true });
@@ -2823,7 +2807,7 @@ if (!window.__applicationLane) {
       // A site that takes the file into a list of its own names it as that
       // list's choice: Microsoft's "Upload your resume" box held the name,
       // and the résumé was sent again on each fill, its parse emptying the
-      // address typed before it (2026-11-07).
+      // address typed before it.
       const chosen = Boolean(name) && [...document.querySelectorAll<HTMLInputElement>('input[role="combobox"]')]
         .some((box) => box.value.trim() === name && shown(box));
       return {
@@ -2891,7 +2875,7 @@ if (!window.__applicationLane) {
       // Answers the applicant (not this extension) put on the page, as
       // candidates for the saved-answer bank.
       const observation = inspect();
-      // A native list's value is its option's hidden value (Zoox's location
+      // A native list's value is its option's hidden value (one employer's location
       // "65f5e6fd-…", Tesla's "7_months_or_more"); a saved answer is filled
       // by the text the applicant picked. A radio with no label of its own
       // reads as its hidden value too: that one has no text to keep.
@@ -3154,8 +3138,8 @@ if (!window.__applicationLane) {
       // A SuccessFactors application folds its sections (Profile Information,
       // Previous Employment, Education, Job-Specific Information) behind
       // their title bars, and nothing inside a folded one is on the page:
-      // L3Harris's form was read as one Language field and nothing was filled
-      // (report fcabe714, 2026-11-04). Each is opened, as the applicant would
+      // one employer's form was read as one Language field and nothing was filled
+      //. Each is opened, as the applicant would
       // open it, before the pass reads the form.
       const folded = [...document.querySelectorAll<HTMLButtonElement>('.rcmFormSection button.rcmFormSectionTopBar[aria-expanded="false"]')];
       if (folded.length && !paused) {
@@ -3175,11 +3159,10 @@ if (!window.__applicationLane) {
         // Long forms (iCIMS rows searched one dropdown at a time) need it.
         // Workday's My Experience searches its field of study and each
         // skill in turn, about 20 s for a search that finds nothing: at 60 s
-        // the pass ended before Skills (Jabil, 2026-10-16). SuccessFactors
+        // the pass ended before Skills. SuccessFactors
         // waits out each of a place's wordings its list lacks, 5 s apiece:
         // with three jobs and two schools the pass ended a minute in, with
-        // "Master" typed into Highest Degree Achieved and never picked
-        // (Westinghouse, report d57dca7e).
+        // "Master" typed into Highest Degree Achieved and never picked.
         // (configPassTimeout: SmartRecruiters' real-key picks too.)
         AbortSignal.timeout(configPassTimeout(location.hostname)),
       ]);
@@ -3218,7 +3201,7 @@ if (!window.__applicationLane) {
             ) ||
             (node as HTMLInputElement).disabled ||
             // A read-only box with its own picker button is filled from that
-            // picker, as Tesla's start date is (report d207d4aa): the site
+            // picker, as Tesla's start date is: the site
             // writes it, never this.
             ((node as HTMLInputElement).readOnly && !pickerBox(node)) ||
             node.getAttribute("aria-disabled") === "true" ||
@@ -3317,8 +3300,7 @@ if (!window.__applicationLane) {
           if (record && record.last !== valueOf(record.element)) inspect();
           // A value the site itself calls invalid is no answer to keep:
           // Microsoft's form showed an address assigned earlier that its own
-          // state never took, flagged it, and it was never typed again
-          // (2026-11-07).
+          // state never took, flagged it, and it was never typed again.
           if (element.getAttribute("aria-invalid") === "true" && !hasEditLock(element as Control, record?.label || "")) return true;
           return Boolean(nodeRecords.get(element as HTMLElement)?.siteValue);
         },
@@ -3365,7 +3347,7 @@ if (!window.__applicationLane) {
           if (!safe()) {
             // Why a write was refused, for the recording: a refusal otherwise
             // leaves only the write note, as a school's "Did You Graduate?" did on
-            // an iCIMS form (2026-11-07).
+            // an iCIMS form.
             const record = nodeRecords.get(element as HTMLElement);
             stopRecording?.note({ refused: element.id || method, reason: !valid(command) ? "stale command" : record?.protected ? `protected: ${record.protectedBy || ""}` : record && hasEditLock(record.element, record.label) ? lockReason(record.element, record.label) : "locked" });
             return false;
@@ -3394,7 +3376,7 @@ if (!window.__applicationLane) {
               // The entry the menu lists for it: the site's own one where it
               // has it (SmartRecruiters' "Michigan State University" under its
               // "fill manually" one), else Down and Enter on the first, the
-              // text as typed (2026-11-04).
+              // text as typed.
               if (typed && method === "trustedChoose") {
                 // The site's own entry where it lists one, else the first
                 // (the text as typed): Down to it, then Enter.
@@ -3403,7 +3385,7 @@ if (!window.__applicationLane) {
                   // Down moves focus into the menu, so the Enter lands on its
                   // entry, not the box: the whole component is the write's,
                   // or that Enter was held back as a stray key and nothing
-                  // was chosen (SmartRecruiters' Office location, 2026-11-04).
+                  // was chosen (SmartRecruiters' Office location).
                   let component: Element = element;
                   for (let host = (element.getRootNode() as ShadowRoot).host as Element | undefined, depth = 0; host && depth < 4; host = (host.getRootNode() as ShadowRoot).host as Element | undefined, depth++) {
                     component = host;
@@ -3415,7 +3397,7 @@ if (!window.__applicationLane) {
                     // then Enter there. A Down the menu let pass left focus in
                     // the box, and the Enter after it cleared what was typed:
                     // every Title, Company and School of a fill went empty
-                    // (LinkedIn, 2026-11-05). No Enter reaches the box.
+                    //. No Enter reaches the box.
                     const allowed = () => safe() && !userAttention();
                     const guard = { applicationId, operation, documentId };
                     const target = (position || 1) - 1;
@@ -3438,7 +3420,7 @@ if (!window.__applicationLane) {
                     }
                     if (moved && reached() === target && allowed())
                       await requestTrustedType(element, guard, "", 0, signal, allowed, true, 0);
-                    // Every Down let pass (Intuitive's Company, 2026-11-07):
+                    // Every Down let pass (one employer's Company):
                     // a real click on the entry, as the applicant would.
                     else if (allowed() && window === window.top) {
                       const entry = menuEntries(element)[target];
@@ -3553,7 +3535,7 @@ if (!window.__applicationLane) {
             reconcileAutomation(element, guardElement);
             // Written with the profile's answer, even one equal to what the
             // site parsed (no change to see): checked, not the site's guess
-            // (AMD's "Did You Graduate?", 2026-11-07).
+            // (one employer's "Did You Graduate?").
             const written = nodeRecords.get(element as HTMLElement);
             if (written && result.ok) written.confirmed = true;
             await awaitSiteSave(savesBefore);
@@ -3602,8 +3584,8 @@ if (!window.__applicationLane) {
         const record = records.get(id);
         // A Workday list button: its question's answers from the
         // questionnaire, else opened, read and closed with nothing chosen
-        // (NVIDIA's Phone Device Type, "Home" and "Home Cellular", was
-        // answered blind and missed, 2026-11-04).
+        // (one employer's Phone Device Type, "Home" and "Home Cellular", was
+        // answered blind and missed).
         if (record && listButton(record.element) && !record.protected && record.element.isConnected &&
             record.element.getAttribute("aria-expanded") !== "true" && document.activeElement !== record.element) {
           const button = record.element as HTMLButtonElement;
@@ -3646,8 +3628,7 @@ if (!window.__applicationLane) {
         }
         // A SmartRecruiters list draws its options only once first opened:
         // Gender, Race and Veteran were never open before their answers were
-        // planned, read as none, and Veteran went unanswered (report
-        // 52645691, 2026-11-05). Opened, read and closed with nothing chosen;
+        // planned, read as none, and Veteran went unanswered. Opened, read and closed with nothing chosen;
         // quick, so also before a fill's plan.
         const splHost = (element: Element) => {
           for (let host = (element.getRootNode() as ShadowRoot).host as Element | undefined, depth = 0; host && depth < 4; host = (host.getRootNode() as ShadowRoot).host as Element | undefined, depth++)
@@ -3680,7 +3661,7 @@ if (!window.__applicationLane) {
         }
         // Microsoft's careers form draws a list's options only once opened:
         // its sponsorship question, read with none, went unanswered
-        // (2026-11-07). Opened (a click on the box, else its arrow), read,
+        //. Opened (a click on the box, else its arrow), read,
         // and closed with nothing chosen; quick, so also before a plan.
         if (record && record.element instanceof HTMLInputElement && record.element.matches('input[role="combobox"][class*="select-module_select-input"]') &&
             !record.protected && record.element.isConnected && !valueOf(record.element) && !picksOf(record.element) &&
@@ -3712,7 +3693,7 @@ if (!window.__applicationLane) {
               if (input.getAttribute("aria-expanded") === "true") pressOutside();
               // The site hands focus back to the box as its list closes, and a
               // focused field is the applicant's: the answer was then skipped
-              // as "The field currently has focus" (2026-11-07).
+              // as "The field currently has focus".
               for (let waited = 0; waited < 600; waited += 50) {
                 if (document.activeElement === input || input.matches(":focus")) input.blur();
                 await pause(50);
@@ -3755,7 +3736,7 @@ if (!window.__applicationLane) {
         }
         // A SuccessFactors list draws its options only once opened, a page at
         // a time as it is scrolled; the AI pass saw Status and Education Type
-        // with none (Expand Energy, 2026-10-30). Opened, scrolled while it
+        // with none. Opened, scrolled while it
         // grows, read, and closed with nothing chosen.
         if (record && record.element instanceof HTMLInputElement && record.element.classList.contains("rcmpaginatedselectinput") &&
             !record.protected && record.element.isConnected && !valueOf(record.element) && document.activeElement !== record.element) {
@@ -3851,7 +3832,7 @@ if (!window.__applicationLane) {
       // Focus an upload of ours left on a configured slot is no applicant's:
       // the résumé's upload in Workday's shared uploader ends on its "Select
       // files" button, which is the cover letter's slot, and the cover letter
-      // was refused as a field in use (Leidos, report 7dd8aa83, 2026-11-07).
+      // was refused as a field in use.
       const slot = records.get(command.fieldId!);
       if (slot && fileControls.has(slot.element) && document.activeElement === slot.element &&
           performance.now() - lastApplicantInput > 2000)
@@ -4019,7 +4000,7 @@ if (!window.__applicationLane) {
   });
   // A SuccessFactors list that arrives long after its click, its fill having
   // given up on it, opens over the form, and a slow site left a stack of them
-  // open (L3Harris, report 92f363c7, 2026-10-15). A list is closed when it
+  // open. A list is closed when it
   // opens unasked: not within 20 seconds of a click this extension made on
   // its dropdown (a fill may still be waiting for it), nor within a minute
   // of the applicant's own.
@@ -4083,8 +4064,7 @@ if (!window.__applicationLane) {
   let submittedTimer: ReturnType<typeof setTimeout> | undefined;
   const checkSubmitted = () => {
     // In any frame: an employer's careers page shows the Greenhouse form,
-    // and its "thank you", in a frame of its own (Pinterest, Roblox,
-    // 2026-10-14). The site rules for the frame's own address decide.
+    // and its "thank you", in a frame of its own (an employer, Roblox). The site rules for the frame's own address decide.
     if (toldSubmitted) return;
     if (submittedOnPage()) {
       toldSubmitted = true;

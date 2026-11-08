@@ -7,7 +7,7 @@ export function degreeAliases(title: string): string[] {
     .replace(/\s+/g, " ")
     .trim();
   // Profiles and resumes often put the level in the plural: "Masters of
-  // Science" missed Cisco's "Master of Science" (Workday, 2026-10-17).
+  // Science" missed one employer's "Master of Science" (Workday).
   const specific: [RegExp, string[]][] = [
     [
       /^(bachelors? of science\b|bs\b|bsc\b)/,

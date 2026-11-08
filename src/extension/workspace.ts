@@ -12,7 +12,7 @@ export const companyFor = (url: string, title = "") => {
   const { hostname, pathname, searchParams } = new URL(url);
   const board = sharedBoardHosts.test(hostname);
   // Greenhouse's embedded form names its board in "for", not its path:
-  // ".../embed/job_app?for=databricks" was filed as "Embed" (2026-11-08).
+  // ".../embed/job_app?for=databricks" was filed as "Embed".
   const embedded = board && /^\/embed\//.test(pathname) ? searchParams.get("for") : "";
   if (embedded) return titleCase(embedded).slice(0, 300);
   const fromTitle =

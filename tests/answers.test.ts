@@ -353,7 +353,7 @@ test("later steps of one application reuse its documents and answer only their o
   await settle(first);
   assert.equal(drafts, 1);
   // The first draft fell back from a provider: that was then, not this step
-  // (a report, 2026-10-14: the notice reappeared after the model was fixed).
+  // (a report: the notice reappeared after the model was fixed).
   first.narrative!.warnings = [...(first.narrative!.warnings || []), "Codex could not draft this (usage limit reached), so Claude was used instead."];
   // A demographics step: no written question, so no model at all.
   const demographics = await queue.enqueue({ ...request([field("Gender", { kind: "select", options: ["Male", "Female"] })]), operation: 2, applicationId });
@@ -387,7 +387,7 @@ test("later steps of one application reuse its documents and answer only their o
   await settle(latest);
   assert.deepEqual(latest.artifacts.filter((a) => a.kind === "transcript").map((a) => [a.name, a.operation]), [["Fall transcript.pdf", 5]]);
   // Redraft documents writes them anew: it took the earlier letter as it was,
-  // its sentences already cut (Tesla, 2026-11-02).
+  // its sentences already cut (Tesla).
   const redrafted = await queue.enqueue({ ...request([field("Gender", { kind: "select", options: ["Male", "Female"] })]), operation: 6, applicationId, redraft: true });
   await settle(redrafted);
   assert.equal(drafts, 2);
@@ -406,7 +406,7 @@ test("the word check knows the applicant's school by its short name, R², and pl
   const support = own.facts.map((fact) => fact.text);
   assert.deepEqual(unsupportedClaims("I hold a B.S. from Penn State University Park.", support, own), []);
   assert.deepEqual(unsupportedClaims("I matched accuracy at R² 0.86 on a Kolmogorov-Arnold Network.", support, own), []);
-  // Its initials name it too (Glean's letter, 2026-10-29), but only its own.
+  // Its initials name it too (one employer's letter), but only its own.
   assert.deepEqual(unsupportedClaims("I finished my B.S. at Penn State UP.", support, own), []);
   assert.deepEqual(unsupportedClaims("I finished my B.S. at UCLA.", support, own), ["UCLA."]);
   // A school's common name is its name too.
@@ -464,7 +464,7 @@ test("questions the model cannot answer are skipped with a reason, and follow-up
   assert.deepEqual(result.sources, { "Based on the engineering work you listed above, what interests you most?": "Platform Engineer" });
 });
 
-// Shield AI, 2026-10-12: "…our values center on doing what honor dictates,
+// an employer: "…our values center on doing what honor dictates,
 // leading as a servant, and pursuing excellence. Which of these resonates
 // most with you…?" was skipped because the posting did not list the values.
 test("a set the question itself lists can be chosen from, and its names are not invented ones", async (t) => {
@@ -486,7 +486,7 @@ test("a set the question itself lists can be chosen from, and its names are not 
   assert.deepEqual(result.answers.map((answer) => answer.value), ["Extreme Ownership resonates most. I cut API latency 35% with a Redis cache at Initrode."]);
 });
 
-// Three ways a sound answer was thrown away (a live application, 2026-10-12).
+// Three ways a sound answer was thrown away (a live application).
 test("the verifier's word needs backing: rephrased figures stand, and an honest limit is not talk about the draft", async (t) => {
   // "over a full grid" in the profile, "across a full grid" in the draft,
   // and no quote from the verifying model.
@@ -567,7 +567,7 @@ test("with no usable quote, one entry has to hold every word of a claim that say
 });
 
 // Invented claims that each name something an entry really holds, checked
-// against a real profile on 2026-10-12: the looser reading passed eight of
+// against a real profile on: the looser reading passed eight of
 // seventeen, and "won a hackathon with FastAPI" passed even the strict one,
 // as a statement of a skill. Entries here are made up to the same shape.
 test("an invented event, result, audience or figure is not vouched for by an entry that names its technology", () => {
@@ -610,7 +610,7 @@ test("an invented event, result, audience or figure is not vouched for by an ent
     assert.equal(heldByOneEntry(claim, entries), false, claim);
 });
 
-// A report on an Ashby form, 2026-10-13: "What AI technologies are you
+// A report on an Ashby form: "What AI technologies are you
 // comfortable with?" was left empty because every "I'm comfortable with X"
 // was read as a claim of work done.
 test("a skill said as \"comfortable with\" rests on an entry naming it, and never on a line of known gaps", () => {
@@ -635,7 +635,7 @@ test("a skill said as \"comfortable with\" rests on an entry naming it, and neve
   assert.equal(supportedBy("I have not used Kubernetes", "", "I have not used Kubernetes.", entries), true);
 });
 
-// A report, 2026-10-13: two written questions were empty after the first
+// A report: two written questions were empty after the first
 // fill and answered after the applicant chose Fill this step again. That
 // second click was the only retry a rejected draft ever got.
 test("an answer a check throws out is written once more, told why, before it is left for the applicant", async (t) => {
@@ -720,7 +720,7 @@ test("without a readable posting, why-this-company questions are the applicant's
 });
 
 // The checker follows the Drafting order in Settings, passing over the model
-// that wrote the draft (2026-10-30: it was the endpoint's model every time,
+// that wrote the draft (: it was the endpoint's model every time,
 // though the applicant had set Claude, then Codex, then that endpoint).
 test("the verifier is never the drafting model, and follows the Drafting order", () => {
   const base = { token: "synthetic-token-".repeat(4), endpoint: "http://127.0.0.1:9/v1" };
@@ -741,7 +741,7 @@ test("the verifier is never the drafting model, and follows the Drafting order",
   // A checking model named on its own comes after the order.
   assert.deepEqual(names(checkers(configSchema.parse({ ...base, provider: "http", model: "qwen", verifyModel: "devstral" }), { provider: "http", model: "qwen" })), ["http:devstral"]);
   // A Checking order of its own is the whole policy, minus the draft's
-  // writer, and one checker in it is enough (2026-11-02).
+  // writer, and one checker in it is enough.
   const chosen = configSchema.parse({
     ...ordered,
     checkProviders: [
@@ -823,7 +823,7 @@ test("a claim stands on a quote the profile really holds, never on the verifier'
     new AbortController().signal,
   );
   // One request for the three, to the verifying model, with only the entries
-  // they touch (2026-11-02: a request each cost a CLI checker three times).
+  // they touch (: a request each cost a CLI checker three times).
   assert.equal(requests.length, 1);
   assert.equal(requests[0].model, "checker");
   assert.match(requests[0].messages[0].content, /several drafts/);
@@ -918,7 +918,7 @@ test("the queue applies the verifier's reading, keeps withheld questions empty, 
   assert.match(warnings, /Kept your resume's own summary: the tailored one claimed "led a team of five"/);
   // Each question left for the applicant is said once.
   assert.equal(narrative.warnings!.filter((w) => w.startsWith('Left "kept"')).length, 1);
-  // A report, 2026-10-13: an essay asking for a tradeoff and a lesson was
+  // A report: an essay asking for a tradeoff and a lesson was
   // left empty for two sentences the profile could not hold. Those come out,
   // as they do from the letter, and the rest of the answer is used.
   const essay = "I built a TypeScript web application used by 2,000 students. I wrote its tests. It ran on a small server. The tradeoff was speed against safety.";
@@ -937,8 +937,7 @@ test("the queue applies the verifier's reading, keeps withheld questions empty, 
   assert.deepEqual(gutted.answers.map((a) => a.fieldId), ["written"]);
   assert.match(gutted.warnings!.join(" "), /Left "kept" for you: the checking model did not find in your profile what the draft said/);
   // A paragraph's opening is not taken out from under the rest of it: the
-  // rest began mid-thought ("Delivery is hybrid push/pull, …", Tesla,
-  // 2026-11-02). It stays, and the card names it to check.
+  // rest began mid-thought ("Delivery is hybrid push/pull, …", Tesla). It stays, and the card names it to check.
   const opened = await run(async () => new Map([["answer:written", verdict()], ["letter:1", verdict({ unsupported: ["I built a TypeScript web application used by 2,000 students"] })]]));
   assert.match(opened.coverLetter[1].text, /^I built a TypeScript web application used by 2,000 students\. I use it daily\./);
   assert.match(opened.warnings!.join(" "), /Kept a paragraph of the cover letter whole whose opening the checking model did not find in your profile: "I built a TypeScript web application/);
@@ -1093,14 +1092,14 @@ test("documents are drafted from the posting the applicant gave: pasted text fir
   assert.match(unreadable.narrative!.warnings!.join(" "), /could not be read from the link you added.*Paste the posting's text/);
   // Unless the page's own text, read by the extension, is the posting: the
   // letter was written from it (Tesla, read in a tab the backend could not
-  // fetch, 2026-11-02).
+  // fetch).
   const readInTab = await queue.enqueue({ ...request([field("Cover Letter", { kind: "file", documentKind: "cover" })]), postingUrl: "https://careers.acme.example/script-built", description: `Responsibilities and qualifications. ${long.repeat(4)}` });
   while (["queued", "running"].includes(readInTab.status)) await new Promise((r) => setTimeout(r, 25));
   assert.doesNotMatch((readInTab.narrative!.warnings || []).join(" "), /could not be read/);
 
   // The form's own ATS publishes the posting: it comes before a linked page
   // read as HTML, which was Simplify's list of internships on GitHub
-  // (Oracle, 2026-10-24).
+  // (Oracle).
   const own = new GenerationQueue(
     store,
     config,
@@ -1249,7 +1248,7 @@ test("AI structured-field suggestions require saved sources and exact available 
       kind: "text",
       section: "Education Information 1",
       // What the rest of its row shows, for the model to tell the entries
-      // apart (Applied Intuition, report 3fcbf55d).
+      // apart.
       row: 'Entry 1 of "Education Information 1": School Attended: Michigan State University',
     }),
     field("Date Of Clearance", {
@@ -1286,12 +1285,11 @@ test("AI structured-field suggestions require saved sources and exact available 
   assert.equal(result.drafts[1].value, "Bachelor's degree");
   assert.equal(result.drafts[2].value, "");
   assert.match(result.drafts[2].skipReason!, /did not cite/);
-  // A date box takes only a date: "N/A" there was invalid (L3Harris,
-  // 2026-10-15).
+  // A date box takes only a date: "N/A" there was invalid.
   assert.equal(result.drafts[3].value, "");
   assert.match(result.drafts[3].skipReason!, /not a date/);
   // An optional follow-up to a Yes is left empty: its "N/A" beside the
-  // question it follows read as a contradiction (L3Harris, report 726eafd7).
+  // question it follows read as a contradiction.
   assert.equal(result.drafts[4].value, "");
   assert.match(result.drafts[4].skipReason!, /follow-up to a Yes/);
   const input = JSON.parse(sent.messages[1].content);
@@ -1429,7 +1427,7 @@ test("an option carrying its own short code matches only on its full remaining t
   assert.equal(pick("Canada", ["United States +1", "Canada (+1)"]), "Canada (+1)");
 });
 
-// A report, 2026-10-13: a required essay was left empty, and the card showed
+// A report: a required essay was left empty, and the card showed
 // the question in one line and why in another, under a label cut short.
 test("the reason a required question was left empty is paired with that question", () => {
   const question = "Describe one project in 200 words or less: what you built, what you owned or decided, a tradeoff you wrestled with, and what you learned from it afterwards.";
@@ -1444,7 +1442,7 @@ test("the reason a required question was left empty is paired with that question
   assert.deepEqual([...used], [items[1]]);
 });
 
-// A report, 2026-10-13: a draft naming "Kolmogorov–Arnold Networks" reached
+// A report: a draft naming "Kolmogorov–Arnold Networks" reached
 // the checker as "Kolmogorov, Arnold Networks", which the profile does not say.
 test("a dash that joins two words in a draft is kept, and one used as punctuation becomes a comma", async (t) => {
   const { config } = await endpoint(t, [
@@ -1455,7 +1453,7 @@ test("a dash that joins two words in a draft is kept, and one used as punctuatio
   assert.equal(result.answers[0]?.value, "I enjoy read–write caches, they are quick, and simple.");
 });
 
-// Measured on 2026-10-13 with eighteen claims, true and false, against a real
+// Measured on with eighteen claims, true and false, against a real
 // profile: the checking model quotes the nearest entry for any claim, and a
 // real quote passed whatever the claim added to it. These are made-up
 // entries of the same shape.
@@ -1510,7 +1508,7 @@ test("what a sentence says that the checker left out of its claims is checked as
   assert.deepEqual(unclaimed("I built a fan-out backend with Redis Streams, the kind Acme runs.", ["built a fan-out backend with Redis Streams"], entries, "Acme runs Redis"), []);
 });
 
-// Measured on 2026-10-13: checking models that reason first took 65 to over
+// Measured on: checking models that reason first took 65 to over
 // 150 seconds a draft on a hosted endpoint, and one told not to answered in
 // about five. A chosen checking model is asked not to; an endpoint that
 // refuses the option is asked again without it.
@@ -1553,7 +1551,7 @@ test("the checking model is asked not to reason, and asked again plainly if the 
   assert.deepEqual(bodies.map((body) => body.reasoning_effort), ["none"]);
 });
 
-// A report, 2026-10-30 (Elucid's form): the checking model slowed to its
+// A report (one employer's form): the checking model slowed to its
 // limit of three minutes a draft, the fill showed nothing for five, and the
 // applicant gave up. Checking stops at its deadline: what was checked by
 // then counts, the rest goes unchecked, and none at all is said plainly.
@@ -1583,7 +1581,7 @@ test("checking stops at its deadline with what it has checked", async (t) => {
   await assert.rejects(check([slow], evidence, new AbortController().signal, AbortSignal.timeout(300)), /took too long/);
 });
 
-// A report, 2026-10-14 (Pinterest's form): "If you do require employee
+// A report (one employer's form): "If you do require employee
 // sponsorship or assistance…, please list the type of support" was optional,
 // and the draft answered it with "I do not require…".
 test("an optional question asked only if something holds stays empty when the draft says it does not", async (t) => {
@@ -1606,8 +1604,8 @@ test("an optional question asked only if something holds stays empty when the dr
   assert.match(result.warnings.join(" "), /applies only if its condition holds/);
 });
 
-// Westinghouse's SuccessFactors called "I accept the posted rate of $25.40 to
-// $29.00 per hour." an invalid number (report cc40f1fb), as L3Harris's did
+// one employer's SuccessFactors called "I accept the posted rate of $25.40 to
+// $29.00 per hour." an invalid number, as one employer's did
 // "$100,000 per year" (b5d63aeb): a one-line salary box takes the figure.
 test("a one-line salary box gets the figure the drafted answer names", () => {
   const asked = "What is your desired salary?";
@@ -1622,7 +1620,7 @@ test("a one-line salary box gets the figure the drafted answer names", () => {
 });
 
 test("a degree listed with the subjects it covers, and a Low-to-High language scale, are picked", async () => {
-  // KLA's Workday, 2026-11-02: Degree and each language level were left.
+  // one employer's Workday: Degree and each language level were left.
   const { pickOption } = await import("../src/shared/answers");
   const { levelChoices } = await import("../src/shared/languages");
   const degrees = ["Select One", "High School", "Associates of Arts or Science (Associates)", "Bachelors of Arts or Science (Bachelors)", "Masters of Technology (Masters)", "Masters of Arts or Science or Business Administration (Masters)", "Doctor of Philosophy or Juris Doctor (Doctorate)"];
@@ -1632,15 +1630,15 @@ test("a degree listed with the subjects it covers, and a Low-to-High language sc
   // Another subject, or another level, is not it.
   assert.equal(pick("Master of Engineering", [], degrees), undefined);
   assert.equal(pick("Bachelor of Engineering", [], ["Masters of Arts or Science (Masters)", "Bachelors of Arts or Science (Bachelors)"]), undefined);
-  // Argonne's: the degree's name with "Degree" after it.
-  const argonne = ["Select One", "Associate of Science Degree", "Bachelor of Science Degree", "Bachelor's Degree or equivalent", "Master of Science Degree", "Master of Laws (LLM)"];
-  assert.equal(pick("M.S. - Master of Science", ["Masters of Science", "Master of Science"], argonne), "Master of Science Degree");
-  assert.equal(pick("B.S. - Bachelor of Science", ["Bachelor of Science"], argonne), "Bachelor of Science Degree");
-  // Micron's: the level alone.
-  const micron = ["Select One", "Advanced Diploma/Associate's Level Degree", "Bachelor's Level Degree", "Master's Level Degree", "Doctorate's Level Degree"];
-  assert.equal(pick("M.S. - Master of Science", ["Masters of Science", "Master of Science"], micron), "Master's Level Degree");
-  assert.equal(pick("B.S. - Bachelor of Science", ["Bachelor of Science"], micron), "Bachelor's Level Degree");
-  // RTX's: the bare level, for the profile's whole degree name.
+  // one employer's: the degree's name with "Degree" after it.
+  const levelsWithDegree = ["Select One", "Associate of Science Degree", "Bachelor of Science Degree", "Bachelor's Degree or equivalent", "Master of Science Degree", "Master of Laws (LLM)"];
+  assert.equal(pick("M.S. - Master of Science", ["Masters of Science", "Master of Science"], levelsWithDegree), "Master of Science Degree");
+  assert.equal(pick("B.S. - Bachelor of Science", ["Bachelor of Science"], levelsWithDegree), "Bachelor of Science Degree");
+  // one employer's: the level alone.
+  const levelsOnly = ["Select One", "Advanced Diploma/Associate's Level Degree", "Bachelor's Level Degree", "Master's Level Degree", "Doctorate's Level Degree"];
+  assert.equal(pick("M.S. - Master of Science", ["Masters of Science", "Master of Science"], levelsOnly), "Master's Level Degree");
+  assert.equal(pick("B.S. - Bachelor of Science", ["Bachelor of Science"], levelsOnly), "Bachelor's Level Degree");
+  // one employer's: the bare level, for the profile's whole degree name.
   const program = ["Select One", "Associates", "Bachelors", "Masters", "Ph.D."];
   assert.equal(pick("M.S. Data Science, Analytics & Engineering (Human-Centered Applications)", [], program), "Masters");
   assert.equal(pick("Bachelors of Science", [], program), "Bachelors");
@@ -1650,7 +1648,7 @@ test("a degree listed with the subjects it covers, and a Low-to-High language sc
   assert.equal(pick(first, rest, scale), "3 - High");
   const [basic, ...basics] = levelChoices("basic");
   assert.equal(pick(basic, basics, scale), "1 - Low");
-  // Booz Allen's Workday (2026-11-02): "1 - Minimal Competency" to "5 - Complete Mastery".
+  // one employer's Workday: "1 - Minimal Competency" to "5 - Complete Mastery".
   const mastery = ["Select One", "1 - Minimal Competency", "2 - Limited Competency", "3 - Professional Competency", "4 - Advanced Professional Competency", "5 - Complete Mastery"];
   for (const [level, expected] of [["native", "5 - Complete Mastery"], ["fluent", "4 - Advanced Professional Competency"], ["intermediate", "3 - Professional Competency"], ["basic", "2 - Limited Competency"]] as const) {
     const [first, ...others] = levelChoices(level);
@@ -1659,7 +1657,7 @@ test("a degree listed with the subjects it covers, and a Low-to-High language sc
 });
 
 test("a figure the draft rounded and a verb in another form are still the profile's", async () => {
-  // Syngenta, 2026-11-02: "a U-Net that predicts sensor surface temperature
+  // an employer: "a U-Net that predicts sensor surface temperature
   // to 0.85 K" was taken out, the profile saying "predicting" and "0.854 K".
   const { supportedBy } = await import("../src/server/verify");
   const entries = [
@@ -1681,7 +1679,7 @@ test("a figure the draft rounded and a verb in another form are still the profil
 });
 
 test("saying what one is applying for is not a claim the profile has to hold", async () => {
-  // Tesla, 2026-11-02: "I am applying for an engineering role at Tesla." was
+  // Tesla: "I am applying for an engineering role at Tesla." was
   // taken out of the letter, which then opened on nothing.
   const { supportedBy, unclaimed } = await import("../src/server/verify");
   const entries = ["### Pixelforge\n- Built a live exam-prep platform."];
@@ -1693,27 +1691,27 @@ test("saying what one is applying for is not a claim the profile has to hold", a
 });
 
 test("a claim the checker reworded is held to the sentence it came from", async (t) => {
-  // Argonne, 2026-11-02: "I am applying for the Robotics Software Developer
-  // role at Argonne" came back reworded, was matched to the whole paragraph,
+  // an employer: "I am applying for the Robotics Software Developer
+  // role at an employer" came back reworded, was matched to the whole paragraph,
   // and missed the exemption an opening like it has.
   const server = createServer(async (req, res) => {
     for await (const _ of req) void _;
     res.writeHead(200, { "Content-Type": "application/json" });
-    res.end(JSON.stringify({ choices: [{ finish_reason: "stop", message: { content: JSON.stringify({ claims: [{ claim: "applying for the Robotics Software Developer position at Argonne", quote: null }], addressesReader: false, filler: [] }) } }] }));
+    res.end(JSON.stringify({ choices: [{ finish_reason: "stop", message: { content: JSON.stringify({ claims: [{ claim: "applying for the Robotics Software Developer position at Acme Labs", quote: null }], addressesReader: false, filler: [] }) } }] }));
   });
   server.listen(0, "127.0.0.1");
   await once(server, "listening");
   t.after(() => new Promise<void>((r) => server.close(() => r())));
   const check = verifier(configSchema.parse({ token: "synthetic-token-".repeat(4), provider: "http", model: "drafter", verifyModel: "checker", endpoint: `http://127.0.0.1:${(server.address() as { port: number }).port}/v1` }))!;
   const verdicts = await check(
-    [{ id: "letter:1", kind: "letter", draftedWith: { provider: "http", model: "drafter" }, text: "I am applying for the Robotics Software Developer role at Argonne. I built a U-Net baseline." }],
+    [{ id: "letter:1", kind: "letter", draftedWith: { provider: "http", model: "drafter" }, text: "I am applying for the Robotics Software Developer role at Acme Labs. I built a U-Net baseline." }],
     { profile: "### Thermal\n- Built the supervised U-Net baseline.", posting: "" },
     new AbortController().signal,
   );
   assert.deepEqual(verdicts.get("letter:1")?.unsupported, []);
 });
 
-// Databricks' Greenhouse questions (2026-11-08): a GPA list noting its scale
+// one employer's Greenhouse questions: a GPA list noting its scale
 // after each range, and a graduation list of academic seasons.
 test("a GPA takes a range noted with its 4.0 scale, and a graduation month its season", () => {
   const gpa = ["2.4 or below", "2.5 - 2.7 (out of 4.0)", "2.8 - 3.0 (out of 4.0)", "3.1 - 3.3 (out of 4.0)", "3.4 - 3.5 (out of 4.0)",

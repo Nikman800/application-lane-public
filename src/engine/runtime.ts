@@ -116,7 +116,7 @@ export function submittedOnPage(): boolean {
   });
 }
 
-// A site's own confirmation that no rule knows (Epic Games, 2026-10-14:
+// A site's own confirmation that no rule knows (an employer:
 // "Your application has been submitted successfully." where its form was):
 // a short message saying the application went in, on a page that no longer
 // holds a form to fill. A form page that mentions applying keeps its boxes,

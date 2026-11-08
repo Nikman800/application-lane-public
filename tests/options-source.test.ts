@@ -33,8 +33,8 @@ beforeEach(() => forgetSiteOptions());
 test("a Workday list's address is read from the page's host and tenant", async () => {
   const studies = await workday("/fieldsOfStudy");
   assert.equal(
-    sourceUrl(studies, "https://jabil.wd5.myworkdayjobs.com/en-US/Jabil_Careers/job/Tampa/AI_J2467953/apply"),
-    "https://jabil.wd5.myworkdayjobs.com/wday/calypso/cxs/jobapplication/jabil/values/educations/fieldsOfStudy",
+    sourceUrl(studies, "https://acme.wd5.myworkdayjobs.com/en-US/Acme_Careers/job/Tampa/AI_J2467953/apply"),
+    "https://acme.wd5.myworkdayjobs.com/wday/calypso/cxs/jobapplication/acme/values/educations/fieldsOfStudy",
   );
   // A site under /recruiting/ names its tenant there, not in its host.
   assert.equal(
@@ -46,8 +46,8 @@ test("a Workday list's address is read from the page's host and tenant", async (
 test("a Greenhouse school search takes the board from the path or the embed's for=", async () => {
   const schools = (await sources("greenhouse")).find((source) => source.urlTemplate.includes("/education/schools"))!;
   assert.equal(
-    sourceUrl(schools, "https://boards.greenhouse.io/anduril/jobs/4567", "Michigan State"),
-    "https://boards.greenhouse.io/v1/boards/anduril/education/schools?term=Michigan%20State&page=1",
+    sourceUrl(schools, "https://boards.greenhouse.io/acme/jobs/4567", "Michigan State"),
+    "https://boards.greenhouse.io/v1/boards/acme/education/schools?term=Michigan%20State&page=1",
   );
   assert.equal(
     sourceUrl(schools, "https://boards.greenhouse.io/embed/job_app?for=robinhood&token=1", "MIT"),
@@ -67,7 +67,7 @@ test("names are read from the body or a nested array, and anything else is no li
 
 test("a whole list is fetched once per page, and a failed one is not kept", async () => {
   const studies = await workday("/fieldsOfStudy");
-  const page = "https://jabil.wd5.myworkdayjobs.com/en-US/Jabil_Careers/job/x/apply";
+  const page = "https://acme.wd5.myworkdayjobs.com/en-US/Acme_Careers/job/x/apply";
   let calls = 0;
   const answer = (body: unknown, ok = true) => (async () => {
     calls++;
@@ -92,7 +92,7 @@ test("only the wordings the site lists are kept, in its spelling, and a shared o
 });
 
 test("a Workday list that answers with folders is not taken for the whole list", async () => {
-  // RTX's fields of study, report 6e6db787: two folders, each a link.
+  // one employer's fields of study: two folders, each a link.
   const studies = await workday("/fieldsOfStudy");
   const folders = [
     { id: "a", descriptor: "Partial List (First 500 Entries)", href: "/wday/calypso/cxs/jobapplication/globalhr/values/educations/fieldsOfStudy/a?limit=100&offset=0" },

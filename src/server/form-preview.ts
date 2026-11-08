@@ -4,7 +4,7 @@ import { proposals } from "../shared/matching";
 import { siteOfAddress } from "./site-check";
 
 // What a searched opening's form will ask and how much of it a fill can
-// answer, known before it is opened (2026-11-05). Three sources, each as far
+// answer, known before it is opened. Three sources, each as far
 // as it reaches:
 //  1. history: what past fills on the same site and at the same company left
 //     to the applicant (queue.json's "needs"), for every site;
@@ -27,7 +27,7 @@ export type Preview = {
 const gaps: { ats?: string; host?: RegExp; note: string }[] = [
   {
     host: /(^|\.)careers\.microsoft\.com$/,
-    note: "Microsoft's careers form: newly handled (its lists and address, 2026-11-07); check its sponsorship answer, address and résumé choice before submitting.",
+    note: "Microsoft's careers form: newly handled (its lists and address); check its sponsorship answer, address and résumé choice before submitting.",
   },
   {
     ats: "SmartRecruiters",

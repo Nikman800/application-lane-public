@@ -90,7 +90,7 @@ export function postingEndpoint(raw: string): Endpoint | undefined {
     return {
       source: "Greenhouse",
       // One API serves EU boards too: there is no boards-api.eu host
-      // (ASM's EU board, 2026-10-02).
+      // (one employer's EU board).
       api: `https://boards-api.greenhouse.io/v1/boards/${board}/jobs/${id}`,
       read: (body) =>
         body?.title
@@ -106,7 +106,7 @@ export function postingEndpoint(raw: string): Endpoint | undefined {
   }
 
   // https://apply.workable.com/<account>/j/<shortcode>/apply: its page builds
-  // itself from this address (NeuroHire's, 2026-10-31: the extension could not
+  // itself from this address (one employer's: the extension could not
   // read the posting from the page).
   if (host === "apply.workable.com" && parts[1] === "j") {
     const [account, , shortcode] = parts;
@@ -129,7 +129,7 @@ export function postingEndpoint(raw: string): Endpoint | undefined {
 
   // https://jobs.smartrecruiters.com/oneclick-ui/company/<company>/publication/<uuid>
   // (its apply form, built by script) or /<company>/<id>-<slug>: the public
-  // posting API takes either id (LLNL and Syngenta, 2026-11-02: the posting
+  // posting API takes either id (an employer and an employer: the posting
   // could not be read from the apply form).
   if (host === "jobs.smartrecruiters.com" || host === "careers.smartrecruiters.com") {
     const oneClick = parts[0] === "oneclick-ui" && parts[1] === "company" && parts[3] === "publication";
@@ -218,8 +218,7 @@ export function postingEndpoint(raw: string): Endpoint | undefined {
     const end = rest.findIndex((part) => /^apply$/i.test(part));
     const segments = end >= 0 ? rest.slice(0, end) : rest;
     // A location holding a slash ("St.-Petersburg/Tampa, FL") is refused by
-    // the API as an encoded slash (400); the job's own slug alone finds it
-    // (Jabil, report b4fef18b, 2026-10-14).
+    // the API as an encoded slash (400); the job's own slug alone finds it.
     const path = (segments.some((part) => part.includes("/")) ? segments.slice(-1) : segments).map(encodeURIComponent).join("/");
     if (at < 1 || !site || /^[a-z]{2}-[A-Z]{2}$/.test(site) || !path) return;
     return {
@@ -280,8 +279,8 @@ export async function fetchPosting(
     const endpoint = postingEndpoint(url);
     if (!endpoint) continue;
     // A slow or dropped answer is asked once more: Workable's took over a
-    // minute at times, and Waggoner Financial's internship was then taken
-    // for a posting that could not be read (2026-10-31).
+    // minute at times, and one employer's internship was then taken
+    // for a posting that could not be read.
     for (let attempt = 0; attempt < 2; attempt++) {
       try {
         const response = await fetcher(endpoint.api, {

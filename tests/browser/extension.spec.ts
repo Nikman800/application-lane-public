@@ -538,7 +538,7 @@ test("an empty embedded frame the page removed is no failed upload", async () =>
   // Microsoft's careers page embeds a near-empty export frame for its profile
   // and removes it; the site rule's uploads sent there failed with "Receiving
   // end does not exist", reported as a résumé and cover letter that did not
-  // upload, while the résumé was in (2026-11-07).
+  // upload, while the résumé was in.
   const markup = '<form><label>First name<input name="firstName" required></label><label>Email<input name="email" required></label><label>Resume<input type="file" name="resume"></label><button type="submit">Submit application</button></form><iframe src="/profile-export-frame"></iframe><script>window.submissions=0;document.querySelector("form").addEventListener("submit",e=>{e.preventDefault();window.submissions++})</script>';
   await context.route(`${origin}/export-frame-shell`, route => route.fulfill({ contentType: "text/html", body: markup }));
   await context.route(`${origin}/profile-export-frame`, route => route.fulfill({ contentType: "text/html", body: "<html><head></head><body></body></html>" }));
@@ -833,7 +833,7 @@ test("a user's Yes radio survives resume and node recreation", async () => {
 });
 
 test("the checkboxes in a Workday multiselect's option list are not fields", async () => {
-  // Jabil's Skills search list (Workday check task 80dbf488): each option
+  // one employer's Skills search list (Workday check task 80dbf488): each option
   // draws a checkbox of its own, named only by a generated id. Taken for
   // fields, ticking one redrew the list and detached the rest.
   const workdayOrigin = atsOrigins[0];
@@ -1140,8 +1140,7 @@ test("the captured Workday phone type uses the confirmed device type", async () 
   });
 });
 
-// TSC's Workday application started with Autofill with Resume (report
-// 117fa197, 2026-10-31): the parser set Phone Device Type to Landline after
+// one employer's Workday application started with Autofill with Resume: the parser set Phone Device Type to Landline after
 // the page was read, with no one at the keys, and that was locked as the
 // applicant's edit. It is the site's guess, which the profile corrects.
 test("a Workday value the resume parser sets after the page is read is corrected from the profile", async () => {
@@ -1163,7 +1162,7 @@ test("a Workday value the resume parser sets after the page is read is corrected
           button.setAttribute('aria-expanded', 'true');
           const popup = document.createElement('div');
           popup.setAttribute('data-automation-activepopup', 'true');
-          // As TSC's: a listbox of Select One, Landline and Mobile.
+          // As one employer's: a listbox of Select One, Landline and Mobile.
           popup.innerHTML = '<ul role="listbox">' + ['Select One', 'Landline', 'Mobile'].map((value) => '<li role="option">' + value + '</li>').join('') + '</ul>';
           for (const leaf of popup.querySelectorAll('[role="option"]'))
             leaf.addEventListener('click', () => {
@@ -1258,7 +1257,7 @@ test("a captured collapsed Workday experience section adds only profile rows", a
     1,
   );
   // Ticking it is the fill's own doing, though the browser calls the box's
-  // change trusted: no pause for an edit nobody made (Jabil, report c7f05eb5).
+  // change trusted: no pause for an edit nobody made.
   await expect.poll(async () => (await state()).applications[0].status, { timeout: 30_000 }).toMatch(/^(awaiting-user|ready)$/);
   expect((await state()).applications[0].note || "").not.toMatch(/You interacted/);
 });
@@ -1516,8 +1515,8 @@ test("Workday search prompts type to filter and pick the match", async () => {
   );
 });
 
-// Jabil's Workday lists 325 fields of study and none is "Data Science"
-// (report 8c0659ee, 2026-10-16). Its list and its search are taken from that
+// one employer's Workday lists 325 fields of study and none is "Data Science"
+//. Its list and its search are taken from that
 // report's recorded traffic: a search returns the entries containing the
 // term, and text left in the box without a pick is cleared when it loses
 // focus. With none of the profile's wordings listed, the closest computing
@@ -1525,7 +1524,7 @@ test("Workday search prompts type to filter and pick the match", async () => {
 test("a Workday field of study missing from the site's list takes the closest computing field, with a caution", async () => {
   test.setTimeout(150_000);
   const workdayOrigin = atsOrigins[0];
-  const fields: string[] = JSON.parse(await readFile(join("tests", "browser", "workday-jabil-fields-of-study.json"), "utf8"));
+  const fields: string[] = JSON.parse(await readFile(join("tests", "browser", "workday-fields-of-study.json"), "utf8"));
   await ui({
     type: "API",
     path: "/v1/profile",
@@ -1626,7 +1625,7 @@ test("a Workday field of study missing from the site's list takes the closest co
 });
 
 // GE Vernova's Workday picks the phone code itself once the country is set
-// (capture 31cb0003, 2026-10-16): the pick is a chip beside an empty search
+//: the pick is a chip beside an empty search
 // box, and the card said "Required: Country / Territory Phone Code".
 test("a Workday phone code the site picked is reported as answered, not as a required field left empty", async () => {
   const workdayOrigin = atsOrigins[0];
@@ -1660,7 +1659,7 @@ test("a Workday phone code the site picked is reported as answered, not as a req
 
 // The same page with Workday's list endpoint answering (values/educations/
 // fieldsOfStudy, as its rule's optionsSource names it).
-// RTX's Workday (report 9b6ea678, 2026-11-02): Enter on the search chose
+// one employer's Workday: Enter on the search chose
 // its one match, "Data Science"; the fill did not count that as its pick,
 // cleared it with the pill's delete charm, and went on to Computer Science.
 test("a Workday field of study chosen by the search's own Enter is kept", async () => {
@@ -1714,7 +1713,7 @@ test("a Workday field of study chosen by the search's own Enter is kept", async 
   await expect(page.locator('[data-automation-id="selectedItem"]')).toHaveText(["Data Science"]);
 });
 
-// KLA's Workday (report daf095e5, 2026-11-03): its field of study opens on
+// one employer's Workday: its field of study opens on
 // folders ("Partial List (First 500 Entries)", "All") and searches only when a
 // real Enter reaches the focused box. Synthetic keys set the text and nothing
 // was searched; real keys blurred the box before the Enter. Answered, the
@@ -1753,10 +1752,10 @@ test("a Workday field of study that searches only on a real Enter in the focused
           const typed = input.value.toLowerCase();
           // Answered from the network a moment later; focus then goes into the
           // results, and the box's own change event (a real one) fires as it
-          // leaves, as KLA's does.
+          // leaves, as one employer's does.
           setTimeout(() => {
             const found = fields.filter((f) => f.toLowerCase().includes(typed));
-            // Each result as KLA draws it: a menu item named with its state
+            // Each result as an employer draws it: a menu item named with its state
             // ("Data Science not checked"), holding a hidden radio and the name.
             const box = popup(found.map((name, n) => '<div id="menuItem-' + n + '" data-automation-id="menuItem" tabindex="-1" role="option" aria-label="' + name + ' not checked" aria-selected="false"><div data-automation-id="promptLeafNode" tabindex="-1" data-automation-checked="Not Checked"><div><input id="radio-' + n + '" type="radio" aria-checked="false" data-automation-id="radioBtn" tabindex="-1"><span></span></div><div id="promptOption-' + n + '" data-automation-id="promptOption" data-automation-label="' + name + '">' + name + '</div></div></div>').join(''));
             const list = box.querySelector('[role="listbox"]');
@@ -1789,7 +1788,7 @@ test("a Workday field of study that searches only on a real Enter in the focused
   await expect(page.locator('[data-automation-id="selectedItem"]')).toHaveText(["Data Science"]);
 });
 
-// Sonos's Workday (report 2664c069, 2026-11-04): each skill was typed and
+// one employer's Workday: each skill was typed and
 // its search never ran (real keys, then the box blurred before Enter), so
 // each waited five seconds for nothing, and the Websites after them were
 // never reached before the applicant gave up.
@@ -1806,9 +1805,9 @@ test("Workday skills searched only on a real Enter in the focused box are each p
             <div data-automation-id="multiSelectContainer" data-uxi-widget-type="multiselect"><div data-automation-id="multiselectInputContainer">
               <input id="skills--skills" placeholder="Search" data-uxi-widget-type="selectinput"></div></div></div></div>
       </main><script>
-        // NVIDIA's lists "numpy" in lower case, and "C++" is typed as real keys
-          // like the rest (2026-11-04).
-          // Axiom Space's library names "C#" and "SQL" its own way (2026-11-04).
+        // one employer's lists "numpy" in lower case, and "C++" is typed as real keys
+          // like the rest.
+          // one employer's library names "C#" and "SQL" its own way.
           const known = ["Python", "Python (Programming Language)", "Structured Query Language (SQL)", "SQL Design", "PyTorch", "Pytorch Lightning", "C++", "numpy", "Python Numpy", "C Sharp (Programming Language)", "Unity C#", "Dart"];
           const searchFor = { "c#": "c sharp" };
         const input = document.getElementById('skills--skills');
@@ -1821,7 +1820,7 @@ test("Workday skills searched only on a real Enter in the focused box are each p
           if (event.key !== 'Enter' || !event.isTrusted || document.activeElement !== input) return;
           event.preventDefault();
           const typed = input.value.toLowerCase();
-          // Sonos's search answers after a second or more, the last search's
+          // one employer's search answers after a second or more, the last search's
           // results showing until then in the list the box names.
           setTimeout(() => {
             document.querySelector('[data-automation-activepopup="true"]')?.remove();
@@ -1832,7 +1831,7 @@ test("Workday skills searched only on a real Enter in the focused box are each p
             box.innerHTML = '<div id="skill-results" role="listbox" data-automation-id="activeListContainer" tabindex="-1">' + known.filter((name) => name.toLowerCase().includes(typed) || name.toLowerCase().includes(searchFor[typed] || typed)).map((name, n) => '<div id="menuItem-' + n + '" role="option" aria-label="' + name + ' not checked"><div data-automation-id="promptLeafNode"><input type="radio" tabindex="-1"><div data-automation-id="promptOption">' + name + '</div></div></div>').join('') + '</div>';
             document.body.append(box);
             box.querySelector('[role="listbox"]').focus();
-            // Axiom Space's: one match is added at once, and a click on an
+            // one employer's: one match is added at once, and a click on an
             // entry already added takes it off again.
             const toggle = (name) => {
               const existing = [...container.querySelectorAll('[data-automation-id="selectedItem"]')].find((item) => item.textContent === name);
@@ -1859,13 +1858,13 @@ test("Workday skills searched only on a real Enter in the focused box are each p
   await enqueue([page]);
   await expect(page.locator('[data-automation-id="selectedItem"]')).toHaveCount(7, { timeout: 60_000 });
   expect((await page.locator('[data-automation-id="selectedItem"]').allTextContents()).sort()).toEqual(["C Sharp (Programming Language)", "C++", "Dart", "PyTorch", "Python", "Structured Query Language (SQL)", "numpy"]);
-  // Nor is the last search's list left open over the form (Axiom Space, its
-  // last skill picked by the search itself, 2026-11-04).
+  // Nor is the last search's list left open over the form (an employer, its
+  // last skill picked by the search itself).
   await expect(page.locator('[data-automation-activepopup="true"]')).toHaveCount(0);
   expect(Date.now() - started).toBeLessThan(40_000);
 });
 
-// NVIDIA's Workday (report 7aa68732, 2026-11-04): its search for "Computer
+// one employer's Workday: its search for "Computer
 // Science" answered five fields, but the list drew only the two rows in view,
 // and "Computer Science", third, was never on the page: the closest field
 // drawn was picked instead.
@@ -1924,7 +1923,7 @@ test("a Workday field of study further down a list that draws only the rows in v
   await expect(page.locator('[data-automation-id="selectedItem"]')).toHaveText(["Computer Science"], { timeout: 60_000 });
 });
 
-// Axiom Space's Workday (2026-11-04): the school was typed, the box lost
+// one employer's Workday: the school was typed, the box lost
 // focus before its Enter, and the search never ran; every wording waited out
 // its five seconds and the school was left unpicked.
 test("a Workday school searched only on a real Enter in the focused box is picked", async () => {
@@ -1978,7 +1977,7 @@ test("a Workday school searched only on a real Enter in the focused box is picke
 test("a Workday field of study the site's own list lacks goes straight to the closest field it lists", async () => {
   test.setTimeout(150_000);
   const workdayOrigin = atsOrigins[0];
-  const fields: string[] = JSON.parse(await readFile(join("tests", "browser", "workday-jabil-fields-of-study.json"), "utf8"));
+  const fields: string[] = JSON.parse(await readFile(join("tests", "browser", "workday-fields-of-study.json"), "utf8"));
   await ui({
     type: "API",
     path: "/v1/profile",
@@ -2084,10 +2083,10 @@ test("a Workday field of study the site's own list lacks goes straight to the cl
   expect(searches.slice(0, searches.indexOf("Computer and Information Science"))).not.toMatch(/Data Sc|^M/);
 });
 
-// Jabil's Workday searches skills only when Enter is pressed ("press Enter to
+// one employer's Workday searches skills only when Enter is pressed ("press Enter to
 // search for the skill"), and lists a skill with its kind: "Python
-// (Programming Language)" before a bare "python" (report 35dd4837's recorded
-// search, 2026-10-16). Typing alone found nothing, so no skill was ever added.
+// (Programming Language)" before a bare "python" ('s recorded
+// search). Typing alone found nothing, so no skill was ever added.
 // A skill the site does not list must not stop the ones after it.
 test("Workday skills are searched with Enter and take the site's named entry", async () => {
   test.setTimeout(150_000);
@@ -2122,7 +2121,7 @@ test("Workday skills are searched with Enter and take the site's named entry", a
             leaf.innerHTML = '<div data-automation-id="promptOption"></div>';
             leaf.firstElementChild.setAttribute('data-automation-label', label);
             leaf.firstElementChild.textContent = label;
-            // A list of checkboxes, as Jabil's is: a picked entry shows
+            // A list of checkboxes, as one employer's is: a picked entry shows
             // checked, and clicking it again takes it off.
             const picked = () => [...container.querySelectorAll('[data-automation-id="selectedItem"]')].find((item) => item.getAttribute('title') === label);
             leaf.setAttribute('data-automation-checked', picked() ? 'Checked' : 'Not Checked');
@@ -2167,15 +2166,14 @@ test("Workday skills are searched with Enter and take the site's named entry", a
   expect((await page.evaluate(() => (window as any).searches as string[])).filter((term) => /^python$/i.test(term)).length).toBe(searched);
 });
 
-// Citi's Workday keeps the skills search results open through a scripted
+// one employer's Workday keeps the skills search results open through a scripted
 // Escape and closes them only on a click elsewhere on the page; the rules
 // click #mainContent for that. The applicant had answered other questions on
 // the page by hand, so the page container read as locked, the click was
-// refused, and the last search's results stayed open over the form (report
-// aad8b81e, 2026-10-27). The list closes on the press, not the click: of
+// refused, and the last search's results stayed open over the form. The list closes on the press, not the click: of
 // the applicant's own closes in the Workday recordings, each was a mousedown
 // on the page, and the rules' click alone left a search that matched nothing
-// (NumPy) open (Citi, 2026-10-28).
+// (NumPy) open.
 test("Workday skills search results close after a fill on a page with the applicant's own answers", async () => {
   test.setTimeout(150_000);
   const workdayOrigin = atsOrigins[0];
@@ -2249,7 +2247,7 @@ test("Workday skills search results close after a fill on a page with the applic
   await expect(page.locator('[data-automation-activepopup="true"]')).toHaveCount(0);
 });
 
-// Typing into Workday's skills search to look around (Jabil, 2026-10-16) is
+// Typing into Workday's skills search to look around is
 // a search, not an answer: the site drops the text unless something is
 // picked. That typing used to lock the field for good, and every later fill
 // left Skills empty.
@@ -2454,8 +2452,8 @@ test("Workday questionnaire dropdowns answer standard questions by their wording
   await expect(page.locator("#q-spons")).toHaveText("No");
   await expect(page.locator("#q-employed")).toHaveText("No");
   // Employer-specific questions stay with the applicant, listed as required:
-  // the legend's asterisk and the button's "Required" say so (KLA's OPT
-  // questions were listed as optional, 2026-11-04).
+  // the legend's asterisk and the button's "Required" say so (one employer's OPT
+  // questions were listed as optional).
   await expect(page.locator("#q-relatives")).toHaveText("Select One");
   await expect.poll(async () => (await state()).applications.at(-1)?.status, { timeout: 30_000 }).toMatch(/ready|awaiting-user/);
   const missing = (await state()).applications.at(-1)!.missing;
@@ -2538,7 +2536,7 @@ test("captured Workday questions fill only confirmed standard answers", async ()
   expect(labels).not.toContain("Select One Required");
 });
 
-// AmFam's Workday (report 5730ee40): a free-text question is titled only by
+// one employer's Workday: a free-text question is titled only by
 // its fieldset's legend, and read as its id the draft refused it as no question.
 test("Workday questionnaire text answer is named by its legend", async () => {
   const workdayOrigin = atsOrigins[0];
@@ -2710,7 +2708,7 @@ test("in a window without focus, Workday's name and disability answer are saved,
     .toEqual({ name: `${profile.firstName} ${profile.lastName}`, disability: "disability-no" });
 });
 
-// Citi's Workday (report cace1c27): "Race/Ethnicity (select all that apply)"
+// one employer's Workday: "Race/Ethnicity (select all that apply)"
 // is a group of checkboxes, and none was ticked for an Asian applicant.
 test("Workday's race checkbox group ticks the applicant's race", async () => {
   const workdayOrigin = atsOrigins[0];
@@ -2750,7 +2748,7 @@ test("Workday's race checkbox group ticks the applicant's race", async () => {
   await expect.poll(() => page.evaluate(() => (window as any).saved), { timeout: 30_000 }).toEqual(["race-1"]);
 });
 
-// Cisco's Workday (report 06a46f40): the first work experience row's Job
+// one employer's Workday: the first work experience row's Job
 // Title, focused by Workday when it added the row, showed the title but
 // reported "required" because the fill never said focus left it.
 test("in a window without focus, a Workday field the site already focused is saved", async () => {
@@ -2860,7 +2858,7 @@ test("a stale Workday signing date left on the page is retyped as today", async 
 });
 
 test("Workday education panels add each school and fill both attended years", async () => {
-  // Citi, report 5092fdc5: one panel was counted twice and its From year stayed blank.
+  // an employer: one panel was counted twice and its From year stayed blank.
   await ui({ type: "SETTINGS", settings: { concurrency: 4, generationConcurrency: 2, networkCapture: "off" } });
   await ui({ type: "API", path: "/v1/profile", method: "PUT", body: {
     ...profile,
@@ -2902,7 +2900,7 @@ test("Workday education panels add each school and fill both attended years", as
 });
 
 test("Workday shared resume uploader attaches the cover letter its instructions request", async () => {
-  // Citi, report 5092fdc5: both documents are requested above one multiple-file input.
+  // an employer: both documents are requested above one multiple-file input.
   await context.route(`${atsOrigins[0]}/**`, (route) => route.fulfill({
     contentType: "text/html",
     body: `<!doctype html><main data-automation-id="applicationPage">
@@ -2938,7 +2936,7 @@ test("Workday shared resume uploader attaches the cover letter its instructions 
   expect((await state()).applications[0].missing).not.toContain("Verify upload: Cover letter");
 });
 
-// Leidos's Workday (report 7dd8aa83, 2026-11-07): the group asks for "any
+// one employer's Workday: the group asks for "any
 // additional documents (e.g. cover letter, …)". The résumé's upload left
 // focus on the "Select files" button, the cover letter's slot, and the
 // cover letter was refused as a field in use.
@@ -2960,7 +2958,7 @@ test("Workday's shared uploader takes the cover letter after the résumé's uplo
       </script>`,
   }));
   const page = await context.newPage();
-  await page.goto(`${atsOrigins[0]}/en-US/acme/job/leidos-documents`);
+  await page.goto(`${atsOrigins[0]}/en-US/acme/job/shared-documents-focus`);
   await panel.bringToFront();
   await background(page);
   await enqueue([page]);
@@ -2970,7 +2968,7 @@ test("Workday's shared uploader takes the cover letter after the résumé's uplo
   expect((await state()).applications[0].missing.join(" ")).not.toContain("Stale or mismatched");
 });
 
-// RTX's Workday (report fa24093e, 2026-11-02): the same uploader under
+// one employer's Workday: the same uploader under
 // "Candidate Attachments", its notice asking for "CV, Resume, Cover Letter".
 test("Workday's Candidate Attachments uploader takes the cover letter its notice asks for", async () => {
   await context.route(`${atsOrigins[0]}/**`, (route) => route.fulfill({
@@ -3005,7 +3003,7 @@ test("Workday's Candidate Attachments uploader takes the cover letter its notice
 });
 
 test("Workday shared resume uploader replaces the resume a previous application left there", async () => {
-  // Citi, report 1eb327d6: "use my last application" lists its resume and
+  // an employer: "use my last application" lists its resume and
   // cover letter in the uploader, and the tailored resume was added beside them.
   await context.route(`${atsOrigins[0]}/**`, (route) => route.fulfill({
     contentType: "text/html",
@@ -3176,7 +3174,7 @@ test("Workday date sections that only accept real keystrokes are filled and rele
     .toBe("detached");
 });
 
-// American Family's Workday (report 75e68e52): the page only took focus with
+// one employer's Workday: the page only took focus with
 // the first real key typed into a job's Year, and Workday then sent focus
 // back to Month. The rest of the year landed in Month, and the fill paused
 // for "a key press on Month" nobody made.
@@ -3241,8 +3239,7 @@ test("a Workday date section that loses focus to its Month mid-typing is retyped
 // Workday moves focus to Year as soon as Month holds two digits, so the
 // release of a month's last key lands on Year. That release counted as typing
 // gone astray: the month was retyped, then assigned, and Workday dropped an
-// assigned month. Every job's Month on Citi's form was left empty (report
-// df423ef2, 2026-10-28).
+// assigned month. Every job's Month on one employer's form was left empty.
 inEitherTab("a Workday Month that hands focus to Year once complete keeps the month typed", async (tab) => {
   await ui({ type: "SETTINGS", settings: { concurrency: 4, generationConcurrency: 2, networkCapture: "off" } });
   const workdayOrigin = atsOrigins[0];
@@ -3342,10 +3339,10 @@ test("real keys are never typed after the applicant clicks into a field of a tab
   expect(await page.evaluate(() => (window as unknown as { trustedKeys: number }).trustedKeys)).toBe(0);
 });
 
-// Citi's Workday asks "Have you ever been employed by KPMG LLP…?" as a list
+// one employer's Workday asks "Have you ever been employed by KPMG LLP…?" as a list
 // button no site rule covers. The profile answers it, and the answer failed
 // as "Custom control requires manual selection" on every application
-// (2026-10-28). The list names no list of its own (no aria-controls), and
+//. The list names no list of its own (no aria-controls), and
 // the question before it can still have its list open, closing.
 inEitherTab("a Workday list question no site rule covers is answered from the profile", async (tab) => {
   await ui({ type: "SETTINGS", settings: { concurrency: 4, generationConcurrency: 2, networkCapture: "off" } });
@@ -3405,7 +3402,7 @@ inEitherTab("a Workday list question no site rule covers is answered from the pr
 // Ashby's education dates are lists whose months are valued "1" to "12".
 // The month written "08" matched none, and when the year was picked Ashby set
 // the empty month to the current one: every start and end month read
-// October (Applied Intuition, report 9027045f, 2026-10-28).
+// October.
 inEitherTab("an Ashby education month valued without a leading zero gets the saved month", async (tab) => {
   await ui({ type: "SETTINGS", settings: { concurrency: 4, generationConcurrency: 2, networkCapture: "off" } });
   const ashbyOrigin = atsOrigins[3];
@@ -3452,7 +3449,7 @@ inEitherTab("an Ashby education month valued without a leading zero gets the sav
 // Ashby puts this year in a date's empty Year once its Month is picked. That
 // change was locked as the applicant's, so the saved start year was never
 // written. Its "Still Student?" box, one per school, was left to the AI,
-// which ticked both (Applied Intuition, report 3fcbf55d, 2026-10-28).
+// which ticked both.
 test("Ashby's own year after a month is replaced, and only a school still attended is ticked as current", async () => {
   await ui({ type: "SETTINGS", settings: { concurrency: 4, generationConcurrency: 2, networkCapture: "off" } });
   const ashbyOrigin = atsOrigins[3];
@@ -3512,7 +3509,7 @@ test("Ashby's own year after a month is replaced, and only a school still attend
   await expect(rows.nth(1).locator("#_systemfield_education_history-isCurrent")).not.toBeChecked();
 });
 
-// Jabil's Workday form (report 882d55be, 2026-10-15) has one education entry,
+// one employer's Workday form has one education entry,
 // with no dates. The block found as that entry, the outermost one holding
 // a single school box, was the whole form: the graduation year was typed into
 // a job's end Month, which passed its keys on to Year, and the fill paused
@@ -3585,7 +3582,7 @@ test("a Workday education entry without dates never types its year into a job's 
   await expect(page.locator("#workExperience-1--endDate-dateSectionYear-input")).toHaveAttribute("data-committed", "");
 });
 
-// Jabil's Workday form (2026-10-16): each job is a group labelled by its
+// one employer's Workday form: each job is a group labelled by its
 // panel's h5 ("Work or Other Experience 2"), and the first legend inside it
 // is its start date's ("From"). Read as the section, every job's Location
 // was one field and got the applicant's home, "Tucson, Arizona".
@@ -4218,7 +4215,7 @@ test("legacy opaque edit locks protect cleared fields after improved label detec
   await expect(page.locator("textarea")).toHaveValue("");
 });
 
-// LinkedIn's SmartRecruiters screening page (2026-11-04): an answer planned
+// one employer's SmartRecruiters screening page: an answer planned
 // before its list was read ("No") failed, and the one planned after it ("Not
 // Applicable") was skipped as "already failed in this fill".
 test("a field that failed one answer still takes another in the same fill", async () => {
@@ -4250,7 +4247,7 @@ test("a field that failed one answer still takes another in the same fill", asyn
 
 // SmartRecruiters' <label>s hold only whitespace around a slot: every field
 // read ":0:" under its older label, and one lock saved under it left a whole
-// screening step unfilled (LinkedIn, 2026-11-05).
+// screening step unfilled.
 test("a lock with no label holds no field", async () => {
   const page = await context.newPage();
   await page.goto(`${origin}/labelless-lock`);
@@ -4308,8 +4305,8 @@ test("a lock saved without a section does not hold every row of a section", asyn
   ]);
 });
 
-// Expand Energy's SuccessFactors lists all read "No Selection" until picked
-// (report a248361b, 2026-10-29). A lock saved under that name held every
+// one employer's SuccessFactors lists all read "No Selection" until picked
+//. A lock saved under that name held every
 // empty list of the row: Education Type, Country, Degree and Status. Yet it
 // still holds a list with an answer in it, the applicant's own pick: without
 // it, Brightline's "State of Andhra Pradesh" was filled over.
@@ -4355,8 +4352,8 @@ test("a lock saved under a list's placeholder does not hold every list showing i
 
 // The AI pass is given a list's options to choose from. A SuccessFactors
 // list has none until opened, then draws them a page at a time as it is
-// scrolled: Expand Energy's Status and Education Type went to the AI pass
-// with no options at all (2026-10-30).
+// scrolled: one employer's Status and Education Type went to the AI pass
+// with no options at all.
 test("a SuccessFactors list's options are read for the AI pass, every page of them", async () => {
   const page = await context.newPage();
   await page.goto(`${origin}/sf-options`);
@@ -4409,7 +4406,7 @@ test("a SuccessFactors list's options are read for the AI pass, every page of th
 
 // The applicant answers the same question by hand on application after
 // application ("Military Status", "How did you hear about us?") and would
-// not add it to the profile themselves (2026-10-30). Given the same way on
+// not add it to the profile themselves. Given the same way on
 // two applications, it is offered to save; saved, it is offered no more.
 test("an answer given by hand on two applications is offered to save", async () => {
   await ui({ type: "SETTINGS", settings: { concurrency: 4, generationConcurrency: 2, modelFill: "off", networkCapture: "off" } });
@@ -4480,7 +4477,7 @@ test("an answer given by hand on two applications is offered to save", async () 
 
 // Links queued from the command line (npm run lane -- add) are tracked by
 // the extension as if pasted in, and its queue is mirrored to the backend for
-// lane status (2026-10-30). A link for a site it may not reach waits for the
+// lane status. A link for a site it may not reach waits for the
 // panel to ask for access.
 test("links queued from the command line are tracked, and the queue is mirrored for it", async () => {
   // As the command line does: straight to the backend, with the token.
@@ -4513,7 +4510,7 @@ test("links queued from the command line are tracked, and the queue is mirrored 
 
 // The command line's fill and switch (npm run lane -- fill | switch | ui)
 // reach the extension over its live line to the backend at once, as the side
-// panel's Fill this step would, and the queue comes back over it (2026-10-30).
+// panel's Fill this step would, and the queue comes back over it.
 test("the command line fills a step and switches to its tab over the live line", async () => {
   const { default: WebSocket } = await import("ws");
   const page = await context.newPage();
@@ -4545,13 +4542,13 @@ test("the command line fills a step and switches to its tab over the live line",
     await expect(page.locator('input[name="firstName"]')).toHaveValue(profile.firstName, { timeout: 30_000 });
     // While it fills, the command line sees it filling, not the "Tracked"
     // it was before, and then how it ended: a fill saving its progress often
-    // must not hold back the queue until it stops (2026-10-30).
+    // must not hold back the queue until it stops.
     const seen = () => messages.filter((message) => message.type === "queue").map((message) => message.snapshot.applications.find((item: { id: string }) => item.id === app.id)?.status);
     await expect.poll(() => seen().some((status) => ["inspecting", "preparing", "filling"].includes(status)), { timeout: 10_000 }).toBe(true);
     await expect.poll(() => seen().at(-1), { timeout: 10_000 }).toBe((await state()).applications.find((item) => item.id === app.id)?.status);
     expect(await page.evaluate(() => (window as unknown as { submissions: number }).submissions)).toBe(0);
     // Refresh puts the current build in its page (lane refresh) without
-    // reloading it, so nothing entered is lost (2026-11-07).
+    // reloading it, so nothing entered is lost.
     await expect.poll(async () => (await state()).applications.find((item) => item.id === app.id)!.status, { timeout: 30_000 }).not.toMatch(/^(inspecting|preparing|filling)$/);
     await page.evaluate(() => ((window as unknown as { before: boolean }).before = true));
     await page.locator('input[name="lastName"]').fill("Typed by hand");
@@ -4566,10 +4563,10 @@ test("the command line fills a step and switches to its tab over the live line",
   }
 });
 
-// L3Harris's SuccessFactors page is the answer to a posted form: reloaded,
+// one employer's SuccessFactors page is the answer to a posted form: reloaded,
 // Chrome asked "Confirm Form Resubmission", and saying yes could repeat what
 // was sent; opened again at its one-time address, it showed only an error
-// (2026-11-07). The fixer's refresh does neither.
+//. The fixer's refresh does neither.
 test("lane refresh leaves a page a form posted to as it is, sending nothing again", async () => {
   const { default: WebSocket } = await import("ws");
   const methods: string[] = [];
@@ -4599,17 +4596,95 @@ test("lane refresh leaves a page a form posted to as it is, sending nothing agai
     await expect.poll(() => messages.some((message) => message.type === "queue"), { timeout: 15_000 }).toBe(true);
     socket.send(JSON.stringify({ type: "command", id: "refresh-posted", action: "refresh", applicationId: app.id }));
     await expect.poll(() => messages.find((message) => message.id === "refresh-posted"), { timeout: 30_000 }).toMatchObject({ ok: true });
-    // Not reloaded and not opened again: L3Harris's address was a one-time
-    // one, and opening it again showed only an error (2026-11-07).
+    // Not reloaded and not opened again: one employer's address was a one-time
+    // one, and opening it again showed only an error.
     expect(methods).toEqual(["GET", "POST"]);
   } finally {
     socket.close();
   }
 });
 
-// Finding jobs on the dashboard (2026-10-30): what to look for, a search
+// Finding jobs on the dashboard: what to look for, a search
 // over SimplifyJobs' list (served from the backend's cache here), and an
 // opening tracked in one click, as the command line's lane search does.
+// The README's screenshots (docs/images/README.md), taken only on request:
+// LANE_SCREENSHOTS=1 npx playwright test -g "README screenshots". Synthetic
+// data only: the fixture applicant, placeholder employers and submissions.
+test("README screenshots", async () => {
+  test.skip(!process.env.LANE_SCREENSHOTS, "Set LANE_SCREENSHOTS=1 to take the README's screenshots.");
+  test.setTimeout(240000);
+  const out = join("docs", "images");
+  await mkdir(out, { recursive: true });
+  const shot = async (page: Page, name: string, width = 1280, height = 860) => {
+    await page.setViewportSize({ width, height });
+    await page.waitForTimeout(800);
+    await page.screenshot({ path: join(out, name) });
+  };
+  const current = await ui({ type: "API", path: "/v1/profile" });
+  await ui({
+    type: "API", path: "/v1/profile", method: "PUT",
+    body: {
+      ...current, confirmed: true,
+      firstName: "Alex", lastName: "Rivera", email: "alex@example.test", phone: "6025550101", city: "Lansing", state: "Michigan", country: "United States",
+      facts: [
+        { id: "fact-1", text: "Built accessible web applications with TypeScript and React." },
+        { id: "fact-2", text: "Cut page load time by 30% by splitting bundles and caching API responses." },
+        { id: "fact-3", text: "Led a team of four students building a course-scheduling app used by 2,000 people." },
+      ],
+      work: [{ organization: "Northwind Labs", title: "Software Engineering Intern", location: "Lansing, MI", startDate: "2025-05", endDate: "2025-08", details: "Built internal dashboards." }],
+      education: [{ organization: "Michigan State University", title: "Bachelor of Science", fieldOfStudy: "Computer Science", startDate: "2022-08", endDate: "2026-05", location: "East Lansing, MI", details: "" }],
+    },
+  });
+  // Submissions over the last weeks, for the progress board.
+  const day = 86_400_000;
+  const companies = ["Northwind Labs", "Pixelforge", "Brightline.AI", "Contoso", "Fabrikam", "Acme Robotics", "Tailspin", "Wingtip Systems"];
+  const entries = Array.from({ length: 34 }, (_, n) => ({
+    applicationId: crypto.randomUUID(), company: companies[n % companies.length], title: "Software Engineer Intern",
+    url: `https://jobs.example.test/${n}`, ats: ["workday", "greenhouse", "lever", "ashby"][n % 4],
+    submittedAt: Date.now() - Math.floor(n / 2) * day - (n % 3) * 3_600_000, confirmedBySite: n % 3 !== 0,
+  }));
+  await writeFile(join(backendDirectory, "submissions.json"), JSON.stringify(entries));
+  // Find jobs: a few openings from a cached board.
+  await mkdir(join(backendDirectory, "search", "cache"), { recursive: true });
+  const posted = Date.now() / 1000 - day / 1000;
+  await writeFile(join(backendDirectory, "search", "cache", "simplify-new-grad.json"), JSON.stringify(
+    [["Pixelforge", "Software Engineer, New Grad", "Seattle, WA"], ["Brightline.AI", "Machine Learning Engineer Intern", "Remote"], ["Contoso", "Frontend Engineer Intern", "Austin, TX"], ["Fabrikam", "Software Engineer I", "Chicago, IL"], ["Tailspin", "Data Engineer Intern", "Denver, CO"]]
+      .map(([company, title, place], n) => ({ id: String(n + 1), title, company_name: company, locations: [place], url: [`https://boards.greenhouse.io/${company.toLowerCase().replace(/\W/g, "")}/jobs/${200 + n}`, `https://jobs.lever.co/${company.toLowerCase().replace(/\W/g, "")}/${n}e7f`, `https://jobs.ashbyhq.com/${company.toLowerCase().replace(/\W/g, "")}/${n}a9c`][n % 3], date_posted: posted - n * 3600, active: true, is_visible: true })),
+  ));
+  // The side panel with applications under way.
+  const pages = [];
+  for (const [address, company, title] of [["https://boards.greenhouse.io/northwindlabs/jobs/101", "Northwind Labs", "Software Engineer Intern"], ["https://jobs.lever.co/pixelforge/a1b2", "Pixelforge", "Frontend Engineer, New Grad"], ["https://jobs.ashbyhq.com/brightline/c3d4", "Brightline.AI", "Machine Learning Engineer Intern"]]) {
+    await context.route(address, (route) =>
+      route.fulfill({ contentType: "text/html", body: html("").replace(/<title>[^<]*<\/title>/, `<title>${title} - ${company}</title>`).replace(/<h1>[^<]*<\/h1>/, `<h1>${title}</h1>`) }),
+    );
+    const page = await context.newPage();
+    await page.goto(address);
+    pages.push(page);
+  }
+  await enqueue(pages);
+  await expect.poll(async () => (await state()).applications.filter((app) => /ready|awaiting-user/.test(app.status)).length, { timeout: 90000 }).toBeGreaterThan(1);
+  await showPanel();
+  await shot(panel, "side-panel.png", 460, 1000);
+  await showDashboard("profile");
+  await shot(panel, "dashboard-profile.png");
+  await showDashboard("jobs");
+  const form = panel.getByRole("region", { name: "What to look for" });
+  await form.getByLabel("Roles, one per line").fill("software engineer\nmachine learning\ndata engineer");
+  await form.getByLabel("Also look for what my profile suggests").uncheck();
+  await form.getByRole("button", { name: "Search" }).click();
+  const found = panel.getByRole("region", { name: "Openings found" });
+  await expect(found).toContainText("openings", { timeout: 60000 });
+  await panel.setViewportSize({ width: 1280, height: 860 });
+  await found.evaluate((element) => { element.scrollIntoView({ block: "start" }); window.scrollBy(0, -96); });
+  await shot(panel, "find-jobs.png");
+  await showDashboard("submitted");
+  const board = panel.getByRole("region", { name: "Progress" });
+  await expect(board).toBeVisible({ timeout: 30000 });
+  await panel.setViewportSize({ width: 1280, height: 860 });
+  await board.evaluate((element) => { element.scrollIntoView({ block: "start" }); window.scrollBy(0, -96); });
+  await shot(panel, "progress-board.png");
+});
+
 test("the dashboard's Find jobs searches for openings and tracks one", async () => {
   await mkdir(join(backendDirectory, "search", "cache"), { recursive: true });
   const posted = Date.now() / 1000 - 86_400;
@@ -6223,8 +6298,7 @@ test("ATS fixtures use packaged adapters but leave every Next step to the user",
   }
 });
 
-// Lever's location box as its own script runs it (retrieveLocations.js,
-// 2026-10-08): typing shows the list, a key press searches after half a
+// Lever's location box as its own script runs it (retrieveLocations.js): typing shows the list, a key press searches after half a
 // second, mousedown on a result picks it, and leaving the box with the list
 // still open empties the box and the pick.
 const leverLocationPage = `<!doctype html><html><head><title>Acme - Frontend Engineer</title></head><body>
@@ -6297,10 +6371,10 @@ test("Lever's location is picked from its search and still picked when the fill 
   expect(await page.evaluate(() => (window as any).submissions)).toBe(0);
 });
 
-// Reports on two Ashby forms, 2026-10-13: a box of a checkbox question was
+// Reports on two Ashby forms: a box of a checkbox question was
 // read as a question of its own. "Veteran" (one of several communities) was
 // ticked for an applicant who is not one, and both degree boxes were ticked.
-// Notion's (2026-10-30): a required one, "the locations you would be
+// one employer's: a required one, "the locations you would be
 // interested in relocating to", read as optional boxes listed one by one,
 // and nothing ticked them for an applicant who will relocate anywhere.
 test("an Ashby checkbox question keeps its boxes together: each carries the question, and only the answer is ticked", async () => {
@@ -6361,7 +6435,7 @@ test("an Ashby checkbox question keeps its boxes together: each carries the ques
   expect(await page.evaluate(() => (window as any).submissions)).toBe(0);
 });
 
-// Rippling's voluntary questions (report ee348448, 2026-11-01): each is a
+// Rippling's voluntary questions: each is a
 // div that says "Select..." until answered and opens its list on a click.
 // Its rule's opening click was refused as if the box were a list's empty
 // "Select" choice, so Hispanic/Latino and Veteran Status were left blank.
@@ -6419,7 +6493,7 @@ test("Rippling's EEO dropdowns that read Select... are opened and answered", asy
   expect(await page.evaluate(() => (window as any).submissions)).toBe(0);
 });
 
-// Rippling's confirmation (2026-11-02): "You have successfully applied to
+// Rippling's confirmation: "You have successfully applied to
 // Software Engineer Intern" on step=confirmation, outside the action card
 // its rule looked in, so the application was never marked submitted.
 test("Rippling's own confirmation step marks the application submitted", async () => {
@@ -6445,11 +6519,10 @@ test("Rippling's own confirmation step marks the application submitted", async (
   await expect.poll(async () => (await state()).applications[0].workflowStage, { timeout: 20000 }).toBe("submitted");
 });
 
-// A report on a JazzHR form (Axtria, 2026-10-14): the sponsorship question
+// A report on a JazzHR form: the sponsorship question
 // was drawn as Yes, No and Other boxes, each named on its own, its <label>
 // bound to the hidden input that collects them; and the school, major and
-// degree were asked of one level of study each. Elucid's (capture c11a168d,
-// 2026-10-30): the citizenship list's first choice, "No answer", read as an
+// degree were asked of one level of study each. one employer's: the citizenship list's first choice, "No answer", read as an
 // answer, and every question marked with JazzHR's asterisk read as optional.
 test("a JazzHR form answers its level-of-study questions and ticks the sponsorship box the profile answers", async () => {
   const question = (id: number, label: string, control: string) =>
@@ -6514,7 +6587,7 @@ test("a JazzHR form answers its level-of-study questions and ticks the sponsorsh
   expect(await page.evaluate(() => (window as any).submissions)).toBe(0);
 });
 
-// The same form again (report 14eb9da9): the resume went into an input JazzHR
+// The same form again: the resume went into an input JazzHR
 // keeps hidden until "Attach resume" is chosen, so the applicant saw none
 // attached; and a school the list lacks was left, where the applicant wanted
 // "Other" and the school's name in the box after it. Schools sharing its
@@ -6561,7 +6634,7 @@ test("a JazzHR form attaches the resume where it shows, and names an unlisted sc
   expect(await page.evaluate(() => (window as any).submissions)).toBe(0);
 });
 
-// The same form (Axtria, task 8135eb3d): JazzHR's "-- No answer --" choice,
+// The same form (an employer, task 8135eb3d): JazzHR's "-- No answer --" choice,
 // valued resumator_no_selection, read as an answer the site had given, so the
 // experience questions were neither answered nor listed as unanswered.
 test("a JazzHR list left on -- No answer -- reads as empty and is listed as unanswered", async () => {
@@ -6622,7 +6695,7 @@ test("the card lists what a fill worked on, and the site's own confirmation mark
   await expect.poll(async () => (await ui({ type: "API", path: "/v1/submissions" })).map((record: { applicationId: string; confirmedBySite: boolean }) => [record.applicationId, record.confirmedBySite]), { timeout: 10000 })
     .toEqual([[sent.id, true]]);
   // A profile change does not ask a submitted application to be filled
-  // again, nor count it as needing the applicant (37 did, 2026-10-16).
+  // again, nor count it as needing the applicant (37 did).
   const statusBefore = (await state()).applications[0].status;
   const current = await ui({ type: "API", path: "/v1/profile" });
   await ui({ type: "API", path: "/v1/profile", method: "PUT", body: { ...current, city: current.city } });
@@ -6664,10 +6737,10 @@ test("a confirmation drawn in place marks the application submitted, and a hidde
   await expect.poll(async () => (await state()).applications[0].workflowStage, { timeout: 20000 }).toBe("submitted");
 });
 
-// A report on an Ashby form, 2026-10-13: "When can you start a new role?" is
+// A report on an Ashby form: "When can you start a new role?" is
 // a text box that opens a calendar. "Immediately" was typed into it, and the
 // picker dropped the word when the box was left.
-// Nokia's Oracle form (report 1f68e4f9, 2026-10-31): a graduation date in
+// one employer's Oracle form: a graduation date in
 // three lists after its question, each opened from its arrow button, not a
 // press on the box. The fill focused the box instead, and in a page out of
 // view that focus comes without a focus event: it was taken for the
@@ -6744,7 +6817,7 @@ test("a date picker asked when the applicant can start gets today's date, which 
   expect(await page.evaluate(() => (window as any).submissions)).toBe(0);
 });
 
-// A report on a Greenhouse form, 2026-10-13: "Please identify your race"
+// A report on a Greenhouse form: "Please identify your race"
 // is a list whose options appear only once it is opened, shown only after
 // "Are you Hispanic/Latino?" is answered No. It was left empty.
 test("a race list that shows its options only when opened is answered, also when an earlier answer brings it out", async () => {
@@ -6794,7 +6867,7 @@ test("a race list that shows its options only when opened is answered, also when
   expect(await page.evaluate(() => (window as any).submissions)).toBe(0);
 });
 
-// A report on Epic Games' careers site, 2026-10-14: its Greenhouse form
+// A report on one employer's careers site: its Greenhouse form
 // labels each box with <label for="First Name"> though no box has that id,
 // and writes "First Name\u2060*\u2060:". Every box read as its placeholder
 // "Enter", so boxes alike were held back and nothing but a few was filled.
@@ -6804,7 +6877,7 @@ test("a form whose labels name no box, around invisible joiners, is read and fil
   await context.route(`${origin}/careers-greenhouse`, (route) =>
     route.fulfill({
       contentType: "text/html; charset=utf-8",
-      body: `<!doctype html><title>Research Intern | Epic Games</title><form onsubmit="window.submissions++; return false">
+      body: `<!doctype html><title>Research Intern | Acme Games</title><form onsubmit="window.submissions++; return false">
         ${group("First Name", "questions.first_name")}
         ${group("Last Name", "questions.last_name")}
         ${group("Email", "questions.email")}
@@ -6833,7 +6906,7 @@ test("a form whose labels name no box, around invisible joiners, is read and fil
   expect(await page.evaluate(() => (window as any).submissions)).toBe(0);
 });
 
-// Reports, 2026-10-14: Pinterest's and Roblox's careers pages show the
+// Reports: one employer's and Roblox's careers pages show the
 // Greenhouse form, and its "thank you" after Submit, in a frame of their own.
 // Only the top page was asked whether it showed a confirmation.
 test("a confirmation drawn in the form's own frame marks the application submitted", async () => {
@@ -6864,7 +6937,7 @@ test("a confirmation drawn in the form's own frame marks the application submitt
   expect((await state()).applications[0].note).toMatch(/^The site confirmed this application was submitted\./);
 });
 
-// A second report from Epic Games' careers site, 2026-10-14: its yes/no
+// A second report from one employer's careers site: its yes/no
 // dropdowns (an older react-select), the phone box that opens once its
 // country is chosen, and both schools' date boxes were all left empty.
 test("an older react-select, a phone box opened by its country, and repeated school rows are filled", async () => {
@@ -6918,7 +6991,7 @@ test("an older react-select, a phone box opened by its country, and repeated sch
   expect((await ui({ type: "SCAN_TAB", tabId })).observation.description).toContain("Multi-modal diffusion models");
 });
 
-// A report, 2026-10-14: Epic Games' careers page replaced its form with
+// A report: one employer's careers page replaced its form with
 // "Your application has been submitted successfully." No site rule knew it.
 test("a site's own submitted message, where its form was, marks the application submitted", async () => {
   await context.route(`${origin}/own-confirmation`, (route) =>
@@ -6943,7 +7016,7 @@ test("a site's own submitted message, where its form was, marks the application 
   await expect.poll(async () => (await state()).applications[0].workflowStage, { timeout: 20000 }).toBe("submitted");
 });
 
-// Found in review, 2026-10-14: an employer's page around a framed form has
+// Found in review: an employer's page around a framed form has
 // no boxes of its own, and its job text may thank applicants. Only a frame
 // the fill wrote to may say the application went in by its words alone.
 test("an employer page's own thanks around a framed form does not mark the application submitted", async () => {
@@ -7229,7 +7302,7 @@ test("a resume swapped for a filename chip does not count as the cover letter", 
 });
 
 // Amazon keeps the account's resume and shows it beside a Replace input
-// (2026-10-31). It gives way to this application's tailored one as answers
+//. It gives way to this application's tailored one as answers
 // the site filled in do; with those kept, the card offers it instead.
 test("a resume the site already held is replaced with the tailored one, or offered for replacing", async () => {
   const body = `<!doctype html><title>Apply to a Job</title><main><h1>Upload your resume</h1><form>
@@ -7287,7 +7360,7 @@ test("a resume the site already held is replaced with the tailored one, or offer
   }
 });
 
-// Nokia's Oracle form (report 392583f7, 2026-10-31): an "Additional
+// one employer's Oracle form: an "Additional
 // Documents" uploader named only "Upload Attachment", whose instructions ask
 // for a cover letter, got none.
 test("an Oracle uploader whose instructions name the cover letter gets it", async () => {
@@ -7304,7 +7377,7 @@ test("an Oracle uploader whose instructions name the cover letter gets it", asyn
             </div></div></div></div></div></attachment-upload-button></div></div>
       </form><script>
         window.attached = [];
-        // As Nokia's: the file is listed in a part of the page that is not
+        // As one employer's: the file is listed in a part of the page that is not
         // shown, with its Remove button, and the visible uploader stays empty.
         const hidden = document.createElement('div');
         hidden.hidden = true;
@@ -7330,7 +7403,7 @@ test("an Oracle uploader whose instructions name the cover letter gets it", asyn
   await page.close();
 });
 
-// RTX's Workday (report 6e6db787): with no pick made by its site rule, the
+// one employer's Workday: with no pick made by its site rule, the
 // fill typed the program's name into Field of Study's search box, the site
 // dropped it, and it was typed again every two seconds.
 test("a list of picks' search box is never typed in as an answer", async () => {
@@ -7358,7 +7431,7 @@ test("a list of picks' search box is never typed in as an answer", async () => {
   await page.close();
 });
 
-// NeuroHire's Workable form (report c98cf17c, 2026-10-31): entries already
+// one employer's Workable form: entries already
 // saved show as cards, not as forms, and the school and each job were added
 // again by the next fill.
 test("Workable entries already saved as cards are not added again", async () => {
@@ -7391,7 +7464,7 @@ test("Workable entries already saved as cards are not added again", async () => 
   await page.close();
 });
 
-// NeuroHire's Workable form (report bb39258c, 2026-10-31): with MSU saved as
+// one employer's Workable form: with MSU saved as
 // a card, "+ Add" for Penn State drew its editor first in the list, and the
 // fill wrote MSU into it and left it open.
 test("a Workable entry added above the saved cards gets its own row and is saved", async () => {
@@ -7430,7 +7503,7 @@ test("a Workable entry added above the saved cards gets its own row and is saved
   await page.close();
 });
 
-// Samsung Semiconductor's Greenhouse form (report c577407b, 2026-10-31):
+// one employer's Greenhouse form:
 // every employment row asks "Current role", and with no row told apart the
 // boxes were one field asked three times and all were left.
 test("each Greenhouse employment row's Current role is answered for its own job", async () => {
@@ -7453,7 +7526,7 @@ test("each Greenhouse employment row's Current role is answered for its own job"
   await page.close();
 });
 
-// A checkbox beside a <label for=""> (2026-10-31): reading it built an
+// A checkbox beside a <label for="">: reading it built an
 // invalid selector, and the fill stopped with "0 fields filled".
 test("a checkbox beside a label with an empty for does not stop the fill", async () => {
   await context.route(`${origin}/empty-label-for`, (route) => route.fulfill({ contentType: "text/html",
@@ -7663,7 +7736,7 @@ test("recorded value changes caused by a click or typing are not marked direct",
   expect(recording.summary.directChanges).toBe(0);
 });
 
-// A tab brought to the front is named at once (2026-11-07): its read took
+// A tab brought to the front is named at once: its read took
 // seconds while a fill ran, and the card meanwhile showed the tab left
 // behind, its buttons acting on that application.
 test("the current-tab card names a newly active tab while it is still being read", async () => {
@@ -7909,8 +7982,7 @@ test("Oracle's resume slot is filled beside its profile-import uploader, and hid
   await context.route(`${oracleOrigin}/**`, (route) =>
     route.fulfill({
       contentType: "text/html",
-      // Shaped like egug.fa.us2.oraclecloud.com's apply flow (issue report,
-      // 2026-09-30): every step is in the page, the later ones hidden.
+      // an employer like egug.fa.us2.oraclecloud.com's apply flow (issue report): every step is in the page, the later ones hidden.
       body: `<!doctype html><title>Personal Info</title><main>
         <div class="apply-flow-section" data-section-number="1">
           <div class="apply-flow-profile-import-awli__button--file-upload">
@@ -7984,7 +8056,7 @@ test("answers an earlier application left are replaced, and the applicant's own 
   await expect(page.locator("[name=email]")).toHaveValue("chosen@example.test");
 });
 
-// PageUp (report 645e8cca): the account's older address comes back in the
+// PageUp: the account's older address comes back in the
 // form, and its second line stayed under the profile's street.
 test("a second address line an earlier application left is emptied when the profile has none", async () => {
   const address = "100 Test Way";
@@ -8007,7 +8079,7 @@ test("a second address line an earlier application left is emptied when the prof
   await expect(page.locator("#sStreet2")).toHaveValue("");
 });
 
-// PageUp (report b040f06f): the education step comes pre-filled from the
+// PageUp: the education step comes pre-filled from the
 // resume, and "Education status: Completed" stayed on a degree under way.
 test("a pre-filled education status is corrected from the degree's end date", async () => {
   await ui({
@@ -8094,8 +8166,7 @@ test("with Keep chosen, answers the site filled in stay as they are", async () =
 });
 
 inEitherTab("Oracle documents left from an earlier application are replaced with this one's", async (tab) => {
-  // As egug.fa.us2.oraclecloud.com shows a returning applicant (screenshot,
-  // 2026-10-03): both slots already hold files, with Remove buttons, and
+  // As egug.fa.us2.oraclecloud.com shows a returning applicant (screenshot): both slots already hold files, with Remove buttons, and
   // earlier uploads are listed to pick from.
   await context.route(`${oracleOrigin}/**`, (route) =>
     route.fulfill({
@@ -8140,7 +8211,7 @@ inEitherTab("Oracle documents left from an earlier application are replaced with
         };
         slot('resume-slot', 'Resume', 'Old_Software_Engineer_Resume.pdf');
         // The earlier application's letter has the very name this one's will
-        // (screenshot, 2026-10-03: both "Alex_Rivera_Cover_Letter.pdf").
+        // (screenshot: both "Alex_Rivera_Cover_Letter.pdf").
         slot('cover-slot', 'Cover Letter', 'Rivera-cover-Personal-Info.pdf');
       </script>`,
     }),
@@ -8182,8 +8253,8 @@ test("an Oracle step holding only Add buttons can be filled", async () => {
   await context.route(`${oracleOrigin}/**`, (route) =>
     route.fulfill({
       contentType: "text/html",
-      // Shaped like section 2 of egug.fa.us2.oraclecloud.com's apply flow
-      // (issue report, 2026-09-30): no inputs until an Add button is pressed.
+      // an employer like section 2 of egug.fa.us2.oraclecloud.com's apply flow
+      // (issue report): no inputs until an Add button is pressed.
       body: `<!doctype html><title>Education and Experience</title><main>
         <div class="apply-flow-section" data-section-number="2">
           <h2 class="apply-flow-block__title"><span>Education</span></h2>
@@ -8243,11 +8314,11 @@ test("Oracle education entries are each filled from lists and saved before the n
   await context.route(`${oracleOrigin}/**`, (route) =>
     route.fulfill({
       contentType: "text/html",
-      // Oracle's inline profile items (recordings, 2026-09-30): Add opens a
+      // Oracle's inline profile items (recordings): Add opens a
       // form in place, dropdowns are lists of gridcells, and the footer's
       // save button (also "Add Education") saves the entry and closes it.
       // The whole step is one application form: each entry's save button is,
-      // to the browser, its submit button (issue report, 2026-09-30).
+      // to the browser, its submit button (issue report).
       body: `<!doctype html><title>Education and Experience</title><main>
         <form class="apply-flow__content apply-flow__content-form" novalidate method="post" action="/apply-submitted">
         <div class="apply-flow-section" data-section-number="2">
@@ -8375,7 +8446,7 @@ test("Oracle language skill pills take each language's level from the profile", 
   await context.route(`${oracleOrigin}/**`, (route) =>
     route.fulfill({
       contentType: "text/html",
-      // egug.fa.us2.oraclecloud.com (report 395479e7, 2026-10-25): an added
+      // egug.fa.us2.oraclecloud.com: an added
       // language row asks Reading, Writing and Speaking as pills, buttons
       // already showing their text, which a value write took for answered.
       body: `<!doctype html><title>Education and Experience</title><main>
@@ -8448,7 +8519,7 @@ test("Oracle entries already saved to the candidate profile are kept, not added 
     body: {
       ...profile,
       education: [
-        // Named more fully than the tile names it (Nokia's, report 1f68e4f9).
+        // Named more fully than the tile names it.
         { organization: "Example State University", title: "Master of Science", fieldOfStudy: "M.S. Data Science, Statistics & Engineering (Applied Systems)", startDate: "2025-08", endDate: "2027-12", location: "", details: "" },
         { organization: "Example Polytechnic", title: "Bachelor of Science", fieldOfStudy: "Computer Science", startDate: "2020-09", endDate: "2024-06", location: "", details: "" },
       ],
@@ -8458,7 +8529,7 @@ test("Oracle entries already saved to the candidate profile are kept, not added 
       ],
     },
   });
-  // egug.fa.us2.oraclecloud.com (report e5a51b64, 2026-10-24): entries saved
+  // egug.fa.us2.oraclecloud.com: entries saved
   // to the candidate profile show as tiles with no fields, the major (or job
   // title, employer) and dates. The fill added every profile row again.
   const tile = (title: string, subtitle: string) =>
@@ -8523,7 +8594,7 @@ test("Oracle's race list is answered from the profile, and its City rule never w
   await context.route(`${oracleOrigin}/**`, (route) =>
     route.fulfill({
       contentType: "text/html",
-      // From an Amex demographics step (recording, 2026-09-30): the race box's
+      // From an employer's demographics step (recording): the race box's
       // id holds "Ethnicity", which contains "city".
       body: `<!doctype html><title>More About You</title><main>
         <div class="apply-flow-section" data-section-number="4">
@@ -8551,7 +8622,7 @@ test("Oracle's race list is answered from the profile, and its City rule never w
           }
         };
         input.addEventListener('click', show);
-        // As on Amex's page (recording, 2026-09-30): leaving the box closes
+        // As on one employer's page (recording): leaving the box closes
         // the list, and only typing a person does filters it; text a script
         // writes changes nothing.
         input.addEventListener('blur', () => setTimeout(() => { lists.innerHTML = ''; }, 50));
@@ -8570,7 +8641,7 @@ test("Oracle's race list is answered from the profile, and its City rule never w
 });
 
 test("an embedded frame that never finishes loading does not hold up tracking or filling", async () => {
-  // As awardco.com and Scale AI's board (full eval runs, 2026-10-07): a
+  // As awardco.com and one employer's board (full eval runs): a
   // third-party frame that never finishes loading kept the tab "loading" and
   // script injection pending, so the fill waited for the page for good.
   const tracker = atsOrigins[2];
@@ -8599,7 +8670,7 @@ test("an embedded frame that never finishes loading does not hold up tracking or
 });
 
 test("a forced resume dialog that fills the application is recognized as replacing the form", async () => {
-  // Paylocity (seen live, 2026-10-07): the page opens under an "Apply with
+  // Paylocity (seen live): the page opens under an "Apply with
   // resume" dialog whose upload rewrites the form. It was not recognized, so
   // the form was filled behind the dialog and the later upload parsed over it.
   await context.route(`${paylocityOrigin}/forced-resume`, (route) =>
@@ -8623,7 +8694,7 @@ test("a forced resume dialog that fills the application is recognized as replaci
 
 test("Paylocity Citrus pickers fill each address and keep education values in their own rows", async () => {
   test.setTimeout(120000);
-  // Paylocity, report 9a0880b3: Citrus uses functional components, not
+  // Paylocity: Citrus uses functional components, not
   // react-select; repeated addresses and schools need independent answers.
   const compiled = await build({ entryPoints: ["tests/browser/paylocity-history-fixture.tsx"], bundle: true, write: false, format: "iife", define: { "process.env.NODE_ENV": '"production"' } });
   await context.route(`${paylocityOrigin}/**`, (route) => route.fulfill({ contentType: "text/html", body: `<!doctype html><title>Software Intern</title><div id="root"></div><script>${compiled.outputFiles[0].text}</script>` }));
@@ -8662,7 +8733,7 @@ test("Paylocity Citrus pickers fill each address and keep education values in th
 });
 
 test("each Paylocity work and education block is its own row, not one ambiguous field", async () => {
-  // Issue report, 2026-10-07: every job repeats Company Name, City, State…
+  // Issue report: every job repeats Company Name, City, State…
   // and every school repeats School Name and GPA. With no row they were
   // refused as "another field has the same label", and both schools were
   // filled from the first one.
@@ -8692,7 +8763,7 @@ test("each Paylocity work and education block is its own row, not one ambiguous 
 });
 
 test("an Avature work section titled by a paragraph gets a filled row for each job", async () => {
-  // Intuit's Avature Register page (form check, rows-short | work): the
+  // one employer's Avature Register page (form check, rows-short | work): the
   // section's title is a <p>, not a <label>, so the site config never found
   // its rows, added none, and every row's Employer was one ambiguous field.
   await ui({
@@ -8745,7 +8816,7 @@ test("an Avature work section titled by a paragraph gets a filled row for each j
 });
 
 test("each Avature job row gets its own start and end month, added rows too", async () => {
-  // Intuit's Avature Register page (fill capture, 2026-10-17): the third
+  // one employer's Avature Register page (fill capture): the third
   // job, in a row the extension added, kept no end month and showed a start
   // month from no job in the profile.
   await ui({
@@ -8809,7 +8880,7 @@ test("each Avature job row gets its own start and end month, added rows too", as
 });
 
 test("each Avature school row gets its school from the site's search, its major and whether it was finished", async () => {
-  // Intuit's Avature Register page (fill capture, 2026-10-17): University/
+  // one employer's Avature Register page (fill capture): University/
   // School lists only what its server finds for the typed text, and the
   // rules gave it no school; "Did you graduate?" was answered with a year.
   await ui({
@@ -8903,7 +8974,7 @@ test("each Avature school row gets its school from the site's search, its major 
 });
 
 test("a question written as text above its options labels the radios and checkboxes under it", async () => {
-  // Paylocity's screener questions (issue report, 2026-10-07): a paragraph,
+  // Paylocity's screener questions (issue report): a paragraph,
   // then one row per option, with nothing tying them together. The fields
   // were named after the inputs ("multiQuestionAnswer1856497") and no
   // question could be answered or shown.
@@ -8937,10 +9008,10 @@ test("a question written as text above its options labels the radios and checkbo
 });
 
 test("a SuccessFactors page fills ordinary names, keeps its signature manual and ignores hidden cookie and captcha frames", async () => {
-  // Shaped like CNH's SuccessFactors application (issue report, 2026-09-30):
+  // an employer like one employer's SuccessFactors application (issue report):
   // a zero-size cookie-manager frame from another site, and an e-signature
   // asking for "First & Last Name".
-  await context.route("https://join.cnh.com/**", (route) =>
+  await context.route("https://join.example-careers.com/**", (route) =>
     route.fulfill({ contentType: "text/html", body: "<!doctype html><title>Cookies</title>" }),
   );
   await context.route("https://www.google.com/recaptcha/**", (route) =>
@@ -8950,7 +9021,7 @@ test("a SuccessFactors page fills ordinary names, keeps its signature manual and
     route.fulfill({
       contentType: "text/html",
       body: `<!doctype html><title>Career Opportunities: Apply for Software Engineer Intern (5659)</title><main>
-        <iframe height="0" style="visibility:hidden;border:0" id="cookiemanageriframe" src="https://join.cnh.com/widgets/cookiemanageriframe/"></iframe>
+        <iframe height="0" style="visibility:hidden;border:0" id="cookiemanageriframe" src="https://join.example-careers.com/widgets/cookiemanageriframe/"></iframe>
         <iframe title="reCAPTCHA" width="304" height="78" src="https://www.google.com/recaptcha/api2/anchor?k=fixture"></iframe>
         <label for="60:_txtFld">* Legal First Name</label><input data-testid="sfTextField" name="firstName" id="60:_txtFld" type="text" aria-required="true">
         <label for="68:_txtFld">* Last Name</label><input data-testid="sfTextField" name="lastName" id="68:_txtFld" type="text" aria-required="true">
@@ -8974,7 +9045,7 @@ test("a SuccessFactors page fills ordinary names, keeps its signature manual and
   await expect(page.locator('[name="custSign"]')).toHaveValue("Manually signed name");
 });
 
-// L3Harris's SuccessFactors application (report fcabe714, 2026-11-04): its
+// one employer's SuccessFactors application: its
 // sections open folded behind their title bars, the form read as one
 // Language field, and nothing was filled.
 test("a SuccessFactors application's folded sections are opened and filled", async () => {
@@ -9009,7 +9080,7 @@ test("a SuccessFactors application's folded sections are opened and filled", asy
 });
 
 test("a race option named by its question, escaped markup and a definition is chosen by its group", async () => {
-  // Shaped like a PageUp demographics step (issue report, 2026-10-03): each
+  // an employer like a PageUp demographics step (issue report): each
   // radio's aria-labelledby lists the question's legend and a hidden copy of
   // the option whose markup is escaped, and each group carries its definition.
   await ui({ type: "API", path: "/v1/profile", method: "PUT", body: { ...profile, gender: "Female", ethnicity: "White" } });
@@ -9044,7 +9115,7 @@ test("a race option named by its question, escaped markup and a definition is ch
 });
 
 test("a veteran question that only says \"protected veterans\" is answered from the profile", async () => {
-  // Shaped like a PageUp VEVRAA step (issue report, 2026-10-03): the legend
+  // an employer like a PageUp VEVRAA step (issue report): the legend
   // never says "veteran status", and the decline has a Unicode hyphen.
   await ui({ type: "API", path: "/v1/profile", method: "PUT", body: { ...profile, veteranStatus: "Decline" } });
   const option = (id: number, name: string) =>
@@ -9070,7 +9141,7 @@ test("a veteran question that only says \"protected veterans\" is answered from 
 });
 
 test("a disability question that only says \"check one of the boxes below\" is answered from the profile", async () => {
-  // Shaped like a PageUp CC-305 step (issue report, 2026-10-03): the legend
+  // an employer like a PageUp CC-305 step (issue report): the legend
   // never says "disability"; only the options do, with escaped markup in
   // their hidden copies.
   await ui({ type: "API", path: "/v1/profile", method: "PUT", body: { ...profile, disabilityStatus: "No" } });
@@ -9098,7 +9169,7 @@ test("a disability question that only says \"check one of the boxes below\" is a
 });
 
 test("an employer page embedding its Greenhouse form names the form's frame for Fill to ask for", async () => {
-  // As ASM's careers page (issue report, 2026-10-02): the form is a shown
+  // As one employer's careers page (issue report): the form is a shown
   // job-boards.eu.greenhouse.io frame the extension has no access to yet,
   // beside a captcha frame and a hidden one that need none.
   const embedded = "https://job-boards.eu.greenhouse.io";
@@ -9116,7 +9187,7 @@ test("an employer page embedding its Greenhouse form names the form's frame for 
       contentType: "text/html",
       body: `<!doctype html><title>Software Engineering Intern</title><main>
         <label>What are you looking for?<input name="search"></label>
-        <iframe id="grnhse_iframe" width="800" height="600" src="${embedded}/embed/job_app?for=asm&token=4830113101"></iframe>
+        <iframe id="grnhse_iframe" width="800" height="600" src="${embedded}/embed/job_app?for=acme&token=4830113101"></iframe>
         <iframe width="304" height="78" src="https://www.recaptcha.net/recaptcha/enterprise/anchor?k=fixture"></iframe>
         <iframe height="0" style="visibility:hidden" src="https://consent.example-cmp.test/frame"></iframe>
       </main>`,
@@ -9152,8 +9223,7 @@ test("an employer page embedding its Greenhouse form names the form's frame for 
   // And open on the application's own card.
   await expect(panel.getByRole("article").first().getByLabel("Problems to resolve")).toContainText("Grant access to embedded site");
   // Granting it from that card while another tab is in front leaves the
-  // current-tab card on the tab in front (an Indeed step shown as the
-  // LinkedIn application, 2026-10-10).
+  // current-tab card on the tab in front (an Indeed step shown as the employer's application).
   await context.route(`${origin}/elsewhere`, (route) =>
     route.fulfill({ contentType: "text/html", body: "<!doctype html><title>Somewhere else</title><label>Note<input name=note></label>" }),
   );
@@ -9173,7 +9243,7 @@ test("an employer page embedding its Greenhouse form names the form's frame for 
 });
 
 test("an apply page on a host without access asks for it even when a frame inside it is readable", async () => {
-  // As Amazon's apply page (issue report df17e712, 2026-10-24): access was
+  // As Amazon's apply page (issue): access was
   // given on amazon.jobs, sign-in led to account.amazon.jobs, and only an
   // empty ad frame on the page could be read. Fill said to open the form.
   const applyOrigin = "https://account.example-jobs.test";
@@ -9217,7 +9287,7 @@ test("an apply page on a host without access asks for it even when a frame insid
 });
 
 test("Indeed's apply steps give the application its posting and employer from the page", async () => {
-  // As smartapply.indeed.com (issue report, 2026-10-10): the steps are in
+  // As smartapply.indeed.com (issue report): the steps are in
   // main, the posting in a collapsed card beside them, and the address names
   // nobody. A tag manager's frame on the page is not a form to ask about.
   const step = "https://smartapply.indeed.com/beta/indeedapply/form/questions-module/questions/1";
@@ -9262,7 +9332,7 @@ test("Indeed's apply steps give the application its posting and employer from th
 });
 
 test("Breezy's apply page gives the application its posting, title and questions", async () => {
-  // As matroid.breezy.hr (report ba965f2e, 2026-10-17): the apply page shows
+  // As matroid.breezy.hr: the apply page shows
   // only the job's title, keeps the posting in its data-position, opens with
   // a hidden "Application Submitted" heading, and heads each of the
   // employer's questions with an <h3> and no label.
@@ -9313,7 +9383,7 @@ test("Breezy's apply page gives the application its posting, title and questions
 });
 
 test("LinkedIn and Indeed are read and drafted for, and never written to", async () => {
-  // Both forbid tools that automate activity on them (decided 2026-10-10):
+  // Both forbid tools that automate activity on them (decided):
   // no fill of any kind reaches their pages, whatever asks for it.
   const step = "https://smartapply.indeed.com/beta/indeedapply/form/questions-module/questions/7";
   await context.route(step, (route) =>
@@ -9362,7 +9432,7 @@ test("LinkedIn and Indeed are read and drafted for, and never written to", async
 });
 
 test("Lever's self-identification date is filled with today's date", async () => {
-  // As Shield AI's form (issue report, 2026-10-11): the date beside the
+  // As one employer's form (issue report): the date beside the
   // disability form's name was left alone as a signature. It is a date.
   const form = "https://jobs.lever.co/datedco/59e0cf9b-04d7-43c0-8a65-9d411fe56c68/apply";
   await context.route(form, (route) =>
@@ -9394,7 +9464,7 @@ test("Lever's self-identification date is filled with today's date", async () =>
 });
 
 test("an Apply with LinkedIn widget does not stop the fill of the form around it", async () => {
-  // As Shield AI's Lever form (issue report, 2026-10-10): the widget is a
+  // As one employer's Lever form (issue report): the widget is a
   // linkedin.com frame the extension can read. It is never a fill target,
   // and being draft-only must not fail the fill of the Lever page.
   const form = "https://jobs.lever.co/widgetco/59e0cf9b-04d7-43c0-8a65-9d411fe56c68/apply";
@@ -9430,7 +9500,7 @@ test("an Apply with LinkedIn widget does not stop the fill of the form around it
 });
 
 test("a modal apply box is the whole form, and LinkedIn's radio questions are read by name", async () => {
-  // As LinkedIn's Easy Apply (issue reports, 2026-10-10): a <dialog> over the
+  // As one employer's Easy Apply (issue reports): a <dialog> over the
   // job page, whose search filters were listed as questions; every radio of
   // a group carries the question as its aria-label and an empty label, with
   // the option's text drawn beside it.
@@ -9470,7 +9540,7 @@ test("a modal apply box is the whole form, and LinkedIn's radio questions are re
 });
 
 test("a cookie notice that calls itself a modal dialog does not hide the form behind it", async () => {
-  // As Pinpoint's application page (nightly eval, 2026-10-11): a notice in
+  // As Pinpoint's application page (nightly eval): a notice in
   // the corner and its preferences box, kept in the page invisible, both
   // role=dialog aria-modal=true. Nothing behind them was read.
   await context.route(`${origin}/cookie-modal`, (route) =>
@@ -9529,7 +9599,7 @@ test("documents can be drafted and saved as files without anything being written
 });
 
 inEitherTab("Greenhouse's job-board uploads stay attached when the site swaps the input for the file's name", async (tab) => {
-  // As ASM's embedded job-boards.eu form (issue report, 2026-10-02): once a
+  // As one employer's embedded job-boards.eu form (issue report): once a
   // file is chosen the site drops the input and shows the file's name with a
   // Remove file button. The upload must count as done, and nothing may
   // click Remove file to upload again.
@@ -9643,7 +9713,7 @@ test("a file an earlier application left on a Greenhouse job board is replaced",
 });
 
 test("ADP expands employer panels and fills each employment history entry", async () => {
-  // ADP employment form, report f165df17-aed9-4a3d-ab20-985264bd7e7e.
+  // ADP employment form-aed9-4a3d-ab20-985264bd7e7e.
   // The captured sdf-expandable-box hides its slotted controls until the
   // shadow button is clicked; dates have two nested shadow roots.
   test.setTimeout(90000);
@@ -9750,7 +9820,7 @@ test("ADP expands employer panels and fills each employment history entry", asyn
 });
 
 test("ADP leaves selected employer types alone on repeated fills", async () => {
-  // ADP employment form, report 99f73927-60dc-4d78-9204-7e3adf66f430.
+  // ADP employment form-60dc-4d78-9204-7e3adf66f430.
   test.setTimeout(90000);
   await ui({ type: "API", path: "/v1/profile", method: "PUT", body: {
     ...profile, work: [
@@ -9818,7 +9888,7 @@ test("ADP leaves selected employer types alone on repeated fills", async () => {
 });
 
 test("ADP document dialogs detect each slot and save the resume and transcript", async () => {
-  // ADP documents step, report 348c3d98-978a-4b4f-97e6-62941f5af8c7.
+  // ADP documents step-978a-4b4f-97e6-62941f5af8c7.
   // The captured component creates a shadow uploader on click and saves
   // only on sdfAccept; an internship essay does not identify a cover letter.
   test.setTimeout(90000);
@@ -9892,7 +9962,7 @@ test("ADP document dialogs detect each slot and save the resume and transcript",
 });
 
 test("ADP demographic radios expose their questions and retain clicked answers", async () => {
-  // ADP EEOC form, report c109ddd6-8937-4459-a179-00a750b590e3.
+  // ADP EEOC form-8937-4459-a179-00a750b590e3.
   await ui({ type: "API", path: "/v1/profile", method: "PUT", body: {
     ...profile, hispanic: "No", ethnicity: "East Asian", gender: "Female", veteranStatus: "No",
   } });
@@ -10066,7 +10136,7 @@ test("an explicit location-address helper fills confirmed location without repla
 });
 
 test("ADP phone controls apply their keyboard formatting during autofill", async () => {
-  // ADP contact form, report 5ee92470-7aae-417f-b930-ac5a6a3bd0df.
+  // ADP contact form-7aae-417f-b930-ac5a6a3bd0df.
   // The capture lacks the mask script; model the keyboard-driven formatting
   // reported by the applicant in the saved phone control's shadow structure.
   await context.route(`${adpOrigin}/**`, (route) => route.fulfill({
@@ -10109,7 +10179,7 @@ test("ADP phone controls apply their keyboard formatting during autofill", async
 });
 
 test("ADP keeps selected dropdown answers when their filter boxes are empty", async () => {
-  // ADP contact form, report 63f5ef6a-b7a0-4ec3-995b-a718c9327ae7:
+  // ADP contact form-b7a0-4ec3-995b-a718c9327ae7:
   // choosing an option clears the filter; choosing Country resets State.
   await ui({ type: "API", path: "/v1/profile", method: "PUT", body: { ...profile, state: "Colorado" } });
   await context.route(`${adpOrigin}/**`, (route) => route.fulfill({
@@ -10166,7 +10236,7 @@ test("ADP keeps selected dropdown answers when their filter boxes are empty", as
 });
 
 test("a location search that finds nothing is closed, so the rest of the form stays visible", async () => {
-  // As Talos's Ashby form in the nightly replay (2026-10-02): the search
+  // As Talos's Ashby form in the nightly replay: the search
   // answers "No results", and while its list is open the site hides every
   // other field from assistive technology (aria-hidden), so the next look
   // at the form found two fields and attached nothing.
@@ -10226,8 +10296,8 @@ test("SuccessFactors uploads the resume through its dialog and fills rows it add
   await context.route(`${sapsfOrigin}/**`, (route) =>
     route.fulfill({
       contentType: "text/html",
-      // Shaped like CNH's SuccessFactors application (issue reports and a
-      // recording, 2026-09-30): "Upload a Resume" opens a dialog holding the
+      // an employer like one employer's SuccessFactors application (issue reports and a
+      // recording): "Upload a Resume" opens a dialog holding the
       // file input, and Add creates rows in the Work Experiences section.
       body: `<!doctype html><title>Career Opportunities: Apply for Software Engineer Intern (5659)</title><main>
         <div class="RCMFormField rcmFormElement attachmentField"><label class="rcmFormFieldLabel">Resume</label>
@@ -10250,7 +10320,7 @@ test("SuccessFactors uploads the resume through its dialog and fills rows it add
       </main><script>
         window.uploaded = [];
         // SuccessFactors' search: only options holding what was typed show,
-        // about 0.7s after typing (recording, 2026-10-01).
+        // about 0.7s after typing (recording).
         let searching;
         const searchable = (input, options) => (input.addEventListener('keydown', (event) => {
           if (event.key === 'Escape') (clearTimeout(searching), document.querySelector('ul.sf-list-select')?.remove());
@@ -10286,7 +10356,7 @@ test("SuccessFactors uploads the resume through its dialog and fills rows it add
           get value() { return this._value; }
           set value(v) { this._value = v; this.setAttribute('value', v); }
         });
-        // As on CNH's page (recording, 2026-10-01): the label text does
+        // As on one employer's page (recording): the label text does
         // nothing; the + icon opens the dialog.
         document.getElementById('51:_attachIcon').addEventListener('click', () => setTimeout(() => {
           const panel = document.createElement('div');
@@ -10301,7 +10371,7 @@ test("SuccessFactors uploads the resume through its dialog and fills rows it add
             done.textContent = 'Your resume has been uploaded.';
             document.body.append(done);
             // Then the site reloads the form from what it saved: unsaved rows
-            // and answers are gone (recording, 2026-10-01).
+            // and answers are gone (recording).
             setTimeout(() => {
               document.getElementById('rows').innerHTML = '';
               rows = 0;
@@ -10369,7 +10439,7 @@ test("SuccessFactors uploads the resume through its dialog and fills rows it add
     ["Work Experiences", 1],
   ]);
   // A date's input inside its picker's shadow root belongs to the row too
-  // (L3Harris, report 56e13a52: every "Start Date" was one locked field).
+  // (an employer: every "Start Date" was one locked field).
   // (This copy's picker gives its input no label of its own.)
   const starts = observed.data.fields.filter((f: { label: string; kind: string }) => f.kind === "text" && /Start Date|Unlabelled field/.test(f.label));
   expect(starts.map((f: { section?: string; index?: number }) => [f.section, f.index])).toEqual([
@@ -10382,7 +10452,7 @@ test("SuccessFactors uploads the resume through its dialog and fills rows it add
   await expect(page.locator("ui5-date-picker-xweb-calendar-widget").nth(1)).toHaveAttribute("value", "06/01/2023");
 });
 
-// Expand Energy's SuccessFactors form (report a248361b, 2026-10-29) titles
+// one employer's SuccessFactors form titles
 // its schools "What is your educational background?". The section was found
 // only by the word "education", so its rows were not seen: the one row the
 // page showed was filled field by field, and the second school never added.
@@ -10390,11 +10460,11 @@ test("SuccessFactors uploads the resume through its dialog and fills rows it add
 // "Bachelors of Science": the generic "Bachelor" matched it by its start
 // before "Bachelor of Science" was looked for by its title. And its School
 // Name took "Michigan College of Beauty - Troy" for Michigan State University:
-// a rule's "%value%" was never filled in, and translate() spelled it from
+// a rule's "%value%" was never filled in, and translate spelled it from
 // "Michigan " itself. Its lists also show their options a hundred at a time
 // and load more as they are scrolled to the end, so a school far down the
 // alphabet ("Pennsylvania State University-University Park") was
-// never drawn to be picked (report 8f198b5b). Once drawn, the option just
+// never drawn to be picked. Once drawn, the option just
 // before it, "…University University Park Dietetic Internship", was taken by
 // its start; the one that is the school's name, punctuation aside, is wanted.
 // A school the list lacks takes its "Other…" and the name in "If other,
@@ -10416,7 +10486,7 @@ test("a SuccessFactors section about educational background gets a row for each 
   const school = `<div class="layoutWrapper row rcmSectionComponent rowBreak"><div class="RCMFormField"><label class="rcmFormFieldLabel"><span class="requiredField">*</span>&nbsp;School Name</label><div class="fieldComponentInput"><input type="text" role="combobox" aria-label="School Name" placeholder="No Selection" class="rcmpaginatedselectinput school" name="school"></div></div>`
     + `<div class="RCMFormField"><label class="rcmFormFieldLabel">If other, enter School Name</label><div class="fieldComponentInput"><input type="text" class="otherSchool"></div></div>`
     + `<div class="RCMFormField"><label class="rcmFormFieldLabel"><span class="requiredField">*</span>&nbsp;Degree</label><div class="fieldComponentInput"><input type="text" role="combobox" aria-label="Degree" placeholder="No Selection" class="rcmpaginatedselectinput degree"></div></div>`
-    // Only "Status", the required marker and a no-break space before it (report 3478a76e).
+    // Only "Status", the required marker and a no-break space before it.
     + `<div class="RCMFormField"><label class="rcmFormFieldLabel"><span class="requiredField">*</span>&nbsp;Status</label><div class="fieldComponentInput"><input type="text" role="combobox" placeholder="No Selection" class="rcmpaginatedselectinput status"></div></div></div>`;
   await context.route(`${sapsfOrigin}/**`, (route) =>
     route.fulfill({
@@ -10427,7 +10497,7 @@ test("a SuccessFactors section about educational background gets a row for each 
           <div role="button" title="Add new row" class="addRowButton" id="addSchool">Add</div>
         </div>
       </main><script>
-        // As on Expand Energy's form: the whole list opens on a click.
+        // As on one employer's form: the whole list opens on a click.
         const degrees = ['No Selection', 'Associates Degree', 'Bachelor in Business Administration', 'Bachelor of Arts', 'Bachelor of Science', 'Master of Science'];
         const schools = ['No Selection', 'A.T. Still University of Health Sciences Arizona School of D', 'Michigan College of Beauty - Troy', 'Michigan State University',
           'Michigan Technological University', 'Middlebury College', 'Mississippi State University', 'Missouri State University', 'Montana State University', 'Montclair State University', 'Morehouse College', 'Mount Holyoke College', 'New Jersey Institute of Technology', 'New Mexico State University', 'New York University', 'North Carolina State University', 'North Dakota State University', 'Northeastern University', 'Northern Illinois University', 'Northwestern University', 'Oakland University', 'Oberlin College', 'Occidental College', 'Ohio State University', 'Ohio University', 'Oklahoma State University', 'Old Dominion University', 'Oregon State University', 'Pace University', 'Pacific Lutheran University', 'Pennsylvania College of Technology', 'Pennsylvania State University College of Medicine', 'Pennsylvania State University Dickinson Law', 'Pennsylvania State University Great Valley',
@@ -10490,7 +10560,7 @@ test("a SuccessFactors section about educational background gets a row for each 
   await expect(page.locator(".status").nth(0)).toHaveValue("Currently Attending");
   await expect(page.locator(".status").nth(1)).toHaveValue("Graduated");
   // Filled again, a list set to Other keeps it: the name was typed over it
-  // each pass and picked again (report on Expand Energy, 2026-10-30).
+  // each pass and picked again (report on an employer).
   await page.evaluate(() => {
     (window as unknown as { typedSchools: number }).typedSchools = 0;
     (window as unknown as { reopened: number }).reopened = 0;
@@ -10498,7 +10568,7 @@ test("a SuccessFactors section about educational background gets a row for each 
     for (const input of lists)
       input.addEventListener('input', () => (window as unknown as { typedSchools: number }).typedSchools++);
     // The list already set to Other is not opened again either: each pass
-    // reopened Expand Energy's and left it open, marked invalid (2026-10-30).
+    // reopened one employer's and left it open, marked invalid.
     lists[2].addEventListener('click', () => (window as unknown as { reopened: number }).reopened++);
   });
   await ui({ type: "FILL_STEP", id: (await state()).applications[0].id });
@@ -10509,7 +10579,7 @@ test("a SuccessFactors section about educational background gets a row for each 
   expect(await page.evaluate(() => (window as unknown as { reopened: number }).reopened)).toBe(0);
 });
 
-// A report on Wisconsin Public Service's SuccessFactors profile, 2026-10-14:
+// A report on Wisconsin Public Service's SuccessFactors profile:
 // each job's "Present Employer" (Current or Prior) and each school's
 // "Education Status" were left, both lists that open only on a click.
 test("a SuccessFactors profile answers each job's Present Employer and each school's Education Status", async () => {
@@ -10575,7 +10645,7 @@ test("a SuccessFactors profile answers each job's Present Employer and each scho
         document.querySelectorAll('.level').forEach((input) => input.addEventListener('input', () => window.levelTyped.push(input.value)));
         document.querySelectorAll('.level').forEach((input) => picklist(input, ['No Selection', 'Advanced Technical Degree', "Bachelor's Degree", 'Basic Education (Primary)', "Doctor's Degree", "Master's Degree", 'Middle School Education (Secondary)', 'Specialized Technical Degree', 'University Degree']));
         window.uploaded = [];
-        // L3Harris's newer chooser (2026-11-07): "Upload from Device" over a
+        // one employer's newer chooser: "Upload from Device" over a
         // file input named "fileData1", no Upload button; choosing a file
         // uploads it.
         document.getElementById('53:_attachIcon').addEventListener('click', () => setTimeout(() => {
@@ -10606,10 +10676,8 @@ test("a SuccessFactors profile answers each job's Present Employer and each scho
   await expect(page.locator(".present").nth(1)).toHaveAttribute("data-picked", "Prior");
   await expect(page.locator(".status").nth(0)).toHaveAttribute("data-picked", "Currently Attending");
   await expect(page.locator(".status").nth(1)).toHaveAttribute("data-picked", "Graduated");
-  // L3Harris's school rows ask the degree as "Level (High School,College,
-  // University, Other)": a degree, though it names schools (report
-  // 0234ca67, 2026-10-15, where each school's name was typed into it; and
-  // report 9981ed08, where a School Name the page already held sent the
+  // one employer's school rows ask the degree as "Level (High School,College,
+  // University, Other)": a degree, though it names schools (where each school's name was typed into it; and, where a School Name the page already held sent the
   // name on to the next box whose aria-label names a school).
   await expect(page.locator(".level").nth(0)).toHaveAttribute("data-picked", "Master's Degree");
   await expect(page.locator(".level").nth(1)).toHaveAttribute("data-picked", "Bachelor's Degree");
@@ -10622,16 +10690,16 @@ test("a SuccessFactors profile answers each job's Present Employer and each scho
   await expect.poll(() => page.evaluate(() => (window as any).uploaded), { timeout: 60000 }).toEqual([expect.stringMatching(/cover.*\.pdf$/i)]);
 });
 
-// L3Harris's SuccessFactors form after its resume upload rebuilt it
-// (report 92f363c7, 2026-10-15): a Country list from a field the site had
+// one employer's SuccessFactors form after its resume upload rebuilt it
+//: a Country list from a field the site had
 // replaced stayed open, and Gender's "M" picked its "Malaysia" while
 // Gender's own list was still loading; Veteran Status, whose list never
 // came, then took a choice from another open list. A field that names its
 // list chooses only from that list.
 test("a SuccessFactors picklist chooses only from its own list, never one another field left open", async () => {
   await ui({ type: "API", path: "/v1/profile", method: "PUT", body: { ...profile, gender: "Male", veteranStatus: "No" } });
-  // Gender's says it is open with no list drawn, as one on L3Harris's form
-  // did after a refresh (report 726eafd7, 2026-11-07): it is opened all the same.
+  // Gender's says it is open with no list drawn, as one on one employer's form
+  // did after a refresh: it is opened all the same.
   const picklist = (label: string, id: string, delay: number, staleOpen = false) =>
     `<div class="RCMFormField rcmFormElement"><label class="rcmFormFieldLabel"><span class="requiredField">*</span>&nbsp;${label}</label><div class="fieldComponentInput"><span class="sfCascadingPicklist"><input type="text" role="combobox" aria-label="${label}" aria-expanded="${staleOpen}" aria-owns="${id}:_listSelect" data-delay="${delay}" placeholder="No Selection" class="rcmpaginatedselectinput"><button type="button" class="rcmpaginatedselectbutton" aria-label="${label}"></button></span></div></div>`;
   await context.route(`${sapsfOrigin}/**`, (route) =>
@@ -10684,7 +10752,7 @@ test("a SuccessFactors picklist chooses only from its own list, never one anothe
   expect(await page.evaluate(() => (window as any).strayClicks)).toEqual([]);
 });
 
-// A SuccessFactors picklist as on L3Harris's form: its choices come from a
+// A SuccessFactors picklist as on one employer's form: its choices come from a
 // timer the page sets on the click, after `delay` milliseconds.
 const sfPicklistPage = (fields: { label: string; id: string; delay: number; options: string[] }[]) =>
   `<!doctype html><title>Apply</title><main id="rmkContent"><label>First name <input name="first"></label>
@@ -10715,7 +10783,7 @@ const sfPicklistPage = (fields: { label: string; id: string; delay: number; opti
           window.shown = { ...window.shown, [id]: (window.shown?.[id] || 0) + 1 };
         }, Number(input.dataset.delay));
       });
-      // As on L3Harris's: Escape marks it closed and leaves its list drawn.
+      // As on one employer's: Escape marks it closed and leaves its list drawn.
       input.addEventListener("keydown", (event) => {
         if (event.key !== "Escape") return;
         input.setAttribute("aria-expanded", "false");
@@ -10730,8 +10798,7 @@ const sfPicklistPage = (fields: { label: string; id: string; delay: number; opti
     });
   </script>`;
 
-// The applicant minimizes the window while a fill runs (report 92f363c7,
-// 2026-10-15): Chrome then runs the page's own timers about once a minute,
+// The applicant minimizes the window while a fill runs: Chrome then runs the page's own timers about once a minute,
 // and SuccessFactors asks for a list's choices from one, so each came a
 // minute late. Headless Chrome never hides a page; here the page is told it
 // is hidden and its timers are slowed as Chrome slows them. While a fill
@@ -10797,7 +10864,7 @@ test("a SuccessFactors list that opens long after its click is closed, and one t
   await expect(page.locator('[id="390:_listSelect"]')).toHaveCount(1);
 });
 
-// L3Harris's SuccessFactors form (report ebfd5371, 2026-10-15): each Yes/No
+// one employer's SuccessFactors form: each Yes/No
 // question is a radio group of spans, each named by the label after it, and
 // the site puts back the answer it stored for one ("No") when another field
 // of the form changes. The profile's answer is the one left.
@@ -10827,7 +10894,7 @@ test("a SuccessFactors Yes/No radio group gets the option its answer names", asy
   await expect.poll(() => page.evaluate(() => (window as any).chosen), { timeout: 30000 }).toBe("Yes");
 });
 
-// L3Harris's "Wage Or Salary Required" (report b5d63aeb, 2026-10-15): a box
+// one employer's "Wage Or Salary Required": a box
 // of type "currency", which the browser reads as text, got "$100,000 per
 // year." and said "Invalid number." It takes the saved figure alone.
 test("a SuccessFactors currency box gets the saved salary as a number", async () => {
@@ -10847,7 +10914,7 @@ test("a SuccessFactors currency box gets the saved salary as a number", async ()
   await expect(page.locator('input[name="wage"]')).toHaveValue("100000", { timeout: 30000 });
 });
 
-// L3Harris's SuccessFactors form, 2026-10-15 (reports 0234ca67, 202b470a):
+// one employer's SuccessFactors form:
 // a cover letter left from an earlier day's attempt held the slot, which
 // then offers only its trash button, so the letter tailored today was never
 // attached. A letter dated before today is deleted, through the site's own
@@ -10911,14 +10978,13 @@ for (const dated of ["older", "today"] as const)
       expect(await page.evaluate(() => [(window as any).deleted, (window as any).uploaded])).toEqual([0, []]);
       await expect(page.locator('[role="dialog"]')).toHaveCount(0);
       // Kept, it is no failed upload: the slot offers no add button then, and
-      // looking for one reported "Cover letter upload did not finish"
-      // (L3Harris, 2026-11-07).
+      // looking for one reported "Cover letter upload did not finish".
       await expect.poll(async () => JSON.stringify((await state()).applications.at(-1)), { timeout: 30000 }).toMatch(/"status":"(awaiting-user|ready)"/);
       expect(JSON.stringify((await state()).applications.at(-1))).not.toMatch(/upload did not finish/i);
     }
   });
 
-// Westinghouse's SuccessFactors (report d57dca7e, 2026-10-28): the account
+// one employer's SuccessFactors: the account
 // kept a resume from an earlier application ("Last Modified: 05/27/2025"),
 // and the slot then offers only its trash button, so the resume tailored for
 // this job was never attached. As with a cover letter, it is replaced.
@@ -10972,7 +11038,7 @@ test("a SuccessFactors resume slot holding a resume from an earlier day is repla
   expect(await page.evaluate(() => (window as any).deleted)).toBe(1);
 });
 
-// Tesla's posting (2026-11-02): tracked before its script drew the job, so
+// Tesla's posting: tracked before its script drew the job, so
 // nothing of it was read, and the backend is refused the page. Its Apply
 // opens the form in a new tab, and the form was filled with no posting. The
 // posting's tab, still open, is read again before drafting.
@@ -11007,7 +11073,7 @@ test("a posting drawn after it was tracked is read again from its tab when its f
   expect(app.postingUrl).toBe(job);
 });
 
-// Tesla's again (2026-11-02): tracked from its form, its posting's link
+// Tesla's again: tracked from its form, its posting's link
 // pasted, the job page not open. The backend is refused the page, so the fit
 // had nothing to go on: the link is read in a tab out of view, then closed.
 test("a posting link the backend cannot read is read in a tab of its own for the fit", async () => {
@@ -11040,8 +11106,7 @@ test("a posting link the backend cannot read is read in a tab of its own for the
   expect(await panel.evaluate(async (url) => (await chrome.tabs.query({})).some((tab) => tab.url === url), job)).toBe(false);
 });
 
-// SmartRecruiters' screening questions (Syngenta, report f3db7e7f,
-// 2026-11-02): each question is page text slotted into a web component's
+// SmartRecruiters' screening questions: each question is page text slotted into a web component's
 // label, and each choice is named only by its own label attribute. Read as
 // slots, the questions were their element ids or "Unlabelled field".
 test("a web component's slotted question and its choices' label attributes name its fields", async () => {
@@ -11075,7 +11140,7 @@ test("a web component's slotted question and its choices' label attributes name 
   expect(labels.join(" ")).not.toMatch(/spl-form-element|Unlabelled field/);
 });
 
-// SmartRecruiters (report a8c856cd, 2026-11-05): an education entry left
+// SmartRecruiters: an education entry left
 // open has a Major and a Degree that name no school; the general fill wrote
 // one school's into another's. The site rule fills its entries; the general
 // fill leaves them.
@@ -11100,7 +11165,7 @@ test("a SmartRecruiters entry editor's fields are left to its site rule", async 
   expect(fields.filter((field) => /^(Major|Degree)$/.test(field.label)).map((field) => field.protected)).toEqual([true, true]);
 });
 
-// Tesla's legal step (report 64249b85, 2026-11-02): its Yes/No questions
+// Tesla's legal step: its Yes/No questions
 // share one fieldset, each <label for="<id>"> over radios "<id>_yes" and
 // "<id>_no". Every radio read as the fieldset's first label, and one answer
 // given locked every "Yes" on the step.
@@ -11134,7 +11199,7 @@ test("Yes/No questions sharing a fieldset are read by their own labels, and one 
   expect(radios("Will you now").every((field) => !field.protected)).toBe(true);
 });
 
-// TSC's Workday (report e48a61a1, 2026-11-02): a questionnaire date's
+// one employer's Workday: a questionnaire date's
 // Month, Day and Year are named only so; the question is the field's legend.
 test("a Workday questionnaire date's parts carry their question", async () => {
   await context.route(`${atsOrigins[0]}/**`, (route) =>
@@ -11152,7 +11217,7 @@ test("a Workday questionnaire date's parts carry their question", async () => {
   expect(labels).toEqual(["What is your first available start date?: Month", "What is your first available start date?: Day", "What is your first available start date?: Year"]);
 });
 
-// NGC's Workday (report cfbf90ad, 2026-11-02): Phone Device Type had no
+// one employer's Workday: Phone Device Type had no
 // exact option for "Mobile", and the list opened for it stayed over the form.
 test("a Workday list opened for an answer it does not hold is closed again", async () => {
   await context.route(`${atsOrigins[0]}/**`, (route) =>
@@ -11188,7 +11253,7 @@ test("a Workday list opened for an answer it does not hold is closed again", asy
   await expect(page.locator("#popup")).toHaveCount(0, { timeout: 15000 });
 });
 
-// DraftKings' Workday (report c875e6c5, 2026-11-02): a questionnaire date
+// one employer's Workday: a questionnaire date
 // keeps only what is typed, and its Month and Day read back empty; its school
 // list says to pick "Other" when the school is not listed.
 test("a Workday questionnaire date is typed, and Other is picked where the question says to", async () => {
@@ -11243,7 +11308,7 @@ test("a Workday questionnaire date is typed, and Other is picked where the quest
   await expect(page.locator("#school")).toHaveText("Other");
 });
 
-// Leidos's Workday (2026-11-08): typing a date's Month moves focus to its
+// one employer's Workday: typing a date's Month moves focus to its
 // Day, as Workday does, and the Day was then refused as a field in use; the
 // date was left half typed and Workday made its year 2005. A Backspace
 // empties a whole part, and a second one, in the emptied part, sent focus
@@ -11294,7 +11359,7 @@ test("a Workday date whose Month moves focus to its Day gets all three parts", a
   expect(parts.map((field: { protected: boolean }) => field.protected)).toEqual([false, false, false]);
 });
 
-// Tesla's (report d207d4aa, 2026-11-02): "When are you available to start
+// Tesla's: "When are you available to start
 // an internship?" is a read-only box filled from its calendar. The applicant
 // can start immediately: today is picked there.
 test("Tesla's start date is picked from its calendar as today", async () => {
@@ -11332,7 +11397,7 @@ test("Tesla's start date is picked from its calendar as today", async () => {
   expect(fields.find((field) => field.label === "When are you available to start an internship?")?.kind).toBe("datepicker");
 });
 
-// Reports from L3Harris's, Space Tango's and Jabil's forms, 2026-10-14: an
+// Reports from one employer's, one employer's and one employer's forms: an
 // application form tracked on its own read no posting, so nothing was
 // tailored. The page that led to it is the posting: the tab that opened it,
 // or the page the browser says it came from.
@@ -11364,7 +11429,7 @@ test("a form tracked on its own takes the page that led to it as its posting", a
   await ui({ type: "TRACK_TAB", tabId: await tabOf(page.url()) });
   app = (await state()).applications.find((a: { url: string }) => a.url.includes("same=1"))!;
   expect(app.postingUrl).toBe(posting);
-  // From another site in the same tab (L3Harris's posting, its form on
+  // From another site in the same tab (one employer's posting, its form on
   // ns2cloud.com): the referrer names only that site; the tab's own pages
   // name the posting.
   const elsewhere = `${atsOrigins[1]}/acme/jobs/4242424242`;
@@ -11384,7 +11449,7 @@ test("a form tracked on its own takes the page that led to it as its posting", a
   expect(app.postingUrl).toBe(elsewhere);
   // A list of jobs opened the posting in a tab of its own, and the form was
   // reached from the posting in that tab (Simplify's list on GitHub, then
-  // Oracle's posting and its form, 2026-10-24): the list opened the
+  // Oracle's posting and its form): the list opened the
   // posting's tab, not the form.
   await context.route(`${atsOrigins[1]}/lists/**`, (route) =>
     route.fulfill({ contentType: "text/html", body: `<!doctype html><title>Summer internships</title><main><a id="open" href="${listed}" target="_blank">Acme Engineer</a></main>` }),
@@ -11399,8 +11464,7 @@ test("a form tracked on its own takes the page that led to it as its posting", a
   await ui({ type: "TRACK_TAB", tabId: await tabOf(opened.url()) });
   app = (await state()).applications.find((a: { url: string }) => a.url.includes("22222222") && a.url.includes("same=1"))!;
   expect(app.postingUrl).toBe(listed);
-  // Tracked on the posting the list opened, before its form (Amazon's,
-  // 2026-10-25): the posting is its own, not the list.
+  // Tracked on the posting the list opened, before its form (Amazon's): the posting is its own, not the list.
   const listedPosting = `${atsOrigins[2]}/acme/33333333-3333-4333-8333-333333333333`;
   await context.route(listedPosting, (route) =>
     route.fulfill({ contentType: "text/html", body: `<!doctype html><title>Software Engineer Intern - Acme</title>
@@ -11420,7 +11484,7 @@ test("a form tracked on its own takes the page that led to it as its posting", a
   expect(app.postingUrl).toBe(listedPosting);
 });
 
-// Amazon's posting (2026-10-31): Fill this step on a posting with no form
+// Amazon's posting: Fill this step on a posting with no form
 // stopped there, and the applicant pressed Apply and filled again. The
 // posting's own Apply is used once, in the same tab, and the fill goes on in
 // the form; an Apply through another site is never pressed.
@@ -11462,8 +11526,7 @@ test("Fill this step on a posting uses its Apply and fills the form it opens", a
   expect(other.url()).toBe(`${talNetOrigin}/posting/elsewhere`);
 });
 
-// WEC Energy Group's SuccessFactors application again (report 54daf500,
-// 2026-10-15): the disability form (CC-305) asks "Please check one of the
+// one employer's SuccessFactors application again: the disability form (CC-305) asks "Please check one of the
 // boxes below:" and names disability only in its heading, and its signing
 // date is a date picker labelled "Date:". Both were left.
 test("a SuccessFactors disability form answers its boxes question and dates itself", async () => {
@@ -11489,7 +11552,7 @@ test("a SuccessFactors disability form answers its boxes question and dates itse
           if (document.getElementById('80:_listSelect')) return;
           dis.setAttribute('aria-expanded', 'true');
           setTimeout(() => {
-            // As on L3Harris's page: a click with no focus marks it open
+            // As on one employer's page: a click with no focus marks it open
             // and loads nothing.
             if (document.activeElement !== dis) return;
             const list = document.createElement('ul');
@@ -11518,7 +11581,7 @@ test("a SuccessFactors disability form answers its boxes question and dates itse
   await expect(page.locator("ui5-date-picker-xweb-calendar-widget")).toHaveAttribute("value", `${two(today.getMonth() + 1)}/${two(today.getDate())}/${today.getFullYear()}`, { timeout: 30000 });
 });
 
-// A report on WEC Energy Group's SuccessFactors application, 2026-10-14:
+// A report on one employer's SuccessFactors application:
 // "What is your desired salary?" got the applicant's website, because a
 // rule took any input near the words "Company Website" (an answer shown for
 // "How did you hear about us?"); and every question no site rule knows
@@ -11545,7 +11608,7 @@ test("a SuccessFactors questions page picks from lists no rule knows, and keeps 
           if (document.getElementById('70:_listSelect')) return;
           prior.setAttribute('aria-expanded', 'true');
           setTimeout(() => {
-            // As on L3Harris's page: a click with no focus marks it open
+            // As on one employer's page: a click with no focus marks it open
             // and loads nothing.
             if (document.activeElement !== prior) return;
             const list = document.createElement('ul');
@@ -11560,7 +11623,7 @@ test("a SuccessFactors questions page picks from lists no rule knows, and keeps 
                 prior.value = name;
                 list.remove();
                 prior.setAttribute('aria-expanded', 'false');
-                // As the Country list did (WEC, 2026-10-15): the page still
+                // As the Country list did (WEC): the page still
                 // loading when the pick was made opens the list again.
                 if (!window.reopened) setTimeout(() => { window.reopened = true; prior.setAttribute('aria-expanded', 'true'); document.body.append(list); }, 200);
               });
@@ -11575,7 +11638,7 @@ test("a SuccessFactors questions page picks from lists no rule knows, and keeps 
           prior.setAttribute('aria-expanded', 'false');
         });
         // A list without the answer ("No" is missing): left as it was, and
-        // closed again (L3Harris's profile, 2026-10-15, lists stacked open).
+        // closed again (one employer's profile, lists stacked open).
         const other = document.getElementById('other');
         const otherList = () => {
           const list = document.createElement('ul');
@@ -11589,8 +11652,8 @@ test("a SuccessFactors questions page picks from lists no rule knows, and keeps 
           if (event.key !== 'Escape') return;
           document.getElementById('71:_listSelect')?.remove();
           other.setAttribute('aria-expanded', 'false');
-          // As on L3Harris's server: a page still on its way opens it again
-          // after it was closed (report f5b57962).
+          // As on one employer's server: a page still on its way opens it again
+          // after it was closed.
           if (!window.otherLate) setTimeout(() => { window.otherLate = true; other.setAttribute('aria-expanded', 'true'); document.body.append(otherList()); }, 500);
         });
         other.addEventListener('click', () => {
@@ -11708,7 +11771,7 @@ test("the dashboard connects to an unpaired backend with the code it shows", asy
   }
 });
 
-// The fixer's work was in files only (2026-10-17): the dashboard shows
+// The fixer's work was in files only: the dashboard shows
 // whether it runs, what it is on, and what it found and fixed.
 test("the dashboard's Fixer page shows whether the fixer runs and its work", async () => {
   const folder = join(backendDirectory, "fixer");
@@ -11767,7 +11830,7 @@ test("drafting providers, the API endpoint and folders are set on the dashboard"
   await expect(checker).toHaveValue("");
   await expect(checker).toHaveAttribute("placeholder", `Uses ${appConfig.model}`);
   await checker.fill("checker-large");
-  // Who checks, in an order of its own (2026-11-02): a smaller Codex model.
+  // Who checks, in an order of its own: a smaller Codex model.
   const checking = panel.getByRole("region", { name: "Checking" });
   await expect(checking).toContainText("The Drafting order checks.");
   await checking.getByRole("button", { name: "Add Codex" }).click();
@@ -11849,8 +11912,8 @@ test("an issue report keeps what web components hold in their shadow roots", asy
 });
 
 test("a form's transcript field gets the applicant's transcript, and the resume field the resume", async () => {
-  // As Georgia Tech Research Institute's PageUp "Document Uploads" step
-  // (2026-10-03): a resume and an unofficial transcript, side by side.
+  // As one employer's PageUp "Document Uploads" step
+  //: a resume and an unofficial transcript, side by side.
   await context.route(`${origin}/documents/**`, (route) =>
     route.fulfill({
       contentType: "text/html",
@@ -11887,7 +11950,7 @@ test("a form's transcript field gets the applicant's transcript, and the resume 
   expect(await withIt.chosen("resume-file")).not.toBe("Unofficial_Transcript.pdf");
 });
 
-// Databricks' Greenhouse form (2026-11-08): one transcript for each degree.
+// one employer's Greenhouse form: one transcript for each degree.
 // With only the newest file, the graduate transcript went into the box for
 // the undergraduate one. Each school now has its own.
 test("each degree's transcript field gets that school's transcript, and none of another degree's", async () => {
@@ -11977,7 +12040,7 @@ test("when the posting cannot be read, the applicant pastes it on the card and t
 test("a report recovers loaded scripts without reloading and keeps interactions after the fill", async () => {
   // Network capture is off unless the applicant turns it on.
   await ui({ type: "SETTINGS", settings: { concurrency: 4, generationConcurrency: 2, networkCapture: "on" } });
-  // Reports 5ee92470 and 4c8463f6: the applicant cannot return to the form.
+  //: the applicant cannot return to the form.
   let loads = 0;
   await context.route(`${origin}/report-once/**`, (route) => {
     if (route.request().url().endsWith("app.js"))
@@ -12282,9 +12345,9 @@ test("an upload the site rejects is reported with its message, not as attached",
     );
 });
 
-// Jabil's Workday form (report f062d50f, 2026-10-15): its Languages and
+// one employer's Workday form: its Languages and
 // Websites sections were left, the applicant's languages had nowhere to
-// live, and the links a form asks for elsewhere (its LinkedIn box) are not
+// live, and the links a form asks for elsewhere (its an employer box) are not
 // to be given twice.
 test("a Workday form adds a row for each language and each link it does not ask for elsewhere", async () => {
   await ui({
@@ -12308,7 +12371,7 @@ test("a Workday form adds a row for each language and each link it does not ask 
           row.innerHTML = '<div data-automation-id="formField-language"><label>Language</label><button type="button" aria-haspopup="listbox" aria-expanded="false">Select One</button></div>'
             + '<div data-automation-id="formField-native"><label for="native-' + languages + '">I am fluent in this language.</label><input type="checkbox" name="native" id="native-' + languages + '"></div>'
             + '<div data-automation-id="formField-comprehension"><label>Comprehension</label><button type="button" class="skill" aria-haspopup="listbox" aria-expanded="false" aria-label="Comprehension Select One">Select One</button></div>';
-          // As React does: only a click is seen (report b5a71768).
+          // As React does: only a click is seen.
           const native = row.querySelector('[name="native"]');
           native.addEventListener('click', () => { native.dataset.seen = String(native.checked); });
           const skill = row.querySelector('.skill');
@@ -12356,7 +12419,7 @@ test("a Workday form adds a row for each language and each link it does not ask 
   await expect(page.locator("#li")).toHaveValue(/linkedin\.com\/in\/example$/);
 });
 
-// KLA's Workday (report 5c049c5a, 2026-11-02): the site read GitHub from
+// one employer's Workday: the site read GitHub from
 // the resume into a Websites row, and the fill added GitHub again.
 test("a Workday Websites row the site already filled keeps its link, and that link is not added again", async () => {
   await ui({ type: "API", path: "/v1/profile", method: "PUT", body: { ...profile, linkedin: "", github: "github.com/example", website: "https://example.dev" } });
@@ -12390,7 +12453,7 @@ test("a Workday Websites row the site already filled keeps its link, and that li
 
 // A Workday language list drawn as a bare listbox the button names in
 // aria-controls, with no active-popup wrapper, its options a moment later: the
-// language was left open and unanswered (report daf095e5, 2026-11-03).
+// language was left open and unanswered.
 test("a Workday language picked from the listbox its button controls", async () => {
   await ui({ type: "API", path: "/v1/profile", method: "PUT", body: { ...profile, languages: ["English: Native"] } });
   await context.route(`${atsOrigins[0]}/**`, (route) =>
@@ -12431,7 +12494,7 @@ test("a Workday language picked from the listbox its button controls", async () 
   await expect(page.locator("#lang")).toHaveText("English", { timeout: 45000 });
 });
 
-// KLA's Workday form filled slowly (report 6d839e90, 2026-11-04): every
+// one employer's Workday form filled slowly: every
 // dropdown is a bare listbox its button names in aria-controls, which the
 // rules looked for only inside an active-popup wrapper, so each pick waited
 // its full four seconds before another way found it, and a level scale that
@@ -12492,7 +12555,7 @@ test("Workday dropdowns drawn as bare listboxes are answered without waiting out
   expect(Date.now() - started).toBeLessThan(15_000);
 });
 
-// NVIDIA's Workday (2026-11-04): Phone Device Type lists only "Home" and
+// one employer's Workday: Phone Device Type lists only "Home" and
 // "Home Cellular". "Mobile" matched neither, the list was left open over the
 // form, and the required field was left for the applicant.
 test("a Workday phone type listed as Home Cellular is picked for a mobile, and the list is not left open", async () => {
@@ -12537,7 +12600,7 @@ test("a Workday phone type listed as Home Cellular is picked for a mobile, and t
 });
 
 // A Workday question whose answers show only once its list is opened
-// (2026-11-04): nothing could answer "…at this location?" without its
+//: nothing could answer "…at this location?" without its
 // options. The page's questionnaire lists them, and without one the list is
 // opened, read and closed with nothing chosen, before answers are decided.
 for (const source of ["questionnaire", "opened list"] as const)
@@ -12596,7 +12659,7 @@ for (const source of ["questionnaire", "opened list"] as const)
     await expect(page.locator('[role="listbox"]')).toHaveCount(0);
   });
 
-// Microsoft's careers form (report cb45d0c9, 2026-11-04): its dropdowns open
+// Microsoft's careers form: its dropdowns open
 // on a whole click, not on a press or on focus, so the list never showed and
 // work authorization was left unanswered.
 test("a combobox that opens only on a whole click is opened and answered", async () => {
@@ -12628,7 +12691,7 @@ test("a combobox that opens only on a whole click is opened and answered", async
   await expect(page.locator("#input-43")).toHaveValue("Yes", { timeout: 45_000 });
 });
 
-// Microsoft's acknowledgments (report bce03da9, 2026-11-04): three lone boxes
+// Microsoft's acknowledgments: three lone boxes
 // each named only "Yes", their questions in legends the group names by
 // aria-labelledby. As one label repeated, all three were left alone.
 test("lone Yes boxes take their group's question and are each answered", async () => {
@@ -12649,7 +12712,7 @@ test("lone Yes boxes take their group's question and are each answered", async (
   for (const id of ["ack_qualifications", "ack_privacy", "ack_conduct"]) await expect(page.locator(`#${id}-0`)).toBeChecked({ timeout: 45_000 });
 });
 
-// SmartRecruiters (2026-11-04): a typed box's menu lists "Fill manually"
+// SmartRecruiters: a typed box's menu lists "Fill manually"
 // first and the site's own entries after it, and Down and Enter took the
 // manual one even when the site listed the city.
 for (const mode of ["keys", "deaf"] as const)
@@ -12670,7 +12733,7 @@ test(`a SmartRecruiters box picks the site's own entry over its fill-manually on
         document.querySelector("oc-personal-information").append(box);
         const input = field.shadowRoot.querySelector("input");
         // The first Down after its menu shows is let pass, as the site's
-        // was once (LinkedIn, 2026-11-05), and an Enter in the box clears it.
+        // was once, and an Enter in the box clears it.
         let passed = false;
         input.addEventListener("input", () => {
           clearTimeout(input.offer);
@@ -12692,13 +12755,13 @@ test(`a SmartRecruiters box picks the site's own entry over its fill-manually on
         });
         // Down moves through the entries and Enter takes the highlighted
         // one, as the site's does; the entries ignore a script's click, as
-        // the site's did (the applicant's account, 2026-11-04).
+        // the site's did (the applicant's account).
         // Down moves focus into the menu, onto its next entry, and the Enter
         // lands on that entry, as the site's does.
         const step = (event) => {
           const options = [...box.shadowRoot.querySelectorAll("spl-select-option")];
-          // ?deaf: every Down is let pass, as Intuitive's Company menu did
-          // (2026-11-07); only a real click on its entry takes it.
+          // ?deaf: every Down is let pass, as one employer's Company menu did
+          //; only a real click on its entry takes it.
           if (event.key === "ArrowDown" && (!passed || location.search.includes("deaf"))) { passed = true; return; }
           if (event.key === "Enter" && event.composedPath()[0] === input) { input.value = ""; return; }
           if (event.key === "ArrowDown" || event.key === "ArrowUp") {
@@ -12721,7 +12784,7 @@ test(`a SmartRecruiters box picks the site's own entry over its fill-manually on
   await expect.poll(() => page.evaluate(() => document.querySelector("spl-autocomplete")!.getAttribute("value")), { timeout: 45_000 }).toBe(`${profile.city}, AZ, United States`);
 });
 
-// Microsoft's careers form (2026-11-07): a list draws its options only once
+// Microsoft's careers form: a list draws its options only once
 // opened, from its arrow, and its sponsorship question, read with none, went
 // unanswered; a multiselect shows its picks as pills beside a read-only box,
 // and a chosen location was reported as missing.
@@ -12766,7 +12829,7 @@ test("Microsoft's lists are read before answering, and a multiselect's pills are
           const buttons = [...document.querySelectorAll('#list-44 button')];
           if (!buttons.length) return;
           const at = buttons.findIndex((button) => button.id === input.getAttribute('aria-activedescendant'));
-          // As on the live site: its arrows light nothing (2026-11-07); a real
+          // As on the live site: its arrows light nothing; a real
           // click on an option keeps it.
           if (event.key === 'ArrowDown' || event.key === 'ArrowUp') event.preventDefault();
           if (event.key === 'Enter' && at >= 0) { input.value = buttons[at].title; close(); }
@@ -12792,7 +12855,7 @@ test("Microsoft's lists are read before answering, and a multiselect's pills are
   await expect(page.locator("#list-44")).toHaveCount(0);
 });
 
-// SmartRecruiters' screening questions (LinkedIn's, 2026-11-04): each list
+// SmartRecruiters' screening questions: each list
 // is an spl-autocomplete whose menu sits in its shadow root, one root above
 // the box, and whose options draw role="option" in their own shadow roots;
 // a script's click on one is ignored, and only Down and Enter choose it. Its
@@ -12863,7 +12926,7 @@ test("SmartRecruiters' screening lists and slotted Yes/No choices are answered",
             }
             // Only a real Enter on the focused option takes it.
             // A multiselect takes only an Enter on the entry itself: one in
-            // the box closes it with nothing taken, as LinkedIn's does.
+            // the box closes it with nothing taken, as one employer's does.
             if (multi && event.key === "Enter" && event.isTrusted && (!moved || !event.composedPath().includes(options()[position]))) {
               menu.hidden = true; input.setAttribute("aria-expanded", "false"); position = -1;
               return;
@@ -12920,7 +12983,7 @@ test("SmartRecruiters' screening lists and slotted Yes/No choices are answered",
   // No list is left open.
   expect(await page.evaluate(() => [...document.querySelectorAll("spl-autocomplete,spl-multiselect-autocomplete")].filter((box) => box.shadowRoot!.querySelector('[role="listbox"]:not([hidden])')).length)).toBe(0);
   // Filled again, the list already holding its answer keeps it: picked a
-  // second time, it was taken away (LinkedIn, 2026-11-05).
+  // second time, it was taken away.
   const current = async () => (await state()).applications.find((candidate: { id: string }) => candidate.id === app.id)! as unknown as { status: string; operation: number };
   await expect.poll(async () => (await current()).status, { timeout: 45_000 }).toMatch(/^(awaiting-user|ready)$/);
   const first = (await current()).operation;
@@ -12929,7 +12992,7 @@ test("SmartRecruiters' screening lists and slotted Yes/No choices are answered",
   expect(await tags("question_past")).toEqual(["Not Applicable"]);
 });
 
-// Carrier's Workday form (report f59d9efd, 2026-10-26): a language row asks
+// one employer's Workday form: a language row asks
 // for an overall level named "All" beside Reading; Reading was filled and All
 // was left.
 test("a Workday language row's All gets that language's level", async () => {
@@ -12972,7 +13035,7 @@ test("a Workday language row's All gets that language's level", async () => {
   await expect(page.locator(".skill")).toHaveText(["Expert", "Expert"], { timeout: 30000 });
 });
 
-// WEC Energy Group's SuccessFactors profile (report 7810d2d5, 2026-10-15):
+// one employer's SuccessFactors profile:
 // rows the site filled from the resume, the first a current job with no End
 // Date box, the second current too, the third ended. The third's end date was
 // written into the second row's box.
@@ -13031,7 +13094,7 @@ test("a SuccessFactors end date goes only into its own job's row", async () => {
   await expect(ends.nth(1)).toHaveAttribute("value", "09/08/2023");
 });
 
-// Westinghouse's SuccessFactors (report cc40f1fb, 2026-10-27): the site filled
+// one employer's SuccessFactors: the site filled
 // the jobs from the resume with other jobs' end dates, and a job still held
 // kept "05/27/2025" because the profile had no end date to write over it.
 test("a SuccessFactors end date the site filled under a current job is emptied", async () => {
@@ -13089,7 +13152,7 @@ test("a SuccessFactors end date the site filled under a current job is emptied",
   await expect(ends.nth(2)).toHaveAttribute("value", "09/08/2023");
 });
 
-// Westinghouse's SuccessFactors (report cc40f1fb, 2026-10-27): the resume left
+// one employer's SuccessFactors: the resume left
 // one school row, the profile's second school. Added for the first school,
 // the row was looked for by its position and found the old one at once, so
 // the first school's name went into the second school's row, and its new
@@ -13139,7 +13202,7 @@ test("a SuccessFactors school row added beside one the site filled gets that sch
         // was typed narrows it, shortly after a key is let go (typing alone
         // does not). Escape closes it. The site's search of Country finds
         // nothing, whatever is typed: its search of India's states found no
-        // "Telangana", which the list holds (Westinghouse, report d57dca7e).
+        // "Telangana", which the list holds.
         let searching;
         const searchable = (input) => ['click', 'keyup', 'keydown'].forEach((type) => input.addEventListener(type, (event) => {
           if (event.type === 'keydown') { if (event.key === 'Escape') document.querySelector('ul.sf-list-select')?.remove(); return; }
@@ -13191,7 +13254,7 @@ test("a SuccessFactors school row added beside one the site filled gets that sch
   await expect(kept.locator('[aria-label="Graduation Year, if applicable"]')).toHaveValue("2024");
 });
 
-// Westinghouse's SuccessFactors (report d57dca7e, 2026-10-28): three jobs and
+// one employer's SuccessFactors: three jobs and
 // two schools, with lists that found none of a job's places, five seconds
 // each. A minute in, the pass ended while the second school's Highest Degree
 // Achieved list was loading; "Master" stayed typed in the box, unpicked, and
@@ -13264,7 +13327,7 @@ test("a long SuccessFactors form still picks the degree of a school after a minu
   await expect(page.locator('[aria-label="Highest Degree Achieved"]')).toHaveAttribute("data-picked", "Master's Degree", { timeout: 200000 });
 });
 
-// Westinghouse's SuccessFactors (report cc40f1fb, 2026-10-27): the question is
+// one employer's SuccessFactors: the question is
 // a note above the list ("1. Are you one of the following? U.S. Citizen or
 // National…"), and the list itself is only "Make Selection Here".
 test("a SuccessFactors list labelled only Make Selection Here answers the question in the note above it", async () => {
@@ -13324,7 +13387,7 @@ test("a SuccessFactors list labelled only Make Selection Here answers the questi
   await expect(page.locator("#country1")).toHaveValue("United States");
 });
 
-// L3Harris's SuccessFactors form (report 9a11d03e, 2026-10-15): saving the
+// one employer's SuccessFactors form: saving the
 // uploaded resume rebuilt the form with the site's own guesses where the
 // fill's values were ("UNSPECIFIED", a month's first day), and those were
 // then kept as if chosen. Nobody typed there: the next fill corrects them.
@@ -13360,7 +13423,7 @@ test("values a site writes into a rebuilt form are corrected by the next fill", 
   await expect(page.locator('[name="city"]')).toHaveValue("Phoenix");
 });
 
-// L3Harris's SuccessFactors form (report 56e13a52, 2026-10-15): the site's
+// one employer's SuccessFactors form: the site's
 // resume parser wrote "UNSPECIFIED" as a company, and with site values kept
 // it stayed. A placeholder is no answer: it is replaced; a real value stays.
 test("a placeholder the site wrote is replaced even when site values are kept", async () => {
@@ -13383,9 +13446,8 @@ test("a placeholder the site wrote is replaced even when site values are kept", 
   await expect(page.locator('[name="city"]')).toHaveValue("Tucson");
 });
 
-// Workday announces a finished upload in an alert (Jabil, report f062d50f,
-// 2026-10-15): "…Resume.pdf successfully uploaded" was reported as a failure.
-// AMD's iCIMS (2026-11-07): every list is drawn as an <a role="combobox">
+// Workday announces a finished upload in an alert: "…Resume.pdf successfully uploaded" was reported as a failure.
+// one employer's iCIMS: every list is drawn as an <a role="combobox">
 // with no address, and each job's Country was refused as able to navigate.
 test("a list drawn as a link with no address is chosen from", async () => {
   await context.route(`${origin}/link-list`, (route) =>
@@ -13421,7 +13483,7 @@ test("a list drawn as a link with no address is chosen from", async () => {
   await expect(page.locator('[id="1_WorkCountry_icimsDropdown"] .dropdown-text')).toHaveText("United States", { timeout: 45_000 });
 });
 
-// AMD's iCIMS screening page (report 4933eec7, 2026-11-07): native lists
+// one employer's iCIMS screening page: native lists
 // marked role="combobox", naming a listbox that is never drawn. Waited on
 // as custom lists, every one ended "Dropdown options were not available".
 test("a native list given the combobox role is set as a select", async () => {
@@ -13444,7 +13506,7 @@ Are you legally authorized to work in the United States?<span class="Field_Requi
   expect((await state()).applications[0].missing.join(" ")).not.toContain("Dropdown options were not available");
 });
 
-// AMD's iCIMS EEO form (report c1e21ba3, 2026-11-07): radios with no
+// one employer's iCIMS EEO form: radios with no
 // labels, each in a span of its own, the option as text after it, and the
 // question as the text before them. Read as "icims_f_Veteran", it was left.
 test("radios named only by the text beside them answer the veteran question", async () => {
@@ -13462,7 +13524,7 @@ test("radios named only by the text beside them answer the veteran question", as
   await expect(page.locator("#icims_f_Veteran_ProtectedVeteran")).not.toBeChecked();
 });
 
-// Databricks' Greenhouse form (report b3cb8c2b, 2026-11-08): a sanctions
+// one employer's Greenhouse form: a sanctions
 // list and its follow-up. Read as what they ask, "None of the above" and
 // "Not applicable" are ticked, and boxes ticked before are cleared; the
 // page's own state put "U.S. citizen" back when the next box was ticked,
@@ -13478,7 +13540,7 @@ test("a sanctions list and its follow-up get None and Not applicable, and stay s
     route.fulfill({
       contentType: "text/html",
       body: `<!doctype html><title>Apply</title><form onsubmit="return false"><label>First name<input name="first"></label>
-        ${list("q1", sanctions, ["Citizen or permanent resident of Cuba, Iran, North Korea, or Syria", "Ordinarily a resident of Russia or Belarus and not willing to relocate for a Databricks role", "None of the above"], ["Ordinarily a resident of Russia or Belarus and not willing to relocate for a Databricks role"])}
+        ${list("q1", sanctions, ["Citizen or permanent resident of Cuba, Iran, North Korea, or Syria", "Ordinarily a resident of Russia or Belarus and not willing to relocate for an Acme role", "None of the above"], ["Ordinarily a resident of Russia or Belarus and not willing to relocate for an Acme role"])}
         ${list("q2", followUp, ["U.S. citizen", "U.S. permanent resident (Green Card holder)", "Not applicable (i.e., I selected “none of the above” for the prior question)"], ["U.S. citizen"])}
       </form><script>{
         // The page keeps its own state and draws the boxes from it after
@@ -13517,7 +13579,7 @@ test("an upload the site announces as successful is not reported as failed", asy
       </form>
       <script>
         // As Workday does: "loading", then "successfully uploaded", the input
-        // emptied and the file listed beside it (report f0a42a0f).
+        // emptied and the file listed beside it.
         window.uploads = 0;
         const input = document.querySelector('[name="resume"]');
         input.addEventListener("change", () => {
@@ -13589,7 +13651,7 @@ async function icimsProfileFill(options: { schoolListed?: boolean }) {
   // unfiltered first page.
   await expect(text(0, "Major")).toHaveText("Data Science");
   // "In Progress", the first of the rule's two answers for an unfinished
-  // degree, over the parser's "Received" (AMD, 2026-11-07).
+  // degree, over the parser's "Received".
   await expect(row(0).locator("select[id$='IsGraduated']")).toHaveValue("28595");
   await expect(row(0).locator("select[name$='EducationStartDate_Month']")).toHaveValue("08");
   await expect(row(0).locator("select[name$='EducationStartDate_Date']")).toHaveValue("19");
@@ -13607,8 +13669,7 @@ async function icimsProfileFill(options: { schoolListed?: boolean }) {
   // The parser's extra row is gone, and the review says so.
   await expect(page.locator(".iCIMS_CollectionContainer")).toHaveCount(2);
   expect((await state()).applications[0].missing.join(" ")).toContain("so it was removed");
-  // A parsed answer the rule found already right is not one to check (AMD,
-  // 2026-11-07).
+  // A parsed answer the rule found already right is not one to check.
   expect((await state()).applications[0].missing.join(" ")).not.toContain("Did You Graduate?");
   expect(await page.evaluate(() => (window as any).uploads)).toBe(1);
   return { text, row };
@@ -13622,7 +13683,7 @@ test("an iCIMS profile rebuilt from the resume is corrected in profile order, an
   await expect(row(1).locator("input[name$='OtherSchool']")).toHaveValue("");
   // Filled again, the rows are already right and skipped whole: what the
   // site holds is still read as the profile's, its list by its text and a
-  // date's day as a day (AMD, 2026-11-07).
+  // date's day as a day.
   const before = (await state()).applications[0].attempts.length;
   await ui({ type: "FILL_STEP", id: (await state()).applications[0].id });
   await expect.poll(async () => (await state()).applications[0].attempts.length, { timeout: 60000 }).toBeGreaterThan(before);
@@ -13632,7 +13693,7 @@ test("an iCIMS profile rebuilt from the resume is corrected in profile order, an
   expect(review).not.toMatch(/Start Date (Day|Month|Year)/);
 });
 
-// AMD's iCIMS (2026-11-07): the site showed both schools exactly, the other
+// one employer's iCIMS: the site showed both schools exactly, the other
 // way round from the profile. Paired by position, each took the other's
 // graduation and "not listed" box; each row now keeps its own school.
 test("iCIMS rows showing both schools in the other order keep their own schools", async () => {
@@ -13757,7 +13818,7 @@ test("parsed education rows are corrected in profile order, and what cannot be c
     'School Dropdown: "Michigan State University" was filled in by the site from your resume and not corrected',
   );
   expect(await review()).toContain('Education row 3 ("Michigan State University") is not in your profile');
-  // The parser's GPA is the profile's own (Jabil, 2026-10-16): left as it
+  // The parser's GPA is the profile's own: left as it
   // is, and not flagged.
   await expect(page.locator('[name="gpa-1"]')).toHaveValue("3.84");
   expect(await review()).not.toContain('Overall Result (GPA): "3.84"');
@@ -13826,7 +13887,7 @@ for (const mode of ["in-place", "reload"] as const) {
     await expect(page.locator('[name=firstName]')).toHaveValue(profile.firstName);
     await expect(page.locator('[name=city]')).toHaveValue(profile.city);
     // Settled: ready once the resume it uploaded is no longer listed for
-    // review as if it were the site's (2026-10-31).
+    // review as if it were the site's.
     await expect.poll(async () => {
       const app = (await state()).applications[0];
       return [["awaiting-user", "ready"].includes(app.status), app.explicitFill, Boolean(app.continueAfterSiteFill)];
@@ -13913,7 +13974,7 @@ test("a resume uploader that rewrites the form gets the resume first, once", asy
   expect(await page.evaluate(() => (window as any).uploads)).toBe(1);
 });
 
-// Microsoft's careers form (2026-11-07): an uploaded résumé is taken into
+// Microsoft's careers form: an uploaded résumé is taken into
 // its own résumé list, named in that list's box, and the file input is
 // emptied. Every upload re-applies its parse, which empties Address and Zip.
 // The résumé was sent again on each fill, after the address was typed, and
@@ -14113,7 +14174,7 @@ test("Mark submitted records the submission from the application card", async ()
   await panel.getByLabel("Filter applications").selectOption("open");
 });
 
-// The applicant, 2026-10-31: a position given up on is abandoned from the
+// The applicant: a position given up on is abandoned from the
 // current tab's card, after a confirmation, and leaves the open list.
 test("Abandon on the current tab's card abandons the application after a confirmation", async () => {
   const page = await context.newPage();
@@ -14141,7 +14202,7 @@ test("Abandon on the current tab's card abandons the application after a confirm
   await page.close();
 });
 
-// A report, 2026-10-13: a Greenhouse form inside an employer's own careers
+// A report: a Greenhouse form inside an employer's own careers
 // site was read (the card showed its 22 fields), but Track as new answered
 // "Grant site access for https://www.pinterestcareers.com." with no prompt.
 test("Track as new asks for the site's access inside the click", async () => {
@@ -14755,7 +14816,7 @@ test("throughput benchmark compares ten applications at one and four lanes", asy
 });
 
 
-// Bank of America / TalNet, report d778b524: revealing graduation exposes
+// Bank of America / TalNet: revealing graduation exposes
 // a site-default year that was absent when the application was bound.
 for (const prefilled of ["replace", "keep"] as const) {
   test(`TalNet fills the default year of a newly revealed graduation date (${prefilled})`, async () => {
@@ -14802,7 +14863,7 @@ for (const prefilled of ["replace", "keep"] as const) {
   });
 }
 
-// Amazon (account.amazon.jobs, report f686f6a0, 2026-10-25): each question is
+// Amazon (account.amazon.jobs): each question is
 // a Select2 inside a <label> whose "for" names no element, named only by the
 // selection's aria-labelledby. Each was listed twice, an unlabelled select
 // with the options and a named box without them, and neither was answered.
@@ -14850,7 +14911,7 @@ test("an Amazon Select2 question is one field, named by its selection, and fille
   ]);
   // The resume the account already holds is the uploader's file, read as
   // the site's: this application's tailored one replaces it, once
-  // (2026-10-31, the applicant's choice).
+  // (the applicant's choice).
   expect(fields[3]).toMatchObject({ value: "Alex_Rivera_Resume.pdf" });
   await enqueue([page]);
   await expect.poll(async () => (await state()).applications[0]?.attempts.filter((a) => a.completedAt).length, { timeout: 30000 }).toBe(1);
@@ -14869,7 +14930,7 @@ test("an Amazon Select2 question is one field, named by its selection, and fille
   expect(open.problems.map((problem: { label: string }) => problem.label)).toContain("Are you 18 years of age or older?");
 });
 
-// Amazon (account.amazon.jobs, report 71e8bf05, 2026-10-25): a text question
+// Amazon (account.amazon.jobs): a text question
 // keeps its answer only from onBlur, which React 15 hears as a captured blur
 // on the document. Filled with input and change alone, the box showed the
 // answer and Continue still called it required.
@@ -14895,7 +14956,7 @@ test("an Amazon text question keeps the filled answer", async () => {
   await expect(page.locator("body")).toHaveAttribute("data-answer", "Phoenix");
 });
 
-// Bank of America / TalNet, report 9e6f698b: previous education uses
+// Bank of America / TalNet: previous education uses
 // "Degree type" rather than the current page's "Degree Type".
 test("TalNet fills Degree type on the previous university education page", async () => {
   await ui({
@@ -14932,7 +14993,7 @@ test("TalNet fills Degree type on the previous university education page", async
   expect((await state()).applications[0].missing).not.toContain("Required: Degree type");
 });
 
-// Bank of America / TalNet, report 6527a0ce: Select2 hides the native selects
+// Bank of America / TalNet: Select2 hides the native selects
 // and nests result sections inside the one current-education row.
 test("TalNet education dropdowns are filled and unanswered Select2 questions are reported", async () => {
   await ui({
@@ -15246,7 +15307,7 @@ test("question drafting includes embedded frames and fills a reviewed batch acro
   } finally { await fixture.close(); }
 });
 
-// The AI-filling setting (decided 2026-10-11): what Fill this step lets the
+// The AI-filling setting (decided): what Fill this step lets the
 // model do, and whether it may answer a legal question the profile cannot.
 for (const level of [
   { modelFill: "auto", legalQuestions: "manual", legalDetails: false },
@@ -15324,8 +15385,8 @@ for (const level of [
         await expect.poll(async () => ((await app()).aiFilled || []).map((entry: { label: string }) => entry.label)).toEqual(
           expect.arrayContaining(["School Attended", "Describe a project"]),
         );
-        // What AI filled is no longer listed as unanswered (Elucid's "College
-        // or University", 2026-10-30: filled, and still listed as optional).
+        // What AI filled is no longer listed as unanswered (one employer's "College
+        // or University": filled, and still listed as optional).
         await expect(page.locator("#minor")).toHaveValue("Mathematics", { timeout: 30000 });
         await expect.poll(async () => (await app()).missing.filter((item: string) => item === "Optional unanswered: Minor")).toEqual([]);
         const left = async () => (await app()).missing.filter((item: string) => item.startsWith("Legal or eligibility question left for you"));
@@ -15373,7 +15434,7 @@ for (const level of [
 
 // A filled form looks finished while the model is still suggesting values
 // for the rest. The applicant starts on the remaining fields, and that edit
-// used to discard the suggestions (a live application, 2026-10-12: the school, degree
+// used to discard the suggestions (a live application: the school, degree
 // and export-control answers of earlier runs never arrived).
 test("an edit while AI is still suggesting keeps the suggestions and the applicant's own answer", async () => {
   const providerServer = createServer(async (req, res) => {
@@ -15506,7 +15567,7 @@ test("with AI filling automatically, trying it again is offered only when someth
 
 test("structured AI fallback lists unresolved fields before an explicit reviewed fill", async () => {
   // "Degree Level Sought": the profile answers a plain "Degree Level" (the
-  // degree under way, 2026-11-05), so the list AI must suggest for asks
+  // degree under way), so the list AI must suggest for asks
   // something the profile does not hold.
   let calls = 0;
   const providerServer = createServer(async (req, res) => {

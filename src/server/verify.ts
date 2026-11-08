@@ -14,7 +14,7 @@ import { sentenceBreak } from "./answers";
 // The verifier shows its work: every claim comes back with the profile line
 // it rests on, and that line is looked up here. Asked only for what is
 // unsupported, a model given a long profile lists true claims too (10 of 16
-// sentences of an all-true letter, 2026-10-01); a quote it cannot produce,
+// sentences of an all-true letter); a quote it cannot produce,
 // or one the profile does not hold, is visible either way.
 
 export type Draft = {
@@ -70,13 +70,13 @@ const VERIFY_BATCH_PROMPT = VERIFY_PROMPT
 // that wrote it, so a Claude draft is checked by Codex and a Codex draft by
 // Claude. A checking model named on its own (verifyModel) comes last, for a
 // setup with one drafting model. (The checker was that endpoint model every
-// time, outside the order the applicant set, 2026-10-30.) A checking model
+// time, outside the order the applicant set.) A checking model
 // chosen on purpose is usually a larger, slower one: it gets longer than the
 // endpoint's usual minute for each draft.
 const CHOSEN_CHECKER_LIMIT_MS = 150_000;
 export function checkers(config: Config, drafter?: DraftProvider): DraftProviderConfig[] {
   // A Checking order of its own, set in Settings, is the whole policy: a
-  // smaller model checks as well as the one that drafts (2026-11-02).
+  // smaller model checks as well as the one that drafts.
   if (config.checkProviders?.length)
     return config.checkProviders.filter((step) => !(drafter && step.provider === drafter.provider && step.model === drafter.model));
   const chain = [...draftProviderChain(config)];
@@ -239,7 +239,7 @@ function terms(claim: string, work: boolean): string[] {
 }
 // Whether an entry holds each of these terms.
 // A decimal the draft rounded from one the entry states: "0.85 K" for the
-// profile's "MAE 0.854 K" (Syngenta, 2026-11-02). Only the same figure to
+// profile's "MAE 0.854 K". Only the same figure to
 // fewer places: 0.86 or 0.9 is not 0.854.
 // A unit with it ("0.85 k") must follow the entry's figure too.
 function roundedFrom(word: string, text: string): boolean {
@@ -252,7 +252,7 @@ function roundedFrom(word: string, text: string): boolean {
     figure.split(".")[1].length > places && Number(figure).toFixed(places) === number);
 }
 // The same verb or noun in another form: the draft's "predicts" for the
-// profile's "predicting" (Syngenta, 2026-11-02). A stem of four letters or
+// profile's "predicting". A stem of four letters or
 // more, so "use" and "used" are not "user".
 function formHeld(word: string, text: string): boolean {
   const stem = word.replace(/(?:ing|ed|es|s)$/u, "");
@@ -261,8 +261,8 @@ function formHeld(word: string, text: string): boolean {
   return new RegExp(` ${escaped}(?:s|es|ed|ing|e|ion|ions)? `, "u").test(text);
 }
 function holds(entry: string, required: string[]): boolean {
-  // A claim's "76.0" is the entry's "76.0%": names() drops the sign that
-  // plain() keeps, and no percentage in a work claim could ever fit.
+  // A claim's "76.0" is the entry's "76.0%": names drops the sign that
+  // plain keeps, and no percentage in a work claim could ever fit.
   const text = ` ${plain(figures(entry))} `.replace(/%/gu, "");
   return required.every(
     (name) =>
@@ -280,7 +280,7 @@ function holds(entry: string, required: string[]): boolean {
 // backend". Those words have to be in one entry, as a claim's would.
 // Saying what one is applying for is the letter's purpose, not a claim the
 // profile could hold: "I am applying for an engineering role at Tesla." was
-// taken out, and the letter opened on nothing (2026-11-02).
+// taken out, and the letter opened on nothing.
 const applyingFor = /^\s*(?:i am|i'm)\s+(?:applying|writing to apply)\s+(?:for|to)\b/iu;
 export function unclaimed(text: string, claims: string[], all: string[], employer = ""): string[] {
   const entries = all.filter((entry) => !gapSection.test(entry));
@@ -417,7 +417,7 @@ export function verifier(config: Config): Verifier | undefined {
         // or most of its words.
         // A claim the model put in its own words is the sentence sharing
         // most of them: matched to the whole draft, an "I am applying for the
-        // … role" opening missed its own exemption (Argonne, 2026-11-02).
+        // … role" opening missed its own exemption.
         const own = contentWords(claim);
         const nearest = sentences(draft.text)
           .map((candidate) => ({ candidate, shared: contentWords(candidate).filter((word) => own.includes(word)).length }))
@@ -449,8 +449,7 @@ export function verifier(config: Config): Verifier | undefined {
     });
     // The drafts of one writer, checked in one request: each draft in a
     // request of its own sent the whole profile and the posting again every
-    // time, and a CLI checker paid for each of those (Codex's weekly limit,
-    // 2026-11-02). One draft alone is asked as before.
+    // time, and a CLI checker paid for each of those (Codex's weekly limit). One draft alone is asked as before.
     const check = async (batch: Draft[]): Promise<Map<string, Verdict>> => {
       const single = batch.length === 1;
       const local = single
@@ -458,7 +457,7 @@ export function verifier(config: Config): Verifier | undefined {
         : evidenceFor({ ...batch[0], text: batch.map((draft) => draft.text).join("\n"), source: batch.map((draft) => draft.source || "").join(" ") }, entries, 16000);
       // The checking model is asked not to reason first, whichever setting
       // names it (an applicant put the model they chose for checking in the
-      // endpoint's own Model field). Measured on 2026-10-13 on a hosted
+      // endpoint's own Model field). Measured on on a hosted
       // endpoint: models that reasoned took 65 to over 150 seconds a draft;
       // without it, a mid-sized open model checked in about 5 seconds and judged 30 true
       // and false claims right three times out of three. An endpoint that

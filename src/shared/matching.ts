@@ -42,7 +42,7 @@ const months = [
   "December",
 ];
 // The listed span holding a month: "October - December 2027" for December
-// 2027 (American Express's Oracle form lists graduation by quarter).
+// 2027 (one employer's Oracle form lists graduation by quarter).
 function monthSpan(options: string[], year: string, month: number): string | undefined {
   const index = (name: string) => months.findIndex((full) => full.toLowerCase().startsWith(name.toLowerCase().slice(0, 3))) + 1;
   return options.find((option) => {
@@ -91,8 +91,8 @@ function dateAnswer(
   if (field.kind === "date" && !match[3]) return;
   if (field.kind === "date") return date;
   // A date typed into a text box is written as the field shows, else in the
-  // applicant's format: SuccessFactors' rows got "2023-07-03" where they
-  // wanted MM/DD/YYYY (L3Harris, report 9a11d03e, 2026-10-15). A year alone
+  // applicant's format: SuccessFactors' rows got "" where they
+  // wanted MM/DD/YYYY. A year alone
   // is the year.
   if (!match[2]) return date;
   return writtenDate(date, field, profile);
@@ -127,7 +127,7 @@ const schoolNamePrompts = new Set([
 ]);
 const schoolNameQuestion = (label: string) => {
   const question = normalize(label.split("?")[0]);
-  // "College or University" (Elucid's JazzHR form, 2026-10-30).
+  // "College or University" (one employer's JazzHR form).
   return /^(school|university|college|institution)( or (school|university|college|institution))?( name)?$/.test(question) || schoolNamePrompts.has(question);
 };
 
@@ -197,7 +197,7 @@ export function deterministicAnswer(
     if (/^(end|to)( date)?( month| day| year)?$/.test(label))
       return dateAnswer(row.endDate, label, field, profile);
     // A job without an end date is the one held now: Greenhouse's "Current
-    // role" box (Samsung Semiconductor, report c577407b).
+    // role" box.
     if (!/education/.test(section) &&
         /^(current (role|job|position|employer)|i currently work here|currently (work|working) here|i am currently working (here|in this role))$/.test(label))
       return row.current !== undefined ? (row.current ? "Yes" : "No") : row.endDate ? "No" : "Yes";
@@ -219,11 +219,11 @@ export function deterministicAnswer(
     if (/^(zip|postal)( code)?$/.test(label)) return row.postalCode || undefined;
     if (/^country$/.test(label)) return row.country || undefined;
     if (/^reason for leaving$/.test(label)) return row.reasonForLeaving || undefined;
-    // "Degree Conferred" / "Degree Received" is a date (L3Harris, 2026-10-15:
+    // "Degree Conferred" / "Degree Received" is a date (an employer:
     // the model put "Bachelors of Science" there): when a finished degree was
     // awarded. One still in progress has not been received, but it will be
     // conferred on its expected date: a form asking both wants that there
-    // (the applicant's reading, 2026-10-15).
+    // (the applicant's reading).
     if (/^(degree|diploma) (conferred|received|awarded)( date)?$|^date (of )?(degree )?(conferred|received|awarded)$/.test(label)) {
       const end = row.endDate.match(/^(\d{4})-(\d{2})(?:-(\d{2}))?$/);
       if (!end) return;
@@ -256,8 +256,7 @@ export function deterministicAnswer(
     // One name or two: "Zip", "Postal code", "Postcode/ZIP".
     [/^((zip|postal|post ?code)( code)? ?){1,2}$|^please enter the zip code of your primary residence in the united states$|^please provide your post code zip code$/, "postalCode"],
     // Also asked as a request, instructions after it: "Please provide your
-    // LinkedIn Profile url. Instruction: Navigate to…" (Micron's Workday,
-    // report 88608f31, 2026-11-02).
+    // LinkedIn Profile url. Instruction: Navigate to…" (one employer's Workday).
     [/^linkedin( profile| url| profile url)?$|^(please )?((provide|enter|share|add|paste|include) )?(your )?linkedin( profile)?( page)?( url| link| address)\b/, "linkedin"],
     [/^(website|portfolio|personal website|other website)( url)?$/, "website"],
     [/^github( profile| url| profile url)?$|^(please )?((provide|enter|share|add|paste|include) )?(your )?github( profile)?( page)?( url| link| address)\b/, "github"],
@@ -270,7 +269,7 @@ export function deterministicAnswer(
   if (
     /^(full legal|legal full|legal) name$/.test(label) ||
     /^(please )?((state|enter|provide|type|write|print|confirm|list) )?(your )?(full legal|legal full|legal) name$/.test(label) ||
-    // As a question: "What is your Legal Name?" (Rubrik, 2026-11-07).
+    // As a question: "What is your Legal Name?".
     /^what is your (full legal|legal full|legal) name$/.test(label)
   )
     return legal;
@@ -404,8 +403,8 @@ function screeningQuestion(
 ): { field: "workAuthorization" | "sponsorship"; invert: boolean } | undefined {
   const sponsorship =
     /\bsponsor/.test(label) || (/\b(require|requires|need|needs|obtain)\b/.test(label) && /\b(authoriz|authoris|visa)/.test(label)) ||
-    // "…ask WEC Energy Group to commence an immigration case in order to
-    // employ you? (e.g. H-1B…)" (SuccessFactors, report 624039b6).
+    // "…ask an employer to commence an immigration case in order to
+    // employ you? (e.g. H-1B…)" (SuccessFactors).
     /\b(commence|file|start|begin|open)\b( \w+){0,2} immigration (case|petition)/.test(label);
   const authorized =
     /\b(authorized|authorised|eligible|permitted|entitled|legally able|legally allowed)\b( \w+){0,2} to work\b|\bright to work\b|\bwork authori[sz]ation\b|\b(legal )?authori[sz]ation to work\b/.test(label);
@@ -460,7 +459,7 @@ export function profileAnswer(
   // authorization there: "Do you have temporary authorization (e.g., OPT,
   // CPT…)?" is No, and "If you are currently in OPT, are you eligible for a
   // STEM extension?" is not theirs to answer, so N/A where the list has it
-  // (Philips' Workday, 2026-11-04). Anyone else is left to answer them.
+  // (one employer's Workday). Anyone else is left to answer them.
   const temporaryAsked = normalize(askedPart(field.label));
   if (/\b(opt|cpt|optional practical training|curricular practical training|temporary (work )?authori[sz]ation)\b/.test(temporaryAsked)) {
     const entry = authorizationEntry(profile, askedPart(field.label));
@@ -484,11 +483,11 @@ export function profileAnswer(
   // or that their immigration permission is temporary. Exact saved answers
   // remain available through deterministicAnswer.
   // "…submit verification of both your identity and authorization to work"
-  // (Citi) asks for documents too.
+  // asks for documents too.
   if (/\b(proof|document\w*|verification|temporary|permit type)\b/.test(normalize(askedPart(field.label))) &&
       /authori[sz]|right to work|visa/.test(label)) return;
   // "Do you currently have an active immigration case (ex H-1B extension,
-  // green card)?" (Ashby, Applied Intuition): a U.S. citizen has none in the
+  // green card)?" (Ashby, an employer): a U.S. citizen has none in the
   // United States. A permanent resident or a visa holder might, and a
   // citizen may have one in another country, so only a U.S. citizen asked
   // about the United States (by name, by its visas, or by the job's
@@ -515,15 +514,14 @@ export function profileAnswer(
       if (!held) return;
       return { value: degreeLevel(field.label) === held ? "Yes" : "No" };
     }
-    // Yes and No as boxes of their own (JazzHR's sponsorship question, report
-    // 0c460367): the question is answered as a Yes/No choice, and the box
+    // Yes and No as boxes of their own (JazzHR's sponsorship question): the question is answered as a Yes/No choice, and the box
     // naming that answer is ticked, the other left clear.
     if (/^(yes|no)$/.test(label)) {
       const answer = profileAnswer({ ...field, kind: "radio", label: field.question!, question: undefined, options: ["Yes", "No"] }, profile);
       return answer && /^(yes|no)$/i.test(answer.value) ? { value: normalize(answer.value) === label ? "Yes" : "No" } : undefined;
     }
     // "Please indicate all of the locations that you would be interested in
-    // relocating to" (Notion, 2026-10-30): an applicant who will relocate
+    // relocating to": an applicant who will relocate
     // anywhere is interested in every one listed. One who will not, or
     // has not said, is left to choose.
     if (/\brelocat/.test(asked) && /\b(locations?|cities|city|offices?|places?|where)\b/.test(asked)) {
@@ -564,9 +562,9 @@ export function profileAnswer(
   // school: its own graduation date, and the profile's GPA only when that row
   // is the program the GPA belongs to (the one ending last).
   const educationRow = /education/.test(normalize(field.section || "")) ? profile.education[field.index || 0] : undefined;
-  // A school's kind, from its degree: Expand Energy's SuccessFactors lists
+  // A school's kind, from its degree: one employer's SuccessFactors lists
   // College, GED, High School, Junior College and Trade School under
-  // "Education Type", and left it to the applicant (report 4d01710e).
+  // "Education Type", and left it to the applicant.
   if (educationRow && /^(education|school|institution) type$|^type of (education|school|institution)$/.test(label)) {
     const level = degreeLevel(educationRow.title);
     if (/^(bachelor|master|mba|doctorate)$/.test(level)) return { value: "College", choices: ["College", "University", "College/University", "4 Year College"] };
@@ -591,7 +589,7 @@ export function profileAnswer(
     return offered.length === 1 ? { value: offered[0] } : undefined;
   }
   // "Please indicate your current year of study in college": counted from
-  // the start of the program still under way (L3Harris, 2026-10-16: an M.S.
+  // the start of the program still under way (an employer: an M.S.
   // begun August 2025 is in its second year). A graduate student is no
   // undergraduate class; one that is gets its class's name in a list.
   if (/\b(current )?year (of|in) (study|school|college|university|the program)\b|\bclass standing\b|\bacademic standing\b|\bwhat year are you in\b/.test(label)) {
@@ -618,13 +616,13 @@ export function profileAnswer(
   // "Anticipated graduation month/year" comes from the latest education end
   // date; an ongoing program without an end date leaves it to the user.
   // "What year did you or, if you have not graduated, will you receive your
-  // degree?" asks the same (L3Harris, report 17ac6723, 2026-10-15).
+  // degree?" asks the same.
   // Amazon's: "In what month and year did you (or do you expect to) graduate
   // from your highest degree?"
-  // Leidos asks it as "Expected degree completion date" (Month, Day, Year),
+  // an employer asks it as "Expected degree completion date" (Month, Day, Year),
   // and also names "your most recent graduation date" in the preamble of a
   // question that asks the highest degree received, which is not this
-  // (report, 2026-11-08).
+  // (report).
   if ((/\b(anticipated|expected|projected)\b.*\bgraduat|\bgraduation (date|month|year)\b|\bwill you (receive|earn|complete|be awarded) (your|the|a) degree\b|\bexpect to graduate\b|\b(anticipated|expected|projected) (degree )?completion date\b/.test(label)) &&
       !/\bwhat is (the |your )?highest (level of )?(education|degree|diploma)\b/.test(label)) {
     // Only a date still ahead is an anticipated graduation; a finished
@@ -644,9 +642,9 @@ export function profileAnswer(
     const day = latest.match(/^\d{4}-\d{2}-(\d{2})$/)?.[1];
     // One part of a date split in three after its question: Oracle's "What is
     // your expected year of graduation? Month", "? Day" and "? Year" each got
-    // the whole date, or the year (Nokia, report 1f68e4f9).
-    // (Workday's carry it as "<question>: Month", report c875e6c5.)
-    // Or after a sentence: NGC's "…input the first of the month.: Month".
+    // the whole date, or the year.
+    // (Workday's carry it as "<question>: Month".)
+    // Or after a sentence: one employer's "…input the first of the month.: Month".
     const part = field.label.match(/(?:\?\s*:?|[.:]\s*:)\s*(month|day|year)\s*$/i)?.[1].toLowerCase();
     if (part === "year") return { value: year };
     if (part === "month") return { value: month, choices: [month.slice(0, 3), monthNumber, String(Number(monthNumber))] };
@@ -654,14 +652,14 @@ export function profileAnswer(
     if (part === "day") return day ? { value: String(Number(day)), choices: [day] } : /\bfirst of the month\b/i.test(field.label) ? { value: "1", choices: ["01"] } : undefined;
     // A question for the month alone ("Please select your Graduation
     // Month", its year asked apart), or a list of only months, takes the
-    // month: "December 2027" matched none of LinkedIn's twelve (2026-11-04).
+    // month: "December 2027" matched none of one employer's twelve.
     const monthsOnly = field.options.length >= 12 && field.options.every((option) => months.some((name) => normalize(option) === normalize(name) || normalize(option) === normalize(name.slice(0, 3))));
     if (monthsOnly || (field.options.length > 0 && /\bmonth\b/.test(label) && !/\byear\b/.test(label) && !/\bdate\b/.test(label)))
       return { value: month, choices: [month.slice(0, 3), monthNumber, String(Number(monthNumber))] };
     const span = monthSpan(field.options, year, Number(monthNumber));
     if (span) return { value: span };
     // A date picker takes a whole date, whatever its label asks: "2027" in
-    // SuccessFactors' was invalid (report 17ac6723). Amazon's names its
+    // SuccessFactors' was invalid. Amazon's names its
     // format: "Date: Year-Month-Day".
     if (day && /\b(year month day|yyyy mm dd)\b/.test(label)) return { value: `${year}-${monthNumber}-${day}` };
     if (field.kind === "datepicker" && day) {
@@ -734,11 +732,11 @@ export function profileAnswer(
   )
     return { value: [profile.city, profile.state].filter(Boolean).join(", ") };
   // Countries of citizenship listed one by one ("Country 1 Name",
-  // Westinghouse's SuccessFactors, report cc40f1fb): the applicant's
+  // one employer's SuccessFactors): the applicant's
   // citizenships in the order they listed them. "Country of citizenship"
   // asks for one, so it is answered only for a single citizenship.
   // The status held in it, "Type of Status 1", is a citizen's; left empty, the
-  // site would not take the page (report cc40f1fb, 2026-10-27).
+  // site would not take the page.
   const citizenships = citizenshipsOf(profile).length
     ? citizenshipsOf(profile)
     : usCitizen(profile) ? ["US"] : [];
@@ -752,8 +750,7 @@ export function profileAnswer(
     return { value: "Citizen", choices: [...citizenWordings, "Citizenship"] };
   // A school's or job's own City, State and Country are where it is, from its
   // row, never the applicant's home: Penn State's row got "Arizona", and the
-  // school list it governs then held only Arizona's (Expand Energy, report
-  // a248361b, 2026-10-29). Without a place for the row, nothing is said.
+  // school list it governs then held only Arizona's. Without a place for the row, nothing is said.
   const history = normalize(field.section || "");
   if (
     /work|employment|experience|education/.test(history) &&
@@ -775,7 +772,7 @@ export function profileAnswer(
   }
   // A country chosen from a list may be listed under another of its names
   // ("United States" for the profile's "United States of America"; Greenhouse's
-  // phone country list, 2026-10-13).
+  // phone country list).
   if (countryLabel.test(label) && profile.country && (field.options.length || /combobox|listbox|select/.test(field.kind)))
     return { value: profile.country, choices: countryNames(profile.country) };
   // Location pickers search by city but list "City, State, Country".
@@ -789,7 +786,7 @@ export function profileAnswer(
     // A plain text box is written as asked: "Where are you currently
     // located? (City, State)" got the country too, from the list's wording.
     // A box that asks only for the city gets only the city: "Tucson" became
-    // "Tucson, Arizona" (Expand Energy, 2026-10-29).
+    // "Tucson, Arizona".
     if (/^(text|textbox)$/.test(field.kind) && !field.options.length && /^(current )?city$/.test(label))
       return { value: profile.city };
     if (/^(text|textbox)$/.test(field.kind) && !field.options.length)
@@ -815,17 +812,16 @@ export function profileAnswer(
     const code = found && normalize(found.code) !== normalize(profile.state) ? found.code : undefined;
     if (code) return { value: profile.state, choices: [code] };
   }
-  // A school, major or degree asked of one level of study (JazzHR, report
-  // 0c460367, 2026-10-14): "Highest Degree Earned/Pursuing", "Completion
+  // A school, major or degree asked of one level of study (JazzHR): "Highest Degree Earned/Pursuing", "Completion
   // date of your highest degree (mm/yyyy)", "Name of the School:
   // Undergraduate Degree", "Field of Study / Major: Graduate/MBA/PhD Degree".
   // "Earned" alone counts only a degree already finished.
   // Also as a sentence: "What is the highest level of education you have
-  // completed?" (SuccessFactors, report 5beb4b34).
-  // Or as the last question after a preamble: "If hired by Leidos, we will
+  // completed?" (SuccessFactors).
+  // Or as the last question after a preamble: "If hired by an employer, we will
   // verify your most recent graduation date and the highest degree or
   // diploma received. What is the highest level of education you've
-  // received?" (2026-11-08).
+  // received?".
   const lastAsk = normalize(field.label.match(/([^.?!]*\?)\s*$/)?.[1] || "");
   const highestPattern = /^(?:what is )?(?:the |your )?highest (?:level of )?(?:degree|education)(?: (?:that )?you (?:have|ve))?((?: (?:earned|obtained|completed|attained|received|pursuing|in progress))*)$/;
   const highest = label.match(highestPattern) || (lastAsk ? lastAsk.match(highestPattern) : null);
@@ -835,7 +831,7 @@ export function profileAnswer(
   }
   // "Please select your degree type" (BA/BS, Masters, PhD, N/A) beside a
   // graduation month and year is the degree being finished, the highest
-  // held or under way (LinkedIn's SmartRecruiters screening, 2026-11-05).
+  // held or under way (one employer's SmartRecruiters screening).
   if (/^(?:please )?(?:select |choose |enter )?(?:your )?(?:degree type|type of degree|degree level|level of degree)$/.test(label)) {
     const row = rowAtLevel(profile, "highest");
     if (!row) return;
@@ -858,8 +854,8 @@ export function profileAnswer(
   }
   // Inside a row of a Languages section (Workday's): that language's skills
   // take its level, and "I am fluent in this language" says whether it is
-  // fluent (Jabil, report b5a71768, 2026-10-15). Carrier names the overall
-  // level "All" (report f59d9efd).
+  // fluent. an employer names the overall
+  // level "All".
   if (/^languages?$/.test(normalize(field.section || "")) && profile.languages?.length) {
     const row = profileLanguages(profile.languages)[field.index || 0];
     if (row && /\bfluent\b/.test(label) && field.kind === "checkbox") return { value: isFluent(row) ? "Yes" : "No" };
@@ -874,7 +870,7 @@ export function profileAnswer(
     const spoken = profileLanguages(profile.languages).map((row) => (row.level ? `${row.language} (${row.level[0].toUpperCase()}${row.level.slice(1)})` : row.language));
     return spoken.length ? { value: spoken.join(", ") } : undefined;
   }
-  // "What area was your major in?" (L3Harris): the program being studied now,
+  // "What area was your major in?": the program being studied now,
   // the one ending last. The model answered with the finished degree's.
   if (/^what (area|field|subject) (was|is) your major( in)?$|^what (was|is) your major$/.test(label)) {
     const current = profile.education.filter((row) => row.fieldOfStudy && /^\d{4}-\d{2}/.test(row.endDate)).sort((a, b) => a.endDate.localeCompare(b.endDate)).at(-1);
@@ -907,15 +903,14 @@ export function profileAnswer(
       : /\bout of 10(\.0)?\b|\b10(\.0)? ?point\b|\bcgpa\b/.test(text) ? "10"
         : /\bout of 5(\.0)?\b|\b5(\.0)? ?point\b/.test(text) ? "5"
           : /\bout of 4(\.0)?\b|\b4(\.0)? ?point\b|\b4 0 scale\b/.test(text) ? "4" : undefined;
-  // "Do you meet the minimum GPA requirement of 3.0?" (Nokia's Oracle form,
-  // report 1f68e4f9): a yes/no threshold, answered by comparing only when
+  // "Do you meet the minimum GPA requirement of 3.0?" (one employer's Oracle form): a yes/no threshold, answered by comparing only when
   // the applicant's GPA is on the scale the question uses (four points
   // unless it says otherwise). Higher is better on these scales; a scale
   // the applicant called "other" (where 1.0 may be the best) never is.
   const floor = field.label.match(/\b(?:c?gpa|grade point average)\b[^?]*?\b(\d{1,2}(?:\.\d{1,2})?)\b|\b(\d{1,2}(?:\.\d{1,2})?)\b[^?]*?\b(?:c?gpa|grade point average)\b/i);
   // Also when the options are not read yet (a Workday list shows them only
   // once opened): "Do you have a 3.0 gpa or higher?" got the profile's
-  // "3.84", which no Yes/No list holds (Morningstar, report f502e2b5).
+  // "3.84", which no Yes/No list holds (Morningstar).
   if (floor && /\b(minimum|at least|or (higher|above|better|greater)|meet|above|exceed)/i.test(field.label) &&
       (!field.options.length ||
         (field.options.some((option) => normalize(option) === "yes") && field.options.some((option) => normalize(option) === "no")))) {
@@ -953,12 +948,12 @@ export function profileAnswer(
       choices: count === 0 ? ["None", "Zero", "0"] : undefined,
     };
   }
-  // "How many years of work experience do you have?" (Rubrik, 2026-11-07):
+  // "How many years of work experience do you have?":
   // the months the profile's jobs cover, each month once however many jobs
   // share it, up to this month. A question about one role or skill ("as a
   // Data Analyst", "with Python") is another question.
   // "Did you obtain this degree in the last 24 months?" after a question for
-  // the highest degree received (Leidos, 2026-11-08): that degree, finished,
+  // the highest degree received: that degree, finished,
   // and when.
   const recent = label.match(/\b(?:did you )?(?:obtain|receive|earn|complete|get)\w* (?:this|that|the|your) degree (?:in|within) the (?:last|past) (\d+) (month|year)s?\b/);
   if (recent) {
@@ -975,16 +970,14 @@ export function profileAnswer(
     }
   }
   // Where the applicant would move from, asked as a place: "…please tell us
-  // the city, state, and zip code you'd be moving from" (Applied Materials,
-  // report 297590e2, 2026-11-08) was answered "Yes", as relocation is.
+  // the city, state, and zip code you'd be moving from" was answered "Yes", as relocation is.
   if ((field.kind === "text" || field.kind === "textarea") && profile.city &&
       (/\bcity\b.*\bstate\b.*\b(zip|postal)\b/.test(label) || /\b(moving|relocating) from\b/.test(label))) {
     const place = [profile.city, [profile.state, profile.postalCode].filter(Boolean).join(" ")].filter(Boolean).join(", ");
     return { value: place };
   }
   // Years with one skill or in one kind of work ("…professional work
-  // experience with the following: C/C++", "…designing HPC…", AMD's iCIMS,
-  // 2026-11-07) are never more than the applicant's years of work in all:
+  // experience with the following: C/C++", "…designing HPC…", one employer's iCIMS) are never more than the applicant's years of work in all:
   // a list's "less than N years" is true when all of it is under N. Any
   // other choice needs the applicant.
   if (field.options.length && !/^how many years of (total |overall |professional |work |paid )*(work )?experience do you have$/.test(label) &&
@@ -1020,9 +1013,9 @@ export function profileAnswer(
         [/\bdisabilit/, "disabilityStatus"],
       ] as const
     )
-      // The topic named first: LinkedIn's "Race/Ethnicity" defines its race
+      // The topic named first: one employer's "Race/Ethnicity" defines its race
       // categories after its name, "Hispanic or Latino" first among them,
-      // and was read as the Hispanic question and left (2026-11-05).
+      // and was read as the Hispanic question and left.
       .map(([pattern, topic]) => ({ topic, at: label.search(pattern) }))
       .filter((found) => found.at >= 0)
       .sort((a, b) => a.at - b.at)[0]?.topic ||
@@ -1044,8 +1037,8 @@ export function profileAnswer(
   // and terms differently, and is left to the applicant.
   // The U.S. form's own race definitions ("A person having origins in any
   // of the original peoples of the Far East … China, India, Japan") name
-  // places that are no other country's question: LinkedIn's Race/Ethnicity
-  // label carried them and was left (2026-11-05).
+  // places that are no other country's question: one employer's Race/Ethnicity
+  // label carried them and was left.
   const definedAway = `${field.question || ""} ${field.label}`.replace(/\b(a person|all persons) (of|having origins in|who identify)\b[^.]*?(?=\b(hispanic|white|black|native hawaiian|asian|american indian|two or more)\b|$)/gis, " ")
     // Nor do its own category names ("American Indian" is not India's).
     .replace(/\b(american indian|alaska(n)? native|native hawaiian|pacific islander)\b/gi, " ");
@@ -1062,7 +1055,7 @@ export function profileAnswer(
     return { value: stated === answer ? "Yes" : "No" };
   }
   // A race list whose options load only when it opens (Greenhouse's
-  // "Please identify your race", a report, 2026-10-13): the answer and the
+  // "Please identify your race", a report): the answer and the
   // ways US lists word it, matched when the list opens. A plain "Asian"
   // answers for East, South and Southeast Asian, as above; an exact option
   // still wins over it.
@@ -1082,7 +1075,7 @@ export function profileAnswer(
     const names = wordings[answer];
     if (!names) return;
     // Workday adds the country: "Asian (Not Hispanic or Latino) (United
-    // States of America)" (RTX, 2026-10-31).
+    // States of America)".
     return { value: answer, choices: names.flatMap((name) => [name, `${name} (Not Hispanic or Latino)`,
       `${name} (United States of America)`, `${name} (Not Hispanic or Latino) (United States of America)`]) };
   }
@@ -1102,10 +1095,9 @@ export function profileAnswer(
       );
     // "Not a protected veteran" is true of someone who never served and of
     // a veteran outside the protected groups, and a list may word the two
-    // apart: Philips' offered "I am a veteran but do not fall under the
+    // apart: one employer's offered "I am a veteran but do not fall under the
     // protected classifications" and "I have no military experience", and
-    // the first was chosen for someone who never served (report 2d320e91,
-    // 2026-11-04). The saved military answer decides; without it, only a
+    // the first was chosen for someone who never served. The saved military answer decides; without it, only a
     // wording that says neither is taken.
     if (demographic === "veteranStatus" && answer === "No") {
       const neverServed = (option: string) => /\b(no (prior )?military|never served|not a veteran|have not served|no service)\b/i.test(option);
@@ -1140,8 +1132,7 @@ export function profileAnswer(
   // question and are not one.
   // A saved "Never a government employee or public official" answers whether
   // the applicant has worked for a government entity: No. The model, held to
-  // the saved words, found no source for "government entity" (L3Harris,
-  // report 9a11d03e, 2026-10-15). Military service, relatives and clearances
+  // the saved words, found no source for "government entity". Military service, relatives and clearances
   // are other questions, left to it.
   const governmentAsked = normalize(askedPart(field.label));
   if (
@@ -1156,8 +1147,7 @@ export function profileAnswer(
   // "Are you eligible to obtain a U.S. security clearance? This is typically
   // based on having U.S. citizenship and … a background investigation": a
   // citizen with no convictions is, by the applicant's own saved details. It
-  // left alone, the site's stored "No" stood (L3Harris, report ed248429,
-  // 2026-10-15). Holding one, and what could prevent one, are other questions.
+  // left alone, the site's stored "No" stood. Holding one, and what could prevent one, are other questions.
   const clearanceAsked = normalize(askedPart(field.label));
   if (
     /^(are|would) you\b.*\b(eligible|able|qualified) to (obtain|get|receive|be granted|acquire)\b.*\bclearance\b/.test(clearanceAsked) &&
@@ -1167,7 +1157,7 @@ export function profileAnswer(
     return { value: "Yes" };
   // And by the same details nothing known stands in the way of one: "Are you
   // aware of anything that may prevent you from obtaining a government
-  // security clearance?" (L3Harris, report b5d63aeb, 2026-10-15).
+  // security clearance?".
   if (
     /^(are you aware|do you know|is there)\b.*\b(prevent|disqualify|keep|stop)\w*\b.*\bclearance\b/.test(clearanceAsked) &&
     usCitizen(profile) &&
@@ -1180,22 +1170,21 @@ export function profileAnswer(
   const remoteBinary = ["combobox", "listbox"].includes(field.kind) &&
     /^(are|do|will|would|can)\b/.test(normalize(askedPart(field.label))) &&
     // "…to work in the country in which you are applying" names no country
-    // (Pinterest's Greenhouse form, 2026-10-14); "which country" asks one.
+    // (one employer's Greenhouse form); "which country" asks one.
     !/\b(temporary|present employer|current employer|country|location|netherlands|portugal|proof|document|permit type)\b/.test(
       normalize(askedPart(field.label))
         .replace(/\b(in )?the country (in which|where|to which|for which) you (are|will be|would be) (applying|working|located)( for (a|the|this) (position|role|job))?\b/, "")
         // "…in the country or jurisdiction where the position to which you
-        // are applying is located" (Citi's Workday, 2026-10-28).
+        // are applying is located" (one employer's Workday).
         .replace(/\b(in )?the country or jurisdiction (where|in which) the (position|role|job) (to which|for which) you are applying is located\b/, "")
         // "…to legally work in the location associated with this job posting"
-        // (Epic Games' form, 2026-10-14) names none either.
+        // (one employer's form) names none either.
         .replace(/\b(in )?the (location|region|geographic region|country)( associated with| of| specified for| for) (this|the) (job|role|position|posting|job posting|internship)\b/, "")
         // "…in the country/region you are applying for?" (Microsoft's
-        // careers site, report ae0e9ee8, 2026-11-04).
+        // careers site).
         .replace(/\b(in )?the country (or )?region (you are|you re|that you are) applying (for|to)\b/, "")
         // "…to work in that country? e.g. (work permit)" follows "…in the
-        // country where this position is located?" (NVIDIA's Workday,
-        // report 8ca807c1, 2026-11-04): the job's country again.
+        // country where this position is located?" (one employer's Workday): the job's country again.
         .replace(/\b(in )?that country\b/, ""),
     );
   if (screening && (field.options.length || remoteBinary)) {
@@ -1241,8 +1230,8 @@ export function profileAnswer(
         if (!supported) return;
       }
     }
-    // A list that words it "Authorized" / "Not Authorized" (Axiom Space's
-    // Workday, report 0197354d, 2026-11-04) is the same Yes and No.
+    // A list that words it "Authorized" / "Not Authorized" (one employer's
+    // Workday) is the same Yes and No.
     const said = screening.invert ? (answer === "Yes" ? "No" : "Yes") : answer;
     if (screening.field === "workAuthorization" && !screening.invert) {
       const worded = field.options.find((option) => said === "Yes" ? /^\s*authori[sz]ed\s*$/i.test(option) : /^\s*not authori[sz]ed\s*$/i.test(option));
@@ -1361,7 +1350,7 @@ function usSchool(row: Profile["education"][number]): boolean | undefined {
 }
 
 // A school list without the applicant's school, followed by a box for the
-// name of one chosen as "Other" (JazzHR, Axtria's form, 2026-10-14: the
+// name of one chosen as "Other" (JazzHR, one employer's form: the
 // applicant asked for Other and the name): the list's Other, and the name.
 // Of several Others ("US Based", "International"), the one for where the
 // school is; when that cannot be told, both are left.
@@ -1415,13 +1404,13 @@ function ownProposals(fields: Field[], profile: Profile): Proposal[] {
     // "If other, enter School Name" counts only beside a list set to Other,
     // which the site's rules choose when the list lacks the answer; written
     // beside a list holding the school, it reads as two answers (Expand
-    // Energy, 2026-10-29).
+    // Energy).
     if (/^if other\b/.test(normalize(field.label))) return [];
     // One box of a "select all that apply" list is a choice, not a
-    // question of its own: Databricks' sanctions list had "Ordinarily a
+    // question of its own: one employer's sanctions list had "Ordinarily a
     // resident of Russia or Belarus and not willing to relocate…" ticked as a
     // relocation question, and its follow-up's "U.S. citizen" as one of
-    // citizenship (2026-11-08). Such lists are read as what they are (see
+    // citizenship. Such lists are read as what they are (see
     // listChoice); other legal lists, and those depending on an earlier
     // answer, are the applicant's.
     const choice = listChoice(field, profile);
@@ -1446,7 +1435,7 @@ function ownProposals(fields: Field[], profile: Profile): Proposal[] {
       const keptSecondLine = Boolean(profile.address) && secondAddressLine.test(normalize(field.label));
       // A job the profile says was remote has no place: a city the site's
       // parser gave it is another job's ("Hyderabad" under a remote job,
-      // AMD's iCIMS, report d9900f7d, 2026-11-07), so it is emptied.
+      // one employer's iCIMS), so it is emptied.
       const section = normalize(field.section || "");
       const remotePlace = !/education/.test(section) && /experience|employment|work|job/.test(section) &&
         /^\s*remote\s*$/i.test(profile.work[field.index || 0]?.location || "") &&
@@ -1484,7 +1473,7 @@ function ownProposals(fields: Field[], profile: Profile): Proposal[] {
       }
       // A saved answer worded as this very question ("Military status": No)
       // that no option says outright is read as its standing question,
-      // which knows how lists word it ("No Military", Expand Energy).
+      // which knows how lists word it ("No Military", an employer).
       const standing = !option && !special ? standingAnswer(field, profile) : undefined;
       if (standing)
         try {
@@ -1502,7 +1491,7 @@ function ownProposals(fields: Field[], profile: Profile): Proposal[] {
     if (field.kind === "checkbox" && answer.value === "No" && !field.value) return [];
     // A value the site pre-filled is replaced only when it differs, from the
     // answer and from every wording of it ("Masters" for "Masters of
-    // Science", Jabil, 2026-10-16).
+    // Science", an employer).
     if (field.siteValue && [answer.value, ...(answer.choices || [])].some((wording) => normalize(wording) === normalize(field.value)))
       return [];
     return [
@@ -1534,7 +1523,7 @@ export function accessPattern(origin: string): string {
   if (labels.length < keep) return own;
   return `${url.protocol}//*.${labels.slice(-keep).join(".")}/*`;
 }
-// Sites whose terms forbid tools that automate activity on them (LinkedIn,
+// Sites whose terms forbid tools that automate activity on them (an employer,
 // Indeed). Their pages are read and answers drafted for the applicant to
 // copy; nothing is ever written, chosen, uploaded or clicked there.
 export const DRAFT_ONLY_NOTE =
@@ -1550,13 +1539,13 @@ export function draftOnlySite(url: string | undefined): boolean {
 // the trailing /apply or /application (Workable's /j/ID/apply, Lever's
 // /company/ID/apply, Ashby's /jobs/ID/application). A link queued from the
 // command line is the application page, and nothing on it names the posting
-// (NeuroHire's, 2026-10-31: "The job posting could not be read").
+// (one employer's: "The job posting could not be read").
 export function postingGuess(raw: string): string | undefined {
   try {
     const url = new URL(raw);
     if (!/^https?:$/.test(url.protocol)) return;
     // A careers site that applies at /careers/apply?pid=<id> shows the job
-    // at /careers/job/<id> (Microsoft's, report bce03da9, 2026-11-04).
+    // at /careers/job/<id> (Microsoft's).
     const pid = url.searchParams.get("pid");
     if (/\/careers\/apply\/?$/i.test(url.pathname) && pid && /^\d{6,}$/.test(pid))
       return `${url.origin}${url.pathname.replace(/\/apply\/?$/i, "")}/job/${pid}`;
@@ -1572,8 +1561,8 @@ export function postingGuess(raw: string): string | undefined {
 }
 // One Workday opening has several addresses: each career site of the tenant
 // (/en-US/UR/job/… and /search/job/…), with "/apply" or without, and the
-// requisition with a posting suffix ("_2642721-1") or none. KLA's internship
-// was queued twice from two of them (2026-11-03). The tenant's host and the
+// requisition with a posting suffix ("_2642721-1") or none. one employer's internship
+// was queued twice from two of them. The tenant's host and the
 // requisition name the opening.
 export function workdayOpening(raw: string): string | undefined {
   try {

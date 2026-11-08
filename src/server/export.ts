@@ -23,7 +23,7 @@ export function fileNamePart(text: string, limit = 80): string {
 }
 
 // "Precisely – Associate Software Engineer". A tab title carries the site
-// and company after the role ("Role | Company | LinkedIn"); the role is first.
+// and company after the role ("Role | Company | an employer"); the role is first.
 export function jobFolderName(company: string | undefined, title: string): string {
   const firm = fileNamePart(company || "", 50);
   const role = fileNamePart(title.split(/\s[|·]\s/)[0] || "", 70);
@@ -115,7 +115,7 @@ export async function markSent(root: string, exported: Exported, sent: boolean) 
 
 // A path as the applicant's desktop names it. The backend in WSL saves to
 // /mnt/c/…, which Chrome's file chooser on Windows does not take, and Open
-// folder found no desktop behind xdg-open (2026-11-02).
+// folder found no desktop behind xdg-open.
 const wsl = process.platform === "linux" && (Boolean(process.env.WSL_DISTRO_NAME) || /microsoft/i.test(release()));
 export function desktopPath(path: string, inWsl = wsl): string {
   const drive = inWsl ? path.match(/^\/mnt\/([a-z])(\/.*)?$/i) : null;

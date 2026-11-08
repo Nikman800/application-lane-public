@@ -20,8 +20,7 @@ const maxClear = 16;
 // Deliberately small: no Enter, no Tab, no modifier, nothing a form could read
 // as "submit". Characters outside this set are refused rather than guessed at.
 // Skill names need a few more: "C#", "C++", "R&D", "Large Language Models
-// (LLM)" fell back to synthetic keys, which NVIDIA's search ignores
-// (2026-11-04).
+// (LLM)" fell back to synthetic keys, which one employer's search ignores.
 const typable = /^[\p{L}\p{N} .,'/#+&()-]{1,200}$/u;
 // A widget that reads event.keyCode must see the code the real key carries.
 const punctuation: Record<string, { code: string; keyCode: number }> = {
@@ -74,7 +73,7 @@ export async function typeTrusted(
   enter = false,
   // Picked from the menu the typing opens: once it has come, Down to its
   // first entry, then Enter. SmartRecruiters' Title, Company and School keep
-  // only a value chosen there (2026-11-04).
+  // only a value chosen there.
   // How many entries down the one to choose is (true: the first).
   choose: boolean | number = false,
   // Down only, with no Enter: the caller reads which entry is highlighted
@@ -83,7 +82,7 @@ export async function typeTrusted(
   // A real click at this point of the page (CSS pixels from the top-left of
   // the tab's view), for an entry the menu's own keys will not reach:
   // SmartRecruiters' menus let every Down pass now and then, and ignore a
-  // script's click (Intuitive, 2026-11-07).
+  // script's click.
   click?: { x: number; y: number },
 ): Promise<void> {
   if (!trustedTypingAvailable())
@@ -138,7 +137,7 @@ export async function typeTrusted(
     });
   }
   // A search box that runs its search on Enter (Workday's field of study at
-  // KLA ignores a synthetic Enter, and a blurred box ignores any).
+  // an employer ignores a synthetic Enter, and a blurred box ignores any).
   const downs = choose === true ? 1 : typeof choose === "number" ? choose : 0;
   // A negative count is that many entries up.
   if (!Number.isInteger(downs) || downs < -30 || downs > 30) throw new Error("Refused an unexpected menu position.");

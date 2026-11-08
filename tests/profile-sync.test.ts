@@ -90,7 +90,7 @@ test("graduation by role: internships and full-time roles state their own date",
   assert.equal(internshipRole("Software Engineer Intern (Summer 2027)"), true);
   assert.equal(internshipRole("Co-op, Data Engineering"), true);
   assert.equal(internshipRole("Internal Tools Engineer"), false);
-  // Banks name internships after the season (Bank of America, 2026-10-04).
+  // Banks name internships after the season (Bank of America).
   assert.equal(graduationFor(rule, "Global Technology Summer Analyst 2027 - Software Engineer and Mainframe Analyst"), "2027-12");
   assert.equal(internshipRole("Investment Banking Summer Associate"), true);
   assert.equal(internshipRole("Analyst, Summer Reading Program Technology"), false);

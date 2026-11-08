@@ -231,17 +231,17 @@ test("an empty end date is not 'still studying', and the highest degree is by le
 });
 
 test("'worked here before' comes from the work history, and No only with the applicant's say-so", () => {
-  const work = [{ organization: "Westinghouse Electric Company LLC", title: "Intern", startDate: "2023-06", endDate: "2023-08", location: "", details: "" }];
+  const work = [{ organization: "Contoso Electric Company LLC", title: "Intern", startDate: "2023-06", endDate: "2023-08", location: "", details: "" }];
   const who = person({ work });
   const question = "Have you previously been employed by this company?";
-  assert.equal(answer(question, applying(who, undefined, "Westinghouse")), "Yes");
+  assert.equal(answer(question, applying(who, undefined, "Contoso")), "Yes");
   assert.equal(answer(question, applying(who, undefined, "Acme Corp")), undefined);
   const never = person({ work, neverWorkedForApplyingCompanies: true });
   assert.equal(answer(question, applying(never, undefined, "Acme Corp")), "No");
   // A name that only shares a word is not confidently the same employer.
-  assert.equal(answer(question, applying(never, undefined, "Westinghouse Air Brake")), undefined);
+  assert.equal(answer(question, applying(never, undefined, "Contoso Air Brake")), undefined);
   // Worked there, but before the time asked about.
-  assert.equal(answer("Have you worked for Westinghouse in the past 12 months?", never), "No");
+  assert.equal(answer("Have you worked for Contoso in the past 12 months?", never), "No");
   // An older profile's global "No" becomes the toggle.
   assert.equal(person({ priorEmployment: "No" }).neverWorkedForApplyingCompanies, true);
   assert.equal(person({ priorEmployment: "Yes" }).neverWorkedForApplyingCompanies, undefined);

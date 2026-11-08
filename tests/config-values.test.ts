@@ -132,7 +132,7 @@ test("maps canonical config keys to confirmed profile values", () => {
 });
 
 test("Paylocity graduation month/year uses the selected education row", () => {
-  // Paylocity, report 9a0880b3: the second school's date must not come
+  // Paylocity: the second school's date must not come
   // from the current program or leave MM/YYYY to a prose-date fallback.
   const schools = profileSchema.parse({ ...profile, education: [
     { organization: "Example University", title: "Master of Science", startDate: "2025-08", endDate: "2099-12" },
@@ -274,7 +274,7 @@ test("answer-bank choices reach each site's own option wording", async () => {
   assert.equal(pick("veteran", { veteranStatus: "Not a veteran" }, veteran), veteran[0]);
   assert.equal(pick("veteran", { veteranStatus: "Yes" }, veteran), veteran[1]);
   assert.equal(pick("veteran", { veteranStatus: "Prefer not to say" }, veteran), veteran[2]);
-  // Sonos's Workday lists no "protected" wording (2026-11-04): "I am not a
+  // one employer's Workday lists no "protected" wording: "I am not a
   // veteran" is picked for someone whose saved answers say they never
   // served, and never for someone who did serve.
   const plain = ["I AM A VETERAN", "I AM NOT A VETERAN", "I DO NOT WISH TO SELF-IDENTIFY"];
@@ -413,7 +413,7 @@ test("a work row gives its own address parts and reason for leaving", () => {
   assert.equal(row("state", 1), undefined);
 });
 
-// A report, 2026-10-13: "How did you find out about this opportunity?" was
+// A report: "How did you find out about this opportunity?" was
 // answered with the name of one of the applicant's references.
 test("a person saved as a reference is not where the applicant heard of a job", () => {
   const saved = profileSchema.parse({
@@ -434,7 +434,7 @@ test("site rules get the middle name, its initial, and a legal name with it", ()
   assert.deepEqual(canonicalValues("middle_name", profile), []);
 });
 
-// Jabil's Workday (2026-10-16): "M.S. Data Science, Statistics & Engineering
+// one employer's Workday: "M.S. Data Science, Statistics & Engineering
 // (Applied Systems)" is in no site's list of fields of study;
 // its shorter forms are searched after it.
 test("a field of study is also searched without its degree, note and second part", async () => {
@@ -449,7 +449,7 @@ test("a field of study is also searched without its degree, note and second part
   assert.deepEqual(fieldOfStudyWordings("Bachelor of Science in Electrical Engineering"), ["Bachelor of Science in Electrical Engineering", "Electrical Engineering"]);
 });
 
-// Jabil's Workday lists none of those (report 8c0659ee): the closest standard
+// one employer's Workday lists none of those: the closest standard
 // fields come next, computing first, as the applicant asked.
 test("a field of study missing from a list has close standard fields to fall back on", async () => {
   const { relatedFieldsOfStudy } = await import("../src/engine/values");
@@ -464,9 +464,9 @@ test("a field of study missing from a list has close standard fields to fall bac
 
 test("every site's graduated question is answered Yes or No from the row's end date", async () => {
   const { readdir } = await import("node:fs/promises");
-  // Intuit's Avature asks "Did you graduate?" for each school; its rule (and
+  // one employer's Avature asks "Did you graduate?" for each school; its rule (and
   // iCIMS') answered with the graduation year, which no Yes/No list holds
-  // (2026-10-17). A degree ending ahead is not yet earned.
+  //. A degree ending ahead is not yet earned.
   const schooled = profileSchema.parse({
     ...profile,
     education: [
@@ -500,7 +500,7 @@ test("every site's graduated question is answered Yes or No from the row's end d
 
 test("a row's dates are written with dashes for month and date inputs", () => {
   // Avature's job rows (and nine other sites' rules) name these keys; they
-  // had no value, so Intuit's start and end months were left to a guess.
+  // had no value, so one employer's start and end months were left to a guess.
   const worked = { ...profile, work: [{ organization: "Sample AI", title: "Intern", location: "", details: "", startDate: "2023-07-03", endDate: "2023-09" }] };
   const at = (key: string) => canonicalValues(key, worked, { collection: "experience", index: 0 });
   assert.deepEqual(at("start_date_dashes_YYYYMM"), ["2023-07"]);
@@ -513,7 +513,7 @@ test("a row's dates are written with dashes for month and date inputs", () => {
 
 // Ashby listed "Pennsylvania State University" for the school saved
 // as "Pennsylvania State University, University Park", and no
-// spelling tried matched it (report 9027045f, 2026-10-28). The name before
+// spelling tried matched it. The name before
 // the campus is tried after the full name.
 test("a school saved with its campus is also tried by its name alone, after the full name", () => {
   const schooled = profileSchema.parse({
@@ -552,7 +552,7 @@ test("a school is also tried by its other whole names, never by a sibling's", ()
 });
 
 test("a stripped job description holds no semicolon, which SmartRecruiters refuses", () => {
-  // LLNL's SmartRecruiters form, 2026-11-02: "This field cannot contain
+  // one employer's SmartRecruiters form: "This field cannot contain
   // following characters: ;" under the experience Description.
   const worked = { ...profile, work: [{ organization: "Pixelforge", title: "Founder", location: "", startDate: "2025-03", endDate: "", details: "Built the platform; shipped via CI/CD ; added OAuth." }] };
   assert.deepEqual(canonicalValues("description_stripped", worked, { collection: "experience", index: 0 }), ["Built the platform, shipped via CI/CD, added OAuth."]);
@@ -560,18 +560,18 @@ test("a stripped job description holds no semicolon, which SmartRecruiters refus
 });
 
 test("a phone's type is offered in the wordings lists use, personal first", () => {
-  // NGC's Workday (report cfbf90ad, 2026-11-02): "Business Mobile" and
+  // one employer's Workday: "Business Mobile" and
   // "Personal Mobile" listed, and "Mobile" picked neither.
   const values = canonicalValues("phone_type", { ...profile, phoneDeviceType: "Mobile" });
   assert.equal(values[0], "Mobile");
   assert.ok(values.indexOf("Personal Mobile") > 0);
-  // NVIDIA's Workday lists only "Home" and "Home Cellular" (2026-11-04).
+  // one employer's Workday lists only "Home" and "Home Cellular".
   assert.ok(values.includes("Home Cellular"));
   assert.ok(!values.includes("Home"));
   assert.ok(!values.includes("Business Mobile"));
 });
 
-// L3Harris's SuccessFactors Veteran Status (report a172edaa, 2026-11-07):
+// one employer's SuccessFactors Veteran Status:
 // "No" took the list's "No Selection" by its first word, and its own
 // "Not Protected Veteran (OFCCP)" matched none of the wordings tried.
 test("a veteran list's OFCCP wording is matched, and No Selection never is", () => {

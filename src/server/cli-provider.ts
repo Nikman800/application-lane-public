@@ -48,7 +48,7 @@ export function cliFailure(command: string, stdout: string, stderr = ""): CliFai
   // Codex repeats the prompt it was given after a line reading "user", and
   // a prompt holds the posting and the profile: "sign in" or
   // "authentication" there is no error, yet it marked every failure on such
-  // a posting as a lapsed login (2026-10-14). Only what Codex said itself is
+  // a posting as a lapsed login. Only what Codex said itself is
   // read, and its error lines first.
   const own = messages
     .join("\n")
@@ -60,8 +60,7 @@ export function cliFailure(command: string, stdout: string, stderr = ""): CliFai
   // What it said, briefly, so the card shows the real cause.
   const said = reason.replace(/\s+/gu, " ").trim().slice(0, 140);
   const quoted = said ? ` ("${said}")` : "";
-  // ("You hit your spend cap set by the owner of your workspace", Codex,
-  // 2026-10-30: asked again for every draft.)
+  // ("You hit your spend cap set by the owner of your workspace", Codex: asked again for every draft.)
   if (/usage limit|rate.?limit|quota|weekly limit|hit your limit|spend(ing)? cap|limit (reached|exceeded)|out of.*usage/iu.test(reason))
     return new CliFailure("usage-limit", "usage limit reached");
   if (/not logged in|login|log in|sign.?in|unauthenticated|authentication|invalid.*(token|credential)/iu.test(reason))
@@ -110,7 +109,7 @@ function run(
     child.on("close", (code) => {
       if (code === 0) done(stdout);
       // Stopped at its time limit, it said only its opening lines: the
-      // limit is the reason, not those (Intuit, 2026-10-17).
+      // limit is the reason, not those.
       else if (signal.aborted) fail(signal.reason);
       else {
         fail(cliFailure(command, stdout, stderr));
@@ -188,7 +187,7 @@ export async function cliComplete(
         "-c",
         'web_search="disabled"',
         // Codex's standard tier: the fast one cost more of the weekly limit
-        // for every draft and check (2026-11-02).
+        // for every draft and check.
         "-C",
         directory,
         ...(cliOwnModel(model) ? [] : ["-m", model]),

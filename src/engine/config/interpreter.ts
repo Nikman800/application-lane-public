@@ -65,8 +65,8 @@ export type InterpreterOptions = {
   // A value the site pre-filled (from a parsed resume) that may be replaced.
   isReplaceable?: (element: Element) => boolean;
   // A site value the rule found already right: checked, so the review does
-  // not ask the applicant to check it (AMD's iCIMS "Did You Graduate?" and
-  // dates, 2026-11-07).
+  // not ask the applicant to check it (one employer's iCIMS "Did You Graduate?" and
+  // dates).
   onConfirmed?: (element: Element) => void;
   // Reads the site's own list of a field's answers from a rule's
   // optionsSource (fetchSiteOptions); undefined when it cannot.
@@ -510,17 +510,16 @@ async function waitFor(
     // SuccessFactors lists show a hundred options, alphabetically, and load
     // the next as the list is scrolled to its end; typing does not narrow
     // them. "Pennsylvania State University-University Park" and
-    // "Computer Science" were never drawn, so never picked (Expand Energy,
-    // report 8f198b5b, 2026-10-29).
+    // "Computer Science" were never drawn, so never picked.
     if (!removed && (options.now || Date.now)() - nudged >= 400) {
       nudged = (options.now || Date.now)();
       // As the applicant scrolls: the last option is brought into view, and
       // each box around it that scrolls is taken to its end and told so.
       // One box told once loaded a school list's next page but never Area
-      // of Study's (report 8f198b5b).
+      // of Study's.
       // Workday's search results are a virtual list that draws only the rows
-      // in view: NVIDIA's drew two of five, and "Computer Science", third,
-      // was never on the page to pick (2026-11-04). A screen at a time, back
+      // in view: one employer's drew two of five, and "Computer Science", third,
+      // was never on the page to pick. A screen at a time, back
       // to the top after the end, as the applicant would scroll it.
       for (const grid of root.querySelectorAll<HTMLElement>('[data-automation-id="activeListContainer"].ReactVirtualized__Grid, .ReactVirtualized__List[role="listbox"]')) {
         if (grid.scrollHeight <= grid.clientHeight + 4) continue;
@@ -773,8 +772,7 @@ function labeledFallback(
 const searchedDropdowns = new WeakMap<Element, "selected" | "no-match">();
 
 // A Select2 list that has no options until something is typed: its choices
-// come from the site's server (Avature's University/School, Intuit
-// 2026-10-17). Typing "Pennsylvania State University, University
+// come from the site's server (Avature's University/School, an employer). Typing "Pennsylvania State University, University
 // Park" found nothing, so the second school was left empty.
 function remoteSelect2(target: Element) {
   const container = target.closest(".select2-container") || target.querySelector(".select2-container");
@@ -788,7 +786,7 @@ function remoteSelect2(target: Element) {
 
 // A search list the general fill meets outside a site rule's paths (iCIMS'
 // job rows: each job's Country, India not on the unfiltered first page,
-// AMD 2026-11-07): searched and picked as a rule would.
+// an employer): searched and picked as a rule would.
 export function searchListDropdown(
   target: Element,
   values: string[],
@@ -832,7 +830,7 @@ function dismissPopup(element: Element) {
   if (!control || control.getAttribute("aria-expanded") === "false") return;
   // A box that keeps whatever is typed (SmartRecruiters' Title and Company,
   // components marked allowcustomvalues) takes Escape as "discard": the
-  // typed title was cleared and the entry refused (2026-11-04). Its list is
+  // typed title was cleared and the entry refused. Its list is
   // closed by leaving it instead.
   let host = (control.getRootNode() as ShadowRoot).host as Element | undefined;
   for (let depth = 0; host && depth < 3 && !host.hasAttribute("allowcustomvalues"); depth++)
@@ -852,8 +850,8 @@ function dismissPopup(element: Element) {
 }
 
 // A list button whose rule opened its list and found nothing to pick is
-// closed, not left over the form: NVIDIA's Phone Device Type stayed open
-// after "Mobile" matched none of "Home" and "Home Cellular" (2026-11-04).
+// closed, not left over the form: one employer's Phone Device Type stayed open
+// after "Mobile" matched none of "Home" and "Home Cellular".
 // Its own Escape, then a press on the page as Workday's rules make.
 async function closeOpenedList(element: Element, options: InterpreterOptions) {
   if (!element.matches('button[aria-haspopup="listbox"]') || element.getAttribute("aria-expanded") !== "true") return;
@@ -1052,9 +1050,9 @@ async function fillFallback(
   const execute = (request: MethodRequest) =>
     executor({ ...request, guardElement: element });
   if (element.matches('button[aria-haspopup="listbox"]')) {
-    // A dropdown already showing an acceptable answer is left as it is: Jabil's
+    // A dropdown already showing an acceptable answer is left as it is: one employer's
     // Degree showed "Masters" and its list was opened for nothing, and left
-    // open (2026-10-16).
+    // open.
     // (A degree in any of its wordings: an education row's fallback has only
     // the profile's "Masters of Science".)
     const shown = element.textContent?.trim() || "";
@@ -1107,7 +1105,7 @@ async function fillFallback(
     // Nothing to choose: the list this opened is closed again, from its own
     // button, rather than left over the form. Workday's stays open after
     // that click; a press on the page around it closes it, as the site's own
-    // rules do (Booz Allen's Veteran Status, report 424d47c0, 2026-11-02).
+    // rules do (one employer's Veteran Status).
     if (opened && element.getAttribute("aria-expanded") === "true")
       await execute({ element, globals, method: "click", signal: options.signal, values: [] });
     const stillOpen = () => available.some((candidate) => candidate.isConnected && (candidate as HTMLElement).getClientRects().length > 0);
@@ -1182,7 +1180,7 @@ async function fillFallback(
     // not options, and render a moment after the click or the search.
     // A combobox that names its list chooses only from that one: another
     // field's list left open over the form gave Veteran Status Gender's
-    // "No Selection" (L3Harris, report 92f363c7).
+    // "No Selection".
     const own = ownLists(element);
     const listed = async () => {
       let available: Element[] = [];
@@ -1248,10 +1246,9 @@ async function fillFallback(
       signal: options.signal,
       values: [],
     });
-    // SuccessFactors checks a list only as focus leaves it: L3Harris's
+    // SuccessFactors checks a list only as focus leaves it: one employer's
     // Veteran Status, the last list of its section, kept "Veteran Status is
-    // required" beside the pick, and the fill picked it again and again
-    // (2026-11-07).
+    // required" beside the pick, and the fill picked it again and again.
     // It checks only with its list closed (its _onBlur), and the list stays
     // open after a pick: Escape closes it, keeping the pick.
     if (chosen && element.matches('input.rcmpaginatedselectinput[role="combobox"]')) {
@@ -1262,7 +1259,7 @@ async function fillFallback(
       }
       await run("blur");
       // In a tab in the background the box may hold no focus to lose, and
-      // no blur came (L3Harris, 2026-11-07): its own blur handler is called
+      // no blur came: its own blur handler is called
       // with one.
       element.dispatchEvent(new FocusEvent("blur"));
     }
@@ -1291,9 +1288,9 @@ function flattenGroups(selectors: InputSelector[]): InputSelector[] {
   });
 }
 
-// The links for a form's Websites section: the profile's LinkedIn, GitHub
-// and website, less any the form asks for in a box of its own (its LinkedIn
-// field), so each is given once (the applicant, 2026-10-15).
+// The links for a form's Websites section: the profile's an employer, GitHub
+// and website, less any the form asks for in a box of its own (its an employer
+// field), so each is given once (the applicant).
 function linksToShare(config: SiteConfig, profile: Profile, root: Document, context: Document | Element): string[] {
   const asked = (keys: string[]) =>
     config.inputSelectors.some(([name, choices]) =>
@@ -1539,9 +1536,9 @@ function matchHistoryRows(
   );
   // Without any entry of the applicant's, the site's own rows still say
   // which is which when each profile row's school or employer is shown
-  // exactly, in a row of its own: AMD's iCIMS redrew two schools the other
+  // exactly, in a row of its own: one employer's iCIMS redrew two schools the other
   // way round, and paired by position each took the other's graduation and
-  // "school not listed" box (2026-11-07). A parser's partial guesses (one
+  // "school not listed" box. A parser's partial guesses (one
   // school shown twice, another nowhere) still give way to profile order.
   const exactRows = new Set(exact.map((pair) => pair.row));
   const exactScopes = new Set(exact.map((pair) => pair.scope));
@@ -1658,7 +1655,7 @@ function isForbiddenClick(
 // control inside it: only the field's own lock counts, and the field is
 // judged on its own. Judged by every control within, one answer the
 // applicant gave by hand anywhere on the page refused it, and each list was
-// left open over the form (Citi, report aad8b81e, 2026-10-27).
+// left open over the form.
 export function clicksAround(element: Element, field: Element | undefined, method: string | undefined, event?: string) {
   return Boolean(field && field !== element && element.contains(field)) &&
     (["click", "reactClick"].includes(method || "") || event === "click");
@@ -1666,12 +1663,10 @@ export function clicksAround(element: Element, field: Element | undefined, metho
 
 // A list's empty choice ("No Selection") is no answer, though "No" begins
 // it: SuccessFactors' Hispanic rule, matching an "Ethnicity/Race" list,
-// picked it for the answer No and kept the race rule out (WEC Energy Group,
-// report 6c3b81b6, 2026-10-15).
+// picked it for the answer No and kept the race rule out.
 // The field itself is never one: a click that opens its list targets it,
 // and Rippling's dropdowns show "Select..." until answered, so their
-// Hispanic and Veteran questions were never opened (report ee348448,
-// 2026-11-01).
+// Hispanic and Veteran questions were never opened.
 function placeholderOption(target: Element, values: string[], base?: Element): boolean {
   if (target === base) return false;
   const text = normalize(target.textContent || "");
@@ -1681,8 +1676,7 @@ function placeholderOption(target: Element, values: string[], base?: Element): b
 
 // An option in a list another control owns is not this control's to pick.
 // SuccessFactors draws each picklist's options in one overlay, and a list
-// that came late for the field before took the next field's pick (report
-// b3028a5e, 2026-10-14).
+// that came late for the field before took the next field's pick.
 // The lists a field names as its own (aria-owns, aria-controls).
 function ownLists(element: Element): string[] {
   return `${element.getAttribute("aria-owns") || ""} ${element.getAttribute("aria-controls") || ""}`.split(/\s+/).filter(Boolean);
@@ -1690,7 +1684,7 @@ function ownLists(element: Element): string[] {
 
 // The control a field's own steps opened a list from: an "If other" box's
 // rule opens the list beside it to choose its "Other" (SuccessFactors), and
-// that list is then the box's to pick from (Expand Energy, 2026-10-29).
+// that list is then the box's to pick from.
 const openedFor = new WeakMap<Element, Element>();
 
 function ownedElsewhere(target: Element, base: Element): boolean {
@@ -1700,7 +1694,7 @@ function ownedElsewhere(target: Element, base: Element): boolean {
   if (opened && ownLists(opened).includes(list.id)) return false;
   // A field that names its list takes no option from another: one left open
   // by a field the site has since rebuilt has no owner left on the page, and
-  // its "Malaysia" was picked for Gender's "M" (L3Harris, report 92f363c7).
+  // its "Malaysia" was picked for Gender's "M".
   const own = ownLists(base);
   if (own.length) return !own.includes(list.id);
   const owner = [...(list.getRootNode() as Document | ShadowRoot).querySelectorAll("[aria-owns],[aria-controls]")].find((element) =>
@@ -1710,9 +1704,9 @@ function ownedElsewhere(target: Element, base: Element): boolean {
 
 // The list a button has open (aria-expanded, aria-controls), loaded and
 // unchanged for a second, holds no option the step is waiting for: the rest
-// of the wait finds nothing more. Each miss cost KLA's Workday form its full
+// of the wait finds nothing more. Each miss cost one employer's Workday form its full
 // four seconds (degree, levels, demographics), so a page took minutes
-// (report 6d839e90, 2026-11-04). The step then fails as it would have.
+//. The step then fails as it would have.
 function openListSettled(root: Document, options: InterpreterOptions) {
   let seen = "";
   let since = 0;
@@ -1737,7 +1731,7 @@ function openListSettled(root: Document, options: InterpreterOptions) {
 // Steps that take the site's first entry for a value: a skill's other names
 // (skill-names.ts) are only for when its own finds nothing, and the library's
 // "Python (Programming Language)", listed first, is not passed over for a
-// stray "python" further down (2026-11-04).
+// stray "python" further down.
 const siteOrdered = new WeakSet<object>();
 
 function heldBy(field: Element, values: string[]) {
@@ -1798,8 +1792,8 @@ async function runAction(
             options,
             action.removed ? undefined : (element) => !ownedElsewhere(element, base) && !placeholderOption(element, values, base),
             // Only a list a button opens: a search's list stays as it was
-            // until its answer comes, and Sonos's skills answered after a
-            // second, past this wait (2026-11-04).
+            // until its answer comes, and one employer's skills answered after a
+            // second, past this wait.
             action.removed || !base.matches('button[aria-haspopup="listbox"]') ? undefined : openListSettled(root, options),
           )
         : actionPaths.flatMap((path) =>
@@ -1818,13 +1812,11 @@ async function runAction(
     // An option that is one of the values, whatever its case, is taken over
     // a looser match of a value before it, the earliest value first: the
     // generic "Bachelor" chose "Bachelor in Business Administration" by its
-    // start while "Bachelor of Science" was listed (Expand Energy,
-    // 2026-10-29). Value order still decides among exact ones ("fluent"
+    // start while "Bachelor of Science" was listed. Value order still decides among exact ones ("fluent"
     // before "Intermediate", both listed). Punctuation does not count:
     // "Pennsylvania State University-University Park" is the
     // profile's "…University, University Park", and the list's "…University
-    // University Park Dietetic Internship", before it, is not (report
-    // 8f198b5b).
+    // University Park Dietetic Internship", before it, is not.
     if (values.length > 1 && !selfOnly && !siteOrdered.has(action)) {
       const plain = (text: string) => text.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
       const rank = (element: Element) =>
@@ -1844,12 +1836,12 @@ async function runAction(
     await sleep(action.time, options.signal);
   }
   // A skill the search's own Enter already added (one match is taken at once:
-  // Axiom Space's "PyTorch") is not clicked again: a second click takes it
-  // back off (2026-11-04). Judged once its option has appeared, when the
+  // one employer's "PyTorch") is not clicked again: a second click takes it
+  // back off. Judged once its option has appeared, when the
   // site's own pick has been made.
   // Only the pick itself: the step after it that closes the list (a press on
   // the page) still runs, or the list stayed open over the form (Axiom
-  // Space, 2026-11-04).
+  // Space).
   if (siteOrdered.has(action) && target !== base &&
       target.closest('[role="listbox"],[role="option"],[data-automation-id="activeListContainer"],[data-automation-activepopup="true"],[data-automation-id="promptOption"]') &&
       heldBy(base, values)) return true;
@@ -1972,8 +1964,8 @@ export async function interpretConfig(
       if ((request.method === "click" || request.method === "reactClick" || (request.method === "event" && request.action?.event === "click")) &&
           request.element.matches('option,[role="option"]') && request.values.length &&
           // Its name as shown counts too: Workday names each search result
-          // with its state ("Data Science not checked"), and KLA's field of
-          // study was never picked (2026-11-03).
+          // with its state ("Data Science not checked"), and one employer's field of
+          // study was never picked.
           ![labelOf(request.element), normalize(request.element.textContent || "")].some((label) =>
             Boolean(label) && matchOption(request.values, [{ label, value: request.element.getAttribute("value") || label }], globals)))
         throw new Error("The configured option does not exactly match a confirmed value.");
@@ -2047,13 +2039,12 @@ export async function interpretConfig(
               ? "experience"
               : undefined;
         // Lists the profile keeps as plain values, one row each: languages,
-        // and the links a form's Websites section takes (Workday, report
-        // f062d50f, 2026-10-15).
+        // and the links a form's Websites section takes (Workday).
         const list = key === "language" ? "languages" : key === "websites" ? "websites" : undefined;
         if (list && selector.array && selector.inputSelectors) {
           // A link the page already holds (the site read it from the resume)
-          // is not added again, and a row holding one is left as it is: KLA's
-          // Workday listed GitHub twice (report 5c049c5a, 2026-11-02).
+          // is not added again, and a row holding one is left as it is: one employer's
+          // Workday listed GitHub twice.
           const linkKey = (value: string) => value.trim().toLowerCase().replace(/^[a-z][a-z0-9+.-]*:\/\//, "").replace(/^www\./, "").replace(/\/+$/, "");
           const held = (row: Element) =>
             [...row.querySelectorAll<HTMLInputElement>('input:not([type="hidden"]):not([type="checkbox"]):not([type="radio"])')].map((input) => input.value).filter((value) => value.trim());
@@ -2157,7 +2148,7 @@ export async function interpretConfig(
                   context,
                 ))
                   // A fallback can name an ancestor of an already found row
-                  // (Citi's education section); it is still the same entry.
+                  // (one employer's education section); it is still the same entry.
                   if (!found.some((row) => row === scope || row.contains(scope) || scope.contains(row))) found.push(scope);
             for (const scope of detected)
               if (
@@ -2189,11 +2180,10 @@ export async function interpretConfig(
           // Oracle shows the entries already saved to the candidate's profile
           // as tiles with no fields: the title and subtitle name the job and
           // employer (or major) and its dates. A profile row a tile already
-          // names is kept, not added again (egug.fa.us2.oraclecloud.com,
-          // report e5a51b64).
+          // names is kept, not added again (egug.fa.us2.oraclecloud.com).
           // Each piece of text on its own: Workable's cards put "Title" and
           // "Software Engineer Intern" in elements with no space between
-          // them (report c98cf17c, 2026-10-31).
+          // them.
           const tileText = (tile: Element) => {
             const pieces: string[] = [];
             const walker = tile.ownerDocument.createTreeWalker(tile, NodeFilter.SHOW_TEXT);
@@ -2207,7 +2197,7 @@ export async function interpretConfig(
           // editor first in its list, and the confirmation, by position, named
           // the saved MSU card instead. Nothing of Penn State's went in, the
           // editor was never saved, and MSU's name reached it from the page's
-          // first school (report bb39258c, 2026-10-31).
+          // first school.
           knownRows.push(...savedTileElements.filter((tile) => !tile.querySelector('input:not([type="hidden"]),textarea,select')));
           const saved = new Set(
             rows.flatMap((row, index) => {
@@ -2216,9 +2206,9 @@ export async function interpretConfig(
               const organization = plainText(row.organization);
               const year = row.startDate?.match(/\d{4}/)?.[0];
               // The same school or employer from the same year is that row,
-              // however the tile names the subject: Nokia's tile said "Data
+              // however the tile names the subject: one employer's tile said "Data
               // Science" for the profile's "M.S. Data Science, Analytics &
-              // Engineering", and the degree was added again (report 1f68e4f9).
+              // Engineering", and the degree was added again.
               return savedTiles.some(
                 (tile) =>
                   (Boolean(subject) &&
@@ -2237,7 +2227,7 @@ export async function interpretConfig(
           // cut-off pass left open (SmartRecruiters' second school, its fields in
           // shadow roots no match could read) went by page order to the saved
           // first school, the second was added again, and the open one was
-          // never saved (report a8c856cd, 2026-11-05).
+          // never saved.
           if (saved.size && existingScopes.length) {
             const unsaved = rows.map((row, index) => ({ row, index })).filter(({ index }) => !saved.has(index));
             const rematched = matchHistoryRows(collection, unsaved.map(({ row }) => row), existingScopes, (element) =>
@@ -2340,10 +2330,10 @@ export async function interpretConfig(
                   confirmed;
               }
               // The confirmation is index-keyed, and with the page's rows
-              // matched out of order it names one of them: Westinghouse's
+              // matched out of order it names one of them: one employer's
               // SuccessFactors had Penn State's row first, MSU was added as the
               // first entry, and MSU's school went into Penn State's row before
-              // the new one was drawn (report cc40f1fb). Only a new row will do.
+              // the new one was drawn. Only a new row will do.
               if (scope && knownRow(scope)) scope = undefined;
               // Accept a newly rendered row that structural detection can see.
               if (!scope) {
@@ -2396,7 +2386,7 @@ export async function interpretConfig(
             // What the row's own rules left is still the row's: a page-wide
             // rule (a second address's State and City) put the applicant's
             // home in Penn State's row, and its school list then held only
-            // Arizona's (Expand Energy, 2026-10-29).
+            // Arizona's.
             for (const control of scope.querySelectorAll('input,select,textarea,[role="combobox"],[role="listbox"],button[aria-haspopup="listbox"]'))
               used.add(control);
             // Kept for diagnosis (issue reports): what each row could not do.
@@ -2425,7 +2415,7 @@ export async function interpretConfig(
       );
       // A current job has no end date, so one the site filled in from the
       // resume is another job's ("05/27/2025" under a job still held, on
-      // Westinghouse's SuccessFactors, report cc40f1fb): it is emptied.
+      // one employer's SuccessFactors): it is emptied.
       const emptiesEnd =
         !values.length &&
         /^(end|to)(_date)?(_|$)/.test(key) &&
@@ -2485,7 +2475,7 @@ export async function interpretConfig(
       // A candidate named exactly as one of the values is taken over a looser
       // match of a value before it, the earliest value first: "US" began "US
       // Virgin Islands" where "United States" was listed (SmartRecruiters'
-      // phone country, Syngenta, 2026-11-02).
+      // phone country, an employer).
       const named = (candidate: Element) =>
         normalize(candidate.getAttribute("label") || candidate.getAttribute("aria-label") || (candidate.textContent || "").trim());
       const exactly = values.length > 1
@@ -2548,7 +2538,7 @@ export async function interpretConfig(
       // A name asked of someone else is not the applicant's: Greenhouse's
       // "last name" label match filled "If you were referred by a current
       // Built employee, please list their first and last name" with the
-      // applicant's (report 9b657c26, 2026-10-31).
+      // applicant's.
       if (/^(?:first_name|last_name|full_name|middle_name|preferred_first_name|preferred_last_name|preferred_name)$/.test(key.replace(/_[234]$/, "")) &&
           /\brefer(?:red|ral|rer|ring)?\b|\bemergency\b|\btheir\b|\b(?:spouse|relative|recruiter|hiring manager)\b/i.test(questionText(element))) {
         lastReason = "This asks for someone else's name, not the applicant's.";
@@ -2625,7 +2615,7 @@ export async function interpretConfig(
             current.length - value.trim().length <= 2);
         // Not when the site itself calls it invalid: Microsoft's form showed
         // the profile's address while its own state held none ("Address
-        // cannot be left blank"), and it was never typed again (2026-11-07).
+        // cannot be left blank"), and it was never typed again.
         if (current && values.some(same) && element.getAttribute("aria-invalid") !== "true") {
           options.onConfirmed?.(element);
           results.push({ key, status: "skipped", reason: "The site's value is already right." });
@@ -2668,9 +2658,9 @@ export async function interpretConfig(
         options.onField?.(element, key);
         // A list already showing one of its answers (a second fill of the
         // step) is not opened again: Workday's Degree was left open over the
-        // form (Jabil, report f0a42a0f, 2026-10-15). Checked before any way
+        // form. Checked before any way
         // of opening it: the search-dropdown handling pressed Workday's Degree
-        // button showing "Masters" (2026-10-16).
+        // button showing "Masters".
         const showing = !isTag(element, "input") && !isTag(element, "textarea") ? normalize(textValue(element) || "") : "";
         if (!selector.everyValue && showing && selector.actions?.some((action) => action.path) && values.some((value) => normalize(value) === showing)) {
           options.onConfirmed?.(element);
@@ -2798,8 +2788,8 @@ export async function interpretConfig(
               try {
                 await runActions([first, ...values.filter((value) => value !== first)]);
                 // Workday adds the pick a moment after its option is clicked;
-                // judged at once, KLA's "Data Science" read as not found and
-                // its search was cleared (2026-11-03).
+                // judged at once, one employer's "Data Science" read as not found and
+                // its search was cleared.
                 for (let waited = 0; studyField && !holdsPick(values) && waited < 1_500; waited += 100)
                   await sleep(100, options.signal);
                 if (studyField && !holdsPick(values)) {
@@ -2812,8 +2802,7 @@ export async function interpretConfig(
                 if (isAbortError(error)) throw error;
                 // A pick made by the search itself (its Enter chose the one
                 // match) is a pick: the next wording's first step cleared it,
-                // and RTX's "Data Science" became "Computer Science" (report
-                // 9b6ea678, 2026-11-02).
+                // and one employer's "Data Science" became "Computer Science".
                 if (pickBox && holdsPick(values)) {
                   picked = true;
                   break;
@@ -2879,7 +2868,7 @@ export async function interpretConfig(
           } else {
             // A list already showing one of its answers (a second fill of the
             // step) is not opened again: Workday's Degree was left open over
-            // the form (Jabil, report f0a42a0f, 2026-10-15).
+            // the form.
             const showing = !isTag(element, "input") && !isTag(element, "textarea") ? normalize(textValue(element) || "") : "";
             if (!selector.everyValue && showing && selector.actions.some((action) => action.path) && values.some((value) => normalize(value) === showing)) {
               results.push({ key, status: "filled" });
@@ -2900,7 +2889,7 @@ export async function interpretConfig(
             // (a second fill pressed nothing for each and waited 3 s), and one
             // searched that left no pick is named for the applicant: the site
             // listed 16 of a profile's first 25 skills, and the other nine went
-            // unmentioned (Cisco, 2026-10-17). Its own wording may add a kind:
+            // unmentioned. Its own wording may add a kind:
             // "Python (Programming Language)".
             const pickBox = selector.everyValue ? element.closest('[data-automation-id="multiSelectContainer"]') : null;
             const held = (value: string) =>
@@ -2953,7 +2942,7 @@ export async function interpretConfig(
           throw new Error("Site did not accept the configured value.");
         // A search whose optional pick found nothing ("No results") leaves
         // its list open, and an open list hides the rest of the form from
-        // the next look at it (Ashby, Talos's Location; nightly 2026-10-02).
+        // the next look at it (Ashby, Talos's Location; nightly).
         const opened = element.matches('[aria-expanded="true"]')
           ? element
           : element.querySelector('[role="combobox"][aria-expanded="true"]');

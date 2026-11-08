@@ -1,8 +1,8 @@
-// Finding jobs to apply for (2026-10-30), from listings that gather many
+// Finding jobs to apply for, from listings that gather many
 // employers' openings: SimplifyJobs' new-grad and internship lists, and the
 // public job boards (Greenhouse, Lever, Ashby) of companies the applicant
 // names. Only these public, read-only listings: never a site whose terms
-// forbid it (LinkedIn, Indeed). What to look for is the applicant's own
+// forbid it (an employer, Indeed). What to look for is the applicant's own
 // (roles, places), drawn from their profile when they ask.
 import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -31,13 +31,13 @@ export function openingKey(url: string): string {
 // Its address follows the applicant's tab through the apply flow (a
 // success page, Workday's "userHome", SmartRecruiters' one-click form), so
 // it is seldom the listing's own, and is matched by more than that
-// (2026-11-07: of the day's submitted openings, only those whose apply page
+// (: of the day's submitted openings, only those whose apply page
 // kept the listing's address were marked tracked).
 export type KnownOpening = { url: string; company?: string; title?: string };
 
 const compact = (text: string) => text.toLowerCase().replace(/[^a-z0-9]+/g, "");
-// "jmfamily" is "JM Family"; "LinkedIn3" is "LinkedIn"; "Intuitive" is
-// "Intuitive Surgical". Generic words do not make two companies one.
+// "jmfamily" is "an employer"; "LinkedIn3" is "an employer"; "an employer" is
+// "an employer Surgical". Generic words do not make two companies one.
 function sameCompany(a: string, b: string): boolean {
   const first = (text: string) => compact(text.split(/[\s,(&-]+/).find((word) => compact(word)) || "");
   const x = compact(a).replace(/\d+$/, "");
@@ -48,7 +48,7 @@ function sameCompany(a: string, b: string): boolean {
   return [[x, head(b)], [y, head(a)]].some(([whole, word]) => word.length >= 3 && whole.startsWith(word));
 }
 
-// Long numbers in an address: a job's own id (AMD's 93894 is short and
+// Long numbers in an address: a job's own id (one employer's 93894 is short and
 // read by its path, Greenhouse's gh_jid, Microsoft's pid, a board's id).
 function jobIds(url: string): string[] {
   let text = url;

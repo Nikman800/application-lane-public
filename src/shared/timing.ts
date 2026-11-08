@@ -13,11 +13,11 @@ export function transitionTiming(
 }
 
 // How long a site rule's pass may run. Workday searches each skill in turn
-// and SuccessFactors waits out each wording its lists lack (report d57dca7e);
+// and SuccessFactors waits out each wording its lists lack;
 // SmartRecruiters' titles, companies, schools and places are typed with real
 // keys and picked from their menus, about 3.5 s each: with three jobs and two
 // schools its pass was cut off a minute in, the second school's end date,
-// description and Save never reached (LinkedIn, 2026-11-05). Others: 60 s.
+// description and Save never reached. Others: 60 s.
 export function configPassTimeout(hostname: string): number {
   return /(^|\.)(myworkday(jobs)?\.com|successfactors\.(com|eu)|sapsf\.(com|eu)|ns2cloud\.com|smartrecruiters\.com)$/.test(hostname) ? 150_000 : 60_000;
 }

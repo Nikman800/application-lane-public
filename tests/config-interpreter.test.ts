@@ -1239,7 +1239,7 @@ test("a search that finds nothing closes its list instead of hiding the page", a
   assert.deepEqual(result, { status: "failed", expanded: "false", restHidden: null, focused: "" });
 });
 
-// Jabil's Workday form (report f0a42a0f, 2026-10-15): a second fill of the
+// one employer's Workday form: a second fill of the
 // step clicked the Degree list open again over its answer and left it open.
 // A list already showing one of its answers is not opened again.
 test("a list already showing its answer is not opened again", async () => {
@@ -1268,7 +1268,7 @@ test("a list already showing its answer is not opened again", async () => {
   assert.deepEqual(result.statuses.map((status: { key: string; status: string }) => [status.key, status.status]), [["preferred_first_name", "filled"]]);
 });
 
-// WEC Energy Group's SuccessFactors form (report 6c3b81b6, 2026-10-15): a
+// one employer's SuccessFactors form: a
 // rule answering "No" took a list's "No Selection", which begins with "no",
 // and kept the race rule from the field. A list's empty choice is no answer.
 test("a list's empty choice is never picked for an answer it merely begins like", async () => {
@@ -1356,7 +1356,7 @@ test("country is filled before the fields it redraws, and in its own place when 
   assert.deepEqual(result.statuses.filter(([key]: string[]) => key === "country"), [["country", "filled"]]);
 });
 
-// Expand Energy's SuccessFactors lists (2026-10-29): an option that is one of
+// one employer's SuccessFactors lists: an option that is one of
 // a rule's values is taken over a looser match of a value before it, and the
 // values' order still decides among exact ones. "Bachelor" had chosen
 // "Bachelor in Business Administration" by its start; taking every exact
@@ -1432,7 +1432,7 @@ test("an exact option beats a looser match, and value order decides among exact 
 });
 
 test("an option named exactly as the answer is taken over one a shorter wording begins", async () => {
-  // SmartRecruiters' phone country (Syngenta, 2026-11-02): "US" began "US
+  // SmartRecruiters' phone country: "US" began "US
   // Virgin Islands", listed before "United States".
   await page.setContent(`<form id="application"><div id="list">
     <div role="option" label="US Virgin Islands">US Virgin Islands</div>
@@ -1460,7 +1460,7 @@ test("an option named exactly as the answer is taken over one a shorter wording 
 });
 
 test("SmartRecruiters' saved experience cards are the profile's rows, not ones to add again", async () => {
-  // Syngenta (report 5232ad5a, 2026-11-02): filled again, the form's saved
+  // an employer: filled again, the form's saved
   // entries counted as none, and every job and school was added twice.
   const parsed = siteConfigSchema.parse(JSON.parse(await readFile("src/engine/config/sites/smartrecruiters.json", "utf8")));
   // Only the experience rule, as plain data for the page.
@@ -1486,7 +1486,7 @@ test("SmartRecruiters' saved experience cards are the profile's rows, not ones t
   assert.deepEqual(clicked, []);
 });
 
-// LinkedIn's SmartRecruiters form (report f3cfe0cf, 2026-11-04): each box of
+// one employer's SmartRecruiters form: each box of
 // an experience entry sits inside its component's shadow root, so none was
 // found, and the entry was saved empty and refused ("Title" required).
 test("SmartRecruiters' experience boxes inside their components' shadow roots are filled before Save", async () => {
@@ -1548,7 +1548,7 @@ test("SmartRecruiters' experience boxes inside their components' shadow roots ar
   assert.ok(save > touched.indexOf("job-title-autocomplete=Founder & Solo Developer"), touched.join(" | "));
 });
 
-// LinkedIn's SmartRecruiters form (2026-11-04): the title was typed, its
+// one employer's SmartRecruiters form: the title was typed, its
 // suggestion list opened, and the Escape that closed the list discarded the
 // typed text, as the component takes Escape in a box that keeps what is typed.
 test("a SmartRecruiters box that keeps typed text keeps it when its list is closed", async () => {
@@ -1584,7 +1584,7 @@ test("a SmartRecruiters box that keeps typed text keeps it when its list is clos
         }, 300);
       });
       // Down highlights the menu's first entry and Enter picks it; Enter
-      // alone picks nothing (the applicant's account, 2026-11-04).
+      // alone picks nothing (the applicant's account).
       let highlighted = null;
       field.addEventListener("keydown", (event) => {
         const first = box.shadowRoot.querySelector('[role="listbox"] [role="option"]');
@@ -1610,7 +1610,7 @@ test("a SmartRecruiters box that keeps typed text keeps it when its list is clos
   assert.deepEqual(kept, ["Founder & Solo Developer", "Founder & Solo Developer"]);
 });
 
-// SmartRecruiters' dates (2026-11-04): a flatpickr month picker inside two
+// SmartRecruiters' dates: a flatpickr month picker inside two
 // shadow roots, its year between two arrows and its months as cells named by
 // their first day. "From" was required and left empty, so no entry saved.
 test("a SmartRecruiters experience date is picked from its month calendar", async () => {
@@ -1662,8 +1662,7 @@ test("a SmartRecruiters experience date is picked from its month calendar", asyn
   assert.deepEqual(dates, ["Jul 2023", "Sep 2024"]);
 });
 
-// L3Harris's SuccessFactors application lives on ns2cloud.com (report
-// a43e721f, 2026-11-04): the rule did not cover that host, so the page was
+// one employer's SuccessFactors application lives on ns2cloud.com: the rule did not cover that host, so the page was
 // filled as a generic form, its sections, resume and cover letter untouched.
 test("SuccessFactors' rule covers an application on ns2cloud.com", async () => {
   const parsed = siteConfigSchema.parse(JSON.parse(await readFile("src/engine/config/sites/successfactors.json", "utf8")));
@@ -1678,13 +1677,13 @@ test("SuccessFactors' rule covers an application on ns2cloud.com", async () => {
   assert.deepEqual(matched, [true, true, false]);
 });
 
-// L3Harris's SuccessFactors Veteran Status (report a172edaa, 2026-11-07):
+// one employer's SuccessFactors Veteran Status:
 // its list words the answer "Not Protected Veteran (OFCCP)", and the rule
 // took "No Selection", which begins with the last wording tried, "No".
 test("SuccessFactors' veteran list takes its Not Protected Veteran entry, never No Selection", async () => {
   const parsed = siteConfigSchema.parse(JSON.parse(await readFile("src/engine/config/sites/successfactors.json", "utf8")));
   const config = { ...parsed, urls: ["https://jobs.example.test/*"], inputSelectors: parsed.inputSelectors.filter(([key]) => key === "veteran") };
-  // As L3Harris draws it: the label inside <font> tags, so the rule's
+  // As an employer draws it: the label inside <font> tags, so the rule's
   // label path misses and the accessible fallback picks; the list checks
   // itself only as focus leaves it.
   await page.setContent(`<div class="RCMFormField rcmFormElement "><font face="Arial"><font face="Arial"><font face="Arial"><label id="574:" for="570:_input" class="rcmFormFieldLabel"><span class="requiredField" aria-hidden="true" role="presentation">*</span>&nbsp;Veteran Status</label><div class="fieldComponentInput"><input aria-label="Veteran Status" type="text" role="combobox" placeholder="No Selection" aria-owns="571:_listSelect" aria-required="true" aria-invalid="true" id="570:_input" class="rcmpaginatedselectinput rcmpaginatedselectitem rcmpaginatedselect_accessible"><div role="alert" class="rcmValidationMsgArea">Veteran Status is required</div></div></font></font></font></div>
@@ -1731,7 +1730,7 @@ test("SuccessFactors' veteran list takes its Not Protected Veteran entry, never 
 });
 
 test("a Workday list opened and left without a pick is closed by a press beside it", async () => {
-  // Booz Allen's Veteran Status (report 424d47c0, 2026-11-02): a second press
+  // one employer's Veteran Status: a second press
   // on its button leaves Workday's list open over the form.
   await page.setContent(`<div data-automation-id="mainContent"><form id="application">
     <label for="vet">Veteran Status</label><button id="vet" type="button" aria-haspopup="listbox" aria-expanded="false">Select One</button>
@@ -1768,7 +1767,7 @@ test("a Workday list opened and left without a pick is closed by a press beside 
 });
 
 test("SmartRecruiters' City box is found by its component's label", async () => {
-  // As Syngenta's form draws it (capture, 2026-11-02): the box sits inside
+  // As one employer's form draws it (capture): the box sits inside
   // the location autocomplete, named only by the components' label.
   const parsed = siteConfigSchema.parse(JSON.parse(await readFile("src/engine/config/sites/smartrecruiters.json", "utf8")));
   const only: unknown = JSON.parse(JSON.stringify({ ...parsed, inputSelectors: parsed.inputSelectors.filter((selector) => selector[0] === "city") }));
@@ -1784,7 +1783,7 @@ test("SmartRecruiters' City box is found by its component's label", async () => 
   assert.equal(result.value, "Lansing");
 });
 
-// SmartRecruiters (report a8c856cd, 2026-11-05): a pass cut off midway left
+// SmartRecruiters: a pass cut off midway left
 // the second school's editor open, its fields in shadow roots no match can
 // read. The next pass saw the first school saved, paired the open editor
 // with it by page order, added the second school again, and never saved the
@@ -1861,7 +1860,7 @@ test("an entry editor left open is finished for the unsaved row, not added again
   assert.equal(result.saved, 1);
 });
 
-// Microsoft's careers form (2026-11-07): the box showed the profile's address
+// Microsoft's careers form: the box showed the profile's address
 // while the site's own state held none ("Address cannot be left blank").
 // Skipped as already right, it was never typed again.
 test("a value that looks right but the site calls invalid is written again", async () => {

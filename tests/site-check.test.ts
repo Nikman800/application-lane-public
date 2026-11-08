@@ -6,7 +6,7 @@ test("an opening's site is known from its address, its host, or the ATS its addr
   assert.equal(siteOfAddress("https://acme.wd5.myworkdayjobs.com/en-US/Careers/job/Remote/Engineer_JR1")?.ats, "Workday");
   assert.equal(siteOfAddress("https://job-boards.greenhouse.io/acme/jobs/123")?.ats, "Greenhouse");
   assert.equal(siteOfAddress("https://jobs.lever.co/acme/123")?.ats, "Lever");
-  // A careers page that embeds Greenhouse names its job ID (Rubrik's).
+  // A careers page that embeds Greenhouse names its job ID.
   assert.deepEqual(siteOfAddress("https://www.example.com/company/careers/departments/job.8267709?gh_jid=8267709"), { ats: "Greenhouse", by: "parameter" });
   // Paccar's names its ATS outright.
   assert.equal(siteOfAddress("https://jobs.example.com/job/Intern/1451916833/?ats=successfactors")?.ats, "SuccessFactors");

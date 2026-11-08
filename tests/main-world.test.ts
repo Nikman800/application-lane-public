@@ -153,7 +153,7 @@ test("uploads a bound artifact through DataTransfer", async () => {
 });
 
 test("an upload the site takes into its own component, once its server answers, is kept", async () => {
-  // SmartRecruiters (LLNL and Syngenta, 2026-11-02): its dropzone clears the
+  // SmartRecruiters: its dropzone clears the
   // file input at once, and names the file in its own files attribute when
   // the upload is answered, about half a second later. Read once at 500 ms,
   // an upload that went in was reported as not finished.

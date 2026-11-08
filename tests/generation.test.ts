@@ -818,7 +818,7 @@ test("codex-cli drafts through codex exec with the CLI's own model and the chose
   assert.ok(call.args.includes("--ignore-rules"));
   assert.ok(call.args.includes("features.shell_tool=false"));
   // The standard tier: the fast one cost more of the weekly limit for every
-  // draft and check (2026-11-02).
+  // draft and check.
   assert.ok(!call.args.some((arg) => /service_tier/.test(arg)));
   assert.match(
     call.input,
@@ -952,7 +952,7 @@ test("Claude's JSON usage-limit error falls back to Codex before the endpoint", 
 });
 
 test("a Codex draft stopped at its time limit says it ran out of time", async (t) => {
-  // Intuit's fill (2026-10-17): Codex was stopped at its limit while the
+  // one employer's fill: Codex was stopped at its limit while the
   // machine was busy, and the notice read "codex exited with an error" with
   // only Codex's opening lines in it.
   const endpoint = await transport(t, () => assert.fail("the endpoint must not be called"));
@@ -990,7 +990,7 @@ test("usage-limited Claude is skipped for subsequent requests while Codex keeps 
   assert.equal((await codex()).count, 2);
 });
 
-// a hosted endpoint, 2026-10-30: "fetch failed" on two fills in three, the
+// a hosted endpoint: "fetch failed" on two fills in three, the
 // connection dropped before any answer, and fine a second later.
 test("a connection dropped before any answer is tried once more", async (t) => {
   let requests = 0;
@@ -1044,8 +1044,8 @@ test("the letter greets the company only by a name the posting writes", () => {
   assert.equal(greet("Application", "Submit your Application."), "");
   // Without a posting, the page around the form names the company.
   assert.equal(
-    greetingCompany({ company: "asm", title: "Software Engineering Intern", description: "", pageText: "Interested in building your career at ASM?" }),
-    "ASM",
+    greetingCompany({ company: "zyx", title: "Software Engineering Intern", description: "", pageText: "Interested in building your career at ZYX?" }),
+    "ZYX",
   );
 });
 
@@ -1060,12 +1060,12 @@ test("a letter drafted without a posting still names the company the page names"
       res.end(JSON.stringify({ choices: [{ finish_reason: "stop", message: { content: JSON.stringify({ resume: ["f1"], answers: [], coverLetter: [{ text: "I build TypeScript interfaces.", factIds: ["f1"] }] }) } }] }));
     });
   });
-  const draft = { ...request(), description: "", company: "asm", pageText: "Create a Job Alert. Interested in building your career at ASM?" };
+  const draft = { ...request(), description: "", company: "zyx", pageText: "Create a Job Alert. Interested in building your career at ZYX?" };
   const narrative = await provider(config, quiet)(draft, profile, signal());
   const input = JSON.parse(sent.messages[1].content);
-  assert.equal(input.job.company, "ASM");
-  assert.match(input.notes.join(" "), /name ASM with the role in the opening sentence/);
-  assert.equal(narrative.coverLetter[0].text, "Dear ASM Hiring Team,");
+  assert.equal(input.job.company, "ZYX");
+  assert.match(input.notes.join(" "), /name ZYX with the role in the opening sentence/);
+  assert.equal(narrative.coverLetter[0].text, "Dear ZYX Hiring Team,");
 });
 
 // No longer skipped where the system has no word list (Windows, a cluster's
@@ -1082,7 +1082,7 @@ test("an ordinary English word opening a sentence is not a claim, a name still i
   assert.deepEqual(unsupportedClaims("I built tests at Second Street Labs.", support, profile), ["Second", "Street", "Labs."]);
 });
 
-// A live application, 2026-10-12: the profile says "reached 76.0%", the draft wrote
+// A live application: the profile says "reached 76.0%", the draft wrote
 // "76%", and the whole answer was left for the applicant.
 test("a figure is the same claim with or without its trailing zero", () => {
   const support = ["Cache hits reached 82.0% at a quarter of the memory budget, with R² 0.50."];
@@ -1099,7 +1099,7 @@ test("a month written out is the same claim as its abbreviation", () => {
   assert.deepEqual(unsupportedClaims("I founded it in June 2025.", support, profile), ["June"]);
 });
 
-// A report, 2026-10-14: "Codex could not draft this (not logged in or
+// A report: "Codex could not draft this (not logged in or
 // authentication expired)" while Codex was logged in. Codex repeats its
 // prompt, and a posting there said "sign in"; that is no error of Codex's.
 test("a CLI failure is read from the CLI's own words, never from the prompt it repeats", async () => {
@@ -1119,7 +1119,7 @@ test("a CLI failure is read from the CLI's own words, never from the prompt it r
   assert.match(expired.message, /please log in again/);
 });
 
-// The Qumulo letter, 2026-10-17: written in one request under a list of
+// The an employer letter: written in one request under a list of
 // rules, it read as a list. The first request now plans which facts answer
 // the posting; drafts are written from the plan, and the better one goes.
 const plan = {

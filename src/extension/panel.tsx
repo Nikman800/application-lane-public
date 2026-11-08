@@ -37,7 +37,7 @@ import {
   type LegalDetailKey,
 } from "../shared/model";
 
-// An education entry's own transcript (2026-11-08): uploaded to the
+// An education entry's own transcript: uploaded to the
 // transcripts folder, and its name kept on the entry, so a form asking for
 // one degree's transcript gets that degree's (shared/transcripts.ts).
 function TranscriptPicker({ value, onChange }: { value?: string; onChange: (name: string | undefined) => void }) {
@@ -350,7 +350,7 @@ function AppIssues({ app }: { app: Application }) {
     <>
       {problems.length > 0 && (
         // Folded by default: a list of varying length above the buttons moved
-        // Fill this step about as it grew (2026-11-04).
+        // Fill this step about as it grew.
         <details className="app-problems" aria-label="Problems to resolve">
           <summary>
             <strong>
@@ -545,8 +545,7 @@ function App() {
   const scanned = useRef(0);
   // The tab just brought to the front, named at once while its page is read:
   // a read takes seconds while a fill runs, and the card meanwhile showed
-  // the tab left behind, its buttons acting on that application
-  // (2026-11-07).
+  // the tab left behind, its buttons acting on that application.
   const [switching, setSwitching] = useState<{ title: string; url: string } | undefined>();
   const scanActive = (attempt = 0) => {
     window.clearTimeout(rescan.current);
@@ -672,7 +671,7 @@ function App() {
       "Marked submitted. Change the stage to undo.",
     );
   // Not applying after all: any fill stops, and the application leaves the
-  // open list as Abandoned (the applicant, 2026-10-31).
+  // open list as Abandoned (the applicant).
   const abandon = (app: { id: string; title: string }) => {
     if (!window.confirm(`Abandon "${app.title}"? Any fill stops; what is on the page stays.`)) return;
     void action(

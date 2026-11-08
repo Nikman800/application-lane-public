@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { loadQuestionnaires, questionnaireAnswers, questionnaireUrls } from "../src/engine/config/workday-questionnaire";
 
-// NVIDIA's questionnaire (2026-11-04), as the page loads it.
+// one employer's questionnaire, as the page loads it.
 const body = {
   id: "2f2764b3a82910064296831695150000",
   questions: [

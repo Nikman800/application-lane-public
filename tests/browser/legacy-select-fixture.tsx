@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 
-// Epic Games' careers form, as reported on 2026-10-14: Greenhouse questions
+// one employer's careers form, as reported on: Greenhouse questions
 // drawn by the site itself. Each label's "for" names no element, labels end
 // in "⁠*⁠:", the dropdowns are an older react-select (the input has
 // no combobox role and an id "react-select-N-input"; the class exposes

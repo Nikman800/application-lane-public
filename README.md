@@ -6,7 +6,6 @@ It never submits anything for you. You review every step, press Next yourself, a
 
 ## Screenshots
 
-<!-- TODO: add the screenshots listed in docs/images/README.md -->
 
 | Side panel | Dashboard |
 | --- | --- |
@@ -103,8 +102,8 @@ npm run lane -- add jobs.txt https://jobs.example.com/apply/123   # queue links,
 npm run lane -- status            # applications by stage, and what needs you
 npm run lane -- failures          # fills that failed, and why (--json for scripts)
 npm run lane -- watch             # print each change as it happens
-npm run lane -- fill notion       # "Fill this step" on that application's tab
-npm run lane -- switch notion     # bring its tab to the front
+npm run lane -- fill acme       # "Fill this step" on that application's tab
+npm run lane -- switch acme     # bring its tab to the front
 npm run lane -- search            # find openings with your saved Find jobs settings
 npm run lane -- search add 1 3    # queue openings by their number
 npm run lane -- ui                # full-screen view: ↑/↓ choose, f fill, s switch, a add links

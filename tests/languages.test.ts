@@ -2,8 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { isFluent, levelChoices, parseLanguage } from "../src/shared/languages";
 
-// The applicant asked for languages in the profile (Workday, report
-// f062d50f, 2026-10-15): one line each, with one level for every skill.
+// The applicant asked for languages in the profile (Workday): one line each, with one level for every skill.
 test("a language line gives its name and one level", () => {
   assert.deepEqual(parseLanguage("English: Native"), { language: "English", level: "native" });
   assert.deepEqual(parseLanguage("Hindi - Fluent"), { language: "Hindi", level: "fluent" });
@@ -24,7 +23,7 @@ test("a languages text box gets each language with how well", async () => {
   assert.equal(ask("Languages"), "English (Native), Hindi (Fluent)");
 });
 
-// Jabil's Workday form (report b5a71768, 2026-10-15): a language row's
+// one employer's Workday form: a language row's
 // Comprehension, Overall, Reading, Speaking and Writing were left, and its
 // numbered scale runs "1 - Beginner" to "5 - Fluent".
 test("a language row's skills take that language's level, in the list's own words", async () => {
@@ -41,7 +40,7 @@ test("a language row's skills take that language's level, in the list's own word
   assert.equal(ask("I am fluent in this language.", 1, "checkbox", ["Yes", "No"]), undefined);
 });
 
-// Carrier's Workday form (report f59d9efd, 2026-10-26) names a language's
+// one employer's Workday form names a language's
 // overall level "All", beside Reading, Speaking and Writing; it was left.
 test("a language row's All takes that language's level", async () => {
   const { profileSchema } = await import("../src/shared/model");

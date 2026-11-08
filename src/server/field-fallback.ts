@@ -314,7 +314,7 @@ export async function writeFieldFallback(
       skipReason ||= "The suggestion was not a valid checkbox value.";
     }
     // A date box takes a date. "N/A" for "Date Of Clearance" (no clearance)
-    // was rejected by the site as invalid (L3Harris, 2026-10-15); left
+    // was rejected by the site as invalid; left
     // empty, it reads as not applicable.
     if (
       value &&
@@ -326,8 +326,7 @@ export async function writeFieldFallback(
     }
     // An optional follow-up to a Yes ("If Yes, what is your relationship to
     // the employee(s)") is left empty: its "N/A" beside a question left
-    // unanswered read as a contradiction (L3Harris, report 726eafd7,
-    // 2026-11-07), and empty it reads as not applying.
+    // unanswered read as a contradiction, and empty it reads as not applying.
     if (value && !field.required && /^(if (yes|so)\b|if you (answered|responded|selected|said|checked) ['"‘’“”]?yes)/i.test(field.label.trim())) {
       value = "";
       skipReason ||= "A follow-up to a Yes; left empty.";

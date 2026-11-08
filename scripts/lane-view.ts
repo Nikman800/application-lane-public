@@ -3,8 +3,7 @@ import { themes, type ThemeName, type ThemeTokens } from "../src/shared/theme";
 // Pieces of the full-screen view (lane.ts ui) that depend only on the width
 // they are drawn in. A line wider than the pane wraps, and the extra lines
 // scroll the top of the screen away: in a half-width Zellij pane the title
-// and the first tabs were gone, leaving "l (37)  find jobs (100)"
-// (2026-11-02).
+// and the first tabs were gone, leaving "l (37)  find jobs (100)".
 
 // The tabs that fit in width, always including the selected one; "‹" and
 // "›" say more are off to either side. The selected tab is shown inverted.
@@ -48,7 +47,7 @@ export function styled(text: string, width: number, style: string): string {
 
 // An opening found by a search, its tracked mark first: at the end of the
 // line it was cut off in a narrow pane, and nothing showed which openings
-// were already applications (2026-11-02).
+// were already applications.
 export function openingLine(
   listing: { company: string; title: string; locations: string[]; postedAt?: number; tracked?: boolean; site?: { ats?: string } },
   ago: (at: number) => string,

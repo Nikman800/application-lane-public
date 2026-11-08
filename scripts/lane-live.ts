@@ -7,7 +7,7 @@ import type { QueueSnapshot } from "../src/shared/model";
 // The live line to the extension, through the backend (src/server/live.ts).
 // Kept (the full-screen view): a line the backend dropped, restarted or not
 // yet back, is opened again every two seconds. The view showed the queue of
-// the moment the backend restarted, and nothing after (2026-11-02).
+// the moment the backend restarted, and nothing after.
 export async function liveLine(
   url: string,
   token: () => Promise<string>,
