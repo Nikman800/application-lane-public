@@ -42,7 +42,7 @@ export async function liveLine(
         });
     });
   await open();
-  const send = (action: string, applicationId?: string) =>
+  const send = (action: string, applicationId?: string, data?: string) =>
     new Promise<{ ok: boolean; error?: string; detail?: string }>((resolve) => {
       if (socket.readyState !== socket.OPEN) return resolve({ ok: false, error: "The backend is not answering. Reconnecting…" });
       const id = randomUUID();
@@ -55,7 +55,7 @@ export async function liveLine(
         results.delete(id);
         resolve(result);
       });
-      socket.send(JSON.stringify({ type: "command", id, action, applicationId }));
+      socket.send(JSON.stringify({ type: "command", id, action, applicationId, ...(data ? { data } : {}) }));
     });
   return {
     get socket() {

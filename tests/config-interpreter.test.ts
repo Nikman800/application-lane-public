@@ -406,6 +406,51 @@ test("runs everyValue actions once per confirmed exact value", async () => {
   assert.equal(result.selected, "TypeScript,Python");
 });
 
+// A pass that ran out of time while the site searched a skill left the typed
+// text in the box; the site committed it when focus moved on, and the change
+// read as the applicant's edit and paused the fill.
+test("a pass ending mid skill search leaves the search box empty", async () => {
+  await page.setContent(`
+    <main data-automation-id="applicationPage">
+      <div data-automation-id="formField-skills">
+        <div data-automation-id="multiSelectContainer"><input placeholder="Search"></div>
+      </div>
+    </main>
+  `);
+  await page.addScriptTag({ content: bundle });
+  const result = await (page.evaluate as any)(
+    async ({ globals, workday }: any) => {
+      const config = {
+        ...workday,
+        inputSelectors: workday.inputSelectors.filter(([key]: [string, unknown]) => key === "skill"),
+      };
+      const profile = {
+        revision: 1, confirmed: true, firstName: "Alex", lastName: "Rivera", email: "alex@example.test",
+        phone: "", city: "", state: "", country: "", address: "", postalCode: "", linkedin: "", website: "",
+        skills: ["Hugging Face Transformers"], facts: [], work: [], education: [], answers: [],
+      };
+      const controller = new AbortController();
+      setTimeout(() => controller.abort(), 800);
+      let outcome = "completed";
+      try {
+        await (window as any).ConfigEngine.interpretConfig(
+          document,
+          "https://acme.wd5.myworkdayjobs.com/en-US/acme/job/skills",
+          config,
+          globals,
+          profile,
+          { signal: controller.signal },
+        );
+      } catch (error) {
+        outcome = (error as Error).name;
+      }
+      return { outcome, value: document.querySelector("input")!.value };
+    },
+    { globals, workday },
+  );
+  assert.deepEqual(result, { outcome: "AbortError", value: "" });
+});
+
 test("adds exactly one repeated row per profile entry before filling", async () => {
   await page.setContent(`
     <form id="application">
@@ -1858,6 +1903,74 @@ test("an entry editor left open is finished for the unsaved row, not added again
   assert.equal(result.added, 0);
   assert.deepEqual(result.editors, [["Penn State", "Data Science"]]);
   assert.equal(result.saved, 1);
+});
+
+// one employer's SmartRecruiters form: the
+// first school's Save was refused and its editor stayed open. The editor
+// path names any open editor, so the second school's row was that one
+// again, and the second school was never added. It is added as its own.
+test("an entry whose Save was refused is not taken for the next entry's row", async () => {
+  await page.setContent(`
+    <form id="application">
+      <button type="button" id="add">Add education</button>
+    </form>
+    <script>{
+      window.added = 0;
+      const field = (host) => { const input = document.createElement('input'); host.attachShadow({ mode: 'open' }).append(input); };
+      document.getElementById('add').addEventListener('click', () => {
+        window.added++;
+        const editor = document.createElement('div');
+        editor.className = 'editor';
+        // Its Save is refused: the editor stays open.
+        editor.innerHTML = '<span class="school"></span><span class="major"></span><button type="button" class="save">Save</button>';
+        document.getElementById('add').before(editor);
+        field(editor.querySelector('.school'));
+        field(editor.querySelector('.major'));
+      });
+    }</script>
+  `);
+  await page.addScriptTag({ content: "globalThis.__name ??= (f) => f;" });
+  await page.addScriptTag({ content: bundle });
+  const result = await page.evaluate(
+    async ({ globals }) => {
+      const profile = {
+        revision: 1, confirmed: true, firstName: "Alex", lastName: "Rivera", email: "alex@example.test", phone: "",
+        city: "", state: "", country: "", address: "", postalCode: "", linkedin: "", website: "", facts: [], answers: [], work: [],
+        education: [
+          { organization: "Penn State", title: "Bachelor of Science", fieldOfStudy: "Data Science", location: "", details: "", startDate: "2018-08", endDate: "2022-05" },
+          { organization: "Virginia Tech", title: "Master of Science", fieldOfStudy: "Computer Science", location: "", details: "", startDate: "2022-08", endDate: "2024-05" },
+        ],
+      };
+      await (window as any).ConfigEngine.interpretConfig(
+        document,
+        "https://jobs.example.test/apply",
+        {
+          ats: "Fixture", urls: ["https://jobs.example.test/*"], urlsExcluded: [], embeddedPaths: [], pathsExcluded: [],
+          containerPath: [".//form[@id='application']"], containerRequired: true, defaultMethod: "default",
+          submitButtonPaths: [], submittedSuccessPaths: [], trackedInputSelectors: [],
+          inputSelectors: [["education", [{
+            array: true,
+            addButtonPath: [".//button[@id='add']"],
+            containerPath: [".//div[@class='editor']"],
+            inputSelectors: [
+              ["school", [".//span[@class='school']/shadow-root/input"]],
+              ["major", [".//span[@class='major']/shadow-root/input"]],
+              ["save", [{ path: [".//button[@class='save']"], method: "click", valueRequired: false }]],
+            ],
+          }]]],
+        },
+        globals,
+        profile,
+      );
+      return {
+        added: (window as any).added,
+        editors: [...document.querySelectorAll(".editor")].map((editor) => [editor.querySelector(".school")!.shadowRoot!.querySelector("input")!.value, editor.querySelector(".major")!.shadowRoot!.querySelector("input")!.value]),
+      };
+    },
+    { globals },
+  );
+  assert.equal(result.added, 2);
+  assert.deepEqual(result.editors, [["Penn State", "Data Science"], ["Virginia Tech", "Computer Science"]]);
 });
 
 // Microsoft's careers form: the box showed the profile's address

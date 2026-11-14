@@ -35,6 +35,15 @@ export function openingKey(url: string): string {
 // kept the listing's address were marked tracked).
 export type KnownOpening = { url: string; company?: string; title?: string };
 
+// Each address an application or submission is known by: where its tab is
+// now (a confirmation page once submitted), the listing it began at, and
+// its posting. one employer's and one employer's listings were offered again once their
+// applications were sent.
+export function knownOpenings(saved: (KnownOpening & { sourceUrl?: string; postingUrl?: string })[]): KnownOpening[] {
+  return saved.flatMap(({ url, sourceUrl, postingUrl, company, title }) =>
+    [...new Set([url, sourceUrl, postingUrl].filter((address): address is string => Boolean(address)))].map((address) => ({ url: address, company, title })));
+}
+
 const compact = (text: string) => text.toLowerCase().replace(/[^a-z0-9]+/g, "");
 // "jmfamily" is "an employer"; "LinkedIn3" is "an employer"; "an employer" is
 // "an employer Surgical". Generic words do not make two companies one.
@@ -55,9 +64,12 @@ function jobIds(url: string): string[] {
   try { text = decodeURIComponent(url); } catch {}
   return [...new Set([
     ...(text.match(/\d{5,}/g) || []),
-    ...(text.match(/\b[JR]R?\d{4,}(?:-\d+)?\b/gi) || []).map((id) => id.toUpperCase()),
+    // Workday's "…Intern_R121996": an underscore before it is no word break.
+    ...(text.match(/(?<![A-Za-z0-9])[JR]R?\d{4,}(?:-\d+)?\b/gi) || []).map((id) => id.toUpperCase()),
     // Workable's "DE75CD20B8".
     ...(text.match(/\/j\/([A-Z0-9]{8,12})\b/g) || []).map((id) => id.slice(3)),
+    // Lever's and Ashby's job UUIDs.
+    ...(text.match(/\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi) || []).map((id) => id.toLowerCase()),
   ])];
 }
 const host = (url: string) => {
@@ -70,8 +82,11 @@ const host = (url: string) => {
 function titleWords(title: string, places: string[]): Set<string> {
   const placeWords = new Set(places.flatMap((place) => place.toLowerCase().split(/[^a-z0-9]+/)).filter(Boolean));
   const skip = /^(summer|fall|spring|winter|20\d\d|january|february|march|april|may|june|july|august|september|october|november|december|to|the|and|of|a|an|in|for|with|at)$/;
+  // A requisition number or season in brackets is no part of the title:
+  // "Data Analyst Intern (73956)" is the listing's "Data Analyst Intern"
+  // (PACCAR).
   return new Set(
-    title.toLowerCase().replace(/engineering/g, "engineer").split(/[^a-z0-9]+/)
+    title.toLowerCase().replace(/[([]\s*(?:[a-z]*\d[\w-]*|(?:summer|fall|spring|winter)\s+20\d\d)\s*[)\]]/g, " ").replace(/engineering/g, "engineer").split(/[^a-z0-9]+/)
       .filter((word) => word && !skip.test(word) && !placeWords.has(word)),
   );
 }
@@ -87,8 +102,16 @@ export function isTracked(listing: { url: string; company: string; title: string
   const ids = jobIds(listing.url);
   return known.some((opening) => {
     if (openingKey(opening.url) === key) return true;
-    if (!opening.company || !sameCompany(opening.company, listing.company)) return false;
     const theirs = jobIds(opening.url);
+    // A job's id on the same site, or a UUID anywhere, is that job whatever
+    // the company was saved as: one employer's Workday application was "sec",
+    // and an employer's Ashby one was named by its board's UUID.
+    // A UUID can be a board's own (Ashby's), so the last one is the job's.
+    const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-/;
+    const ownUuid = (list: string[]) => list.filter((id) => uuid.test(id)).at(-1);
+    if (ownUuid(ids) && ownUuid(ids) === ownUuid(theirs)) return true;
+    if (host(opening.url) === host(listing.url) && ids.some((id) => !uuid.test(id) && theirs.includes(id))) return true;
+    if (!opening.company || !sameCompany(opening.company, listing.company)) return false;
     if (ids.length && theirs.some((id) => ids.includes(id))) return true;
     // Two openings of one site, each named by its own id, are two openings
     // whatever their titles (neurohire's two "Business Data Analyst" jobs).

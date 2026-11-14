@@ -1,12 +1,16 @@
 import { clicksAround, setEngineWait } from "../engine/config/interpreter";
+import { noteSession, showBadge } from "./badge";
+import type { BadgeInfo } from "./badge-info";
 import { setMonthPickerWait } from "../engine/page/month-picker";
 import { fetchSiteOptions } from "../engine/config/options-source";
 import { pickMonth } from "../engine/page/month-picker";
+import { pickTdsDate, tdsDateBox } from "../engine/page/tds-date-picker";
 import { loadQuestionnaires, questionnaireUrls, type QuestionnaireAnswers } from "../engine/config/workday-questionnaire";
 import { adapterFor } from "./adapters";
 import { redactURL, secretName } from "./workspace";
 import { DRAFT_ONLY_NOTE, draftOnlySite } from "../shared/matching";
 import { startRecorder } from "./recorder";
+import { boundSnapshotMarkup } from "./snapshot-markup";
 import { PAGE_TIMER_EVENT } from "../engine/page/timers";
 import { pickOption } from "../shared/answers";
 import { nameVariants } from "../shared/matching";
@@ -19,13 +23,32 @@ import {
   submittedOnPage,
   confirmationInPlace,
   fillDocument,
+  resumeSlotOpen,
   searchSiteList,
 } from "../engine/runtime";
 import {
   requestMainWorld,
-  requestTrustedType,
+  requestTrustedType as sendTrustedKeys,
   authorizeMainWorld,
 } from "../engine/page/bridge";
+
+// Real keys this extension is sending, and for a moment after the last lands:
+// a key event then is its own, whichever box it reaches and whatever the
+// applicant did a moment before. Counted only by the element being typed
+// into, the fill paused on its own keys twice (Salesforce's Workday, a key
+// on "From: Month" after a window switch, and on its export-control list).
+let keysInFlight = 0;
+let keysSettleUntil = 0;
+const ownKeysNow = () => keysInFlight > 0 || performance.now() < keysSettleUntil;
+const requestTrustedType: typeof sendTrustedKeys = async (...args) => {
+  keysInFlight++;
+  try {
+    return await sendTrustedKeys(...args);
+  } finally {
+    keysInFlight--;
+    keysSettleUntil = performance.now() + 400;
+  }
+};
 import {
   ownLabel as nativeOwnLabel,
   fieldWordLimit,
@@ -181,8 +204,10 @@ type Command = {
   session?: string;
   startedAt?: number;
   replaceSiteValues?: boolean;
+  ownWrites?: { label: string; value: string }[];
   section?: string;
   index?: number;
+  groupLoop?: boolean;
   // A config pass limited to these keys, with the documents its upload
   // steps hand to the site (uploads made through a dialog, SuccessFactors).
   onlyKeys?: string[];
@@ -233,6 +258,9 @@ if (!window.__applicationLane) {
   let pausedBy = "";
   let applicationId = "";
   let replaceSiteValues = false;
+  // Values this extension wrote on the application's pages before (see
+  // Application.ownWrites): a field still holding one is not the applicant's.
+  let ownWrites: { label: string; value: string }[] = [];
   // Until when value changes nobody made by hand are the site filling the
   // form from an uploaded resume (set when such an upload is attached).
   let siteFillUntil = 0;
@@ -267,8 +295,13 @@ if (!window.__applicationLane) {
   const userAttention = () =>
     document.hasFocus() &&
     (performance.now() - applicantGesture < attentionSpan || !!applicantControl?.isConnected);
+  // Leaving the page ends their last click or key too: kept, a key of theirs
+  // before they switched away came back to life when the debugger's first
+  // key handed the page focus again, within its few seconds, and that key
+  // (the job's From Month) paused the fill as theirs (Salesforce's Workday).
   window.addEventListener("blur", () => {
     applicantControl = undefined;
+    applicantGesture = -Infinity;
   });
   const trustedKeyEvents = ["keydown", "beforeinput", "input", "change"];
   // A real click the fill itself made on a menu's entry (see trustedChoose),
@@ -298,6 +331,32 @@ if (!window.__applicationLane) {
         event.preventDefault();
         event.stopImmediatePropagation();
         misdirected = true;
+      },
+      true,
+    );
+  // A real click the fill is making on a menu's entry, at a point of the
+  // window, while it is in flight and for a moment after. The debugger
+  // clicks wherever that point is when the press arrives: a menu that
+  // closed or moved in between left another box there, and SmartRecruiters'
+  // Company pick clicked into the City box above it, which paused the fill
+  // as the applicant's "click on City" (Veolia). Such a click, at exactly the fill's point, is kept from the
+  // page and tried again; anywhere else it is the applicant's.
+  let ownClickAt: { x: number; y: number; target: Element; until: number; missed: boolean } | undefined;
+  const ownClickEvent = (event: Event) =>
+    !!ownClickAt &&
+    event.isTrusted &&
+    performance.now() < ownClickAt.until &&
+    /^(pointer|mouse)(down|up)$|^click$/.test(event.type) &&
+    Math.abs((event as MouseEvent).clientX - ownClickAt.x) <= 2 &&
+    Math.abs((event as MouseEvent).clientY - ownClickAt.y) <= 2;
+  for (const type of ["pointerdown", "mousedown", "pointerup", "mouseup", "click"])
+    window.addEventListener(
+      type,
+      (event) => {
+        if (!ownClickEvent(event) || event.composedPath().includes(ownClickAt!.target)) return;
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        ownClickAt!.missed = true;
       },
       true,
     );
@@ -410,7 +469,9 @@ if (!window.__applicationLane) {
     if (element instanceof HTMLInputElement && element.classList.contains("rcmpaginatedselectinput") &&
       /^no selection$/i.test(element.value.trim())) return "";
     const file = fileControls.get(element);
-    if (file) return file.value;
+    // A tracked uploader that lists its file beside an emptied input
+    // (SmartRecruiters' spl-dropzone).
+    if (file) return file.value || currentFileName(element);
     if (isToggleChoice(element)) {
       const pressed = toggleGroup(element).find(
         (button) => button.getAttribute("aria-pressed") === "true",
@@ -425,6 +486,9 @@ if (!window.__applicationLane) {
       return selected ? ownLabel(selected) : "";
     }
     if (element.matches('button[aria-haspopup="listbox"]')) {
+      const chosen = selectedCustomValue(element);
+      if (chosen !== undefined && element.matches('[role="combobox"]') && element.getRootNode() instanceof ShadowRoot &&
+        (element.getRootNode() as ShadowRoot).host.closest("spl-select")) return clip(chosen);
       const value = clip(element.textContent || "");
       return /^(?:select(?: one)?|select[.…]*|choose|--)?$/i.test(value)
         ? ""
@@ -469,6 +533,18 @@ if (!window.__applicationLane) {
           [...(element.files || [])].map((f) => f.name).join(", ") ||
           currentFileName(element)
         );
+    }
+    // TikTok's UD select keeps its search box empty and draws the choice (or
+    // a multiple one's tags) beside it. Read as the empty box, a question its
+    // site rule answered looked unanswered, and a multiple list's choice was
+    // clicked again, which takes it off.
+    if (element instanceof HTMLInputElement && element.classList.contains("ud__select__selector__search__input")) {
+      const selector = element.closest(".ud__select__selector");
+      if (selector) {
+        const chosen = [...selector.querySelectorAll(".ud__select__selector__selectItem, .ud__select__selector__tag")]
+          .map((item) => clip(item.textContent || "")).filter(Boolean);
+        return chosen.join(", ");
+      }
     }
     if ((element.getAttribute("role") === "combobox" && !calendarBox(element)) || element.closest(".pcty-input-select__input") || element.matches(legacyReactSelect)) {
       const accessibleValue = selectedCustomValue(element);
@@ -736,7 +812,8 @@ if (!window.__applicationLane) {
   const placeholder = (value: string) =>
     /^\s*(unspecified|not specified|unknown|n\/?a|none|null|undefined|-+|\.+)\s*$/i.test(value);
   const adoptSiteValue = (record: RecordEntry) => {
-    if ((replaceSiteValues || placeholder(record.last)) && record.protectedBy === "existing value") {
+    const ownWritten = ownWrites.some((entry) => entry.label === record.label && entry.value === record.last);
+    if ((replaceSiteValues || placeholder(record.last) || ownWritten) && record.protectedBy === "existing value") {
       record.protected = false;
       record.protectedBy = undefined;
       record.siteValue = true;
@@ -923,7 +1000,13 @@ if (!window.__applicationLane) {
           record.automationWritten = false;
           record.fillWarning = "The site cleared the value that was filled.";
         } else if (
-          previous?.automationWritten &&
+          // Ours or not as recorded: a value no one typed (typing leaves an
+          // edit lock) that the site wrote over when it redrew the form is
+          // its own. SuccessFactors' resume parser put "UNSPECIFIED" over
+          // the profile's company, its own title and the 1st and the 30th for dates, and
+          // they were kept as the applicant's (PACCAR).
+          previous &&
+          previous.last &&
           previous.element !== element &&
           previous.last !== current &&
           !writePending(previous) &&
@@ -1002,7 +1085,7 @@ if (!window.__applicationLane) {
           record.confirmed = false;
         }
         else if (!engineRelated && !paused &&
-          ((applicationId && element.closest(".RCMFormField")) ||
+          ((applicationId && closestAcrossShadows(element, ".RCMFormField")) ||
             element.closest('[data-automation-id="applicationPage"] [data-automation-id^="formField-"]')) &&
           performance.now() - lastApplicantInput > 2000) {
           // Workday's Autofill with Resume does the same, as its page loads
@@ -1214,6 +1297,8 @@ if (!window.__applicationLane) {
       ...((slots) => (slots.length ? { documentSlots: slots } : {}))([...new Set([...document.querySelectorAll(".attachmentField label")]
         .map((label) => /cover\s*letter/i.test(label.textContent || "") ? "cover" : /\b(resume|cv)\b/i.test(label.textContent || "") ? "resume" : "")
         .filter(Boolean))]),
+      ...(configEngineEnabled && resumeSlotOpen() ? { resumeSlotOpen: true } : {}),
+      ...((folded) => (folded ? { foldedSections: folded } : {}))(document.querySelectorAll('.rcmFormSection button.rcmFormSectionTopBar[aria-expanded="false"]').length),
       canAdvance: Boolean(next),
       atReview,
       addable: fields.length || !configEngineEnabled ? undefined : addableCollections(),
@@ -1250,6 +1335,7 @@ if (!window.__applicationLane) {
       ));
   function human(event: Event) {
     if (writing && !event.isTrusted) return;
+    if (event.isTrusted && ownKeysNow() && ["keydown", "keyup", "keypress", "beforeinput", "input", "change"].includes(event.type)) return;
     // Our own real keystrokes (CDP) are trusted, so this is the one case where
     // a trusted event is not the user's. Telling them apart is safe because we
     // only type while the page lacks the user's attention (no focus, or no
@@ -1421,7 +1507,12 @@ if (!window.__applicationLane) {
     // a date's focus from its Month to its Day as the Month is typed, and the
     // Day was refused, the date left half typed.
     const ourFocus = performance.now() - lastEngineWrite < 3000 && performance.now() - lastApplicantInput > 2000;
-    if (document.activeElement === record.element && !ourFocus) return { reason: "The field currently has focus." };
+    // A box that only kept the focus of an earlier click is not in use: Meta's
+    // Current location was refused for the focus of a click the applicant made
+    // two minutes before. It is theirs while they
+    // have touched the page within ten seconds.
+    const applicantHere = performance.now() - lastApplicantInput < 10_000;
+    if (document.activeElement === record.element && !ourFocus && applicantHere) return { reason: "The field currently has focus." };
     return { record };
   }
   function guard(
@@ -1525,6 +1616,25 @@ if (!window.__applicationLane) {
   // on a press anywhere outside them; neither chooses anything.
   const ripplingSelect = (element: Element) =>
     element.matches('[role="combobox"][aria-haspopup="listbox"]') && Boolean(element.closest('[data-testid="select-controller"]'));
+  // Paylocity's address lines (Address Line 1, and Postal Code outside the
+  // US) are text boxes that suggest addresses as they are typed, not lists:
+  // a combobox naming its "-autocomplete-list". Opened as a list, nothing was
+  // typed (or the box already held the city a résumé parse put there), no
+  // suggestion came, and the line was left empty or holding the city
+  // (Paylocity's address).
+  const paylocityAddressBox = (element: Element): element is HTMLInputElement =>
+    element instanceof HTMLInputElement && element.getAttribute("role") === "combobox" && Boolean(element.id) &&
+    element.getAttribute("aria-controls") === `${element.id}-autocomplete-list` &&
+    element.getAttribute("data-automation-id") === element.id;
+  // Rippling's Location is a text box that asks Google Maps for places as it
+  // is typed (no combobox role: aria-autocomplete="list" and
+  // aria-haspopup="listbox" inside data-testid="location"). Its suggestions are
+  // drawn a second after the text, in a dialog outside the form; the text
+  // alone left that list open and the box unpicked (Rippling's Location).
+  const ripplingLocation = (element: Element): element is HTMLInputElement =>
+    element instanceof HTMLInputElement && element.getAttribute("role") !== "combobox" &&
+    element.getAttribute("aria-autocomplete") === "list" && element.getAttribute("aria-haspopup") === "listbox" &&
+    Boolean(element.closest('[data-testid="location"]'));
   // SuccessFactors' picklists open on a click, not on a press, and draw each
   // option as one menu item link inside it.
   const successFactorsPicklist = (element: Element) =>
@@ -1540,9 +1650,22 @@ if (!window.__applicationLane) {
     element.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", code: "Escape", bubbles: true }));
     pressOutside();
   };
+  // The nearest ancestor matching a selector, looked for past the shadow
+  // roots a control sits in: SuccessFactors' UI5 date picker's input is two
+  // shadow roots inside its RCMFormField, and closest alone never found it.
+  // A date its resume parser rewrote then read as the applicant's edit and
+  // was kept, while the same row's company and title were corrected (PACCAR).
+  function closestAcrossShadows(element: Element, selector: string): Element | null {
+    for (let node: Element | undefined = element, depth = 0; node && depth < 8; depth++) {
+      const found = node.closest(selector);
+      if (found) return found;
+      node = ((node.getRootNode() as ShadowRoot).host as Element | undefined) || undefined;
+    }
+    return null;
+  }
   function inEntryEditor(element: Element): boolean {
     for (let node: Element | undefined = element, depth = 0; node && depth < 8; depth++) {
-      if (node.closest("oc-education-entry, oc-experience-entry")) return true;
+      if (node.closest("oc-education-entry, oc-experience-entry, [data-lane-entry-busy]")) return true;
       node = ((node.getRootNode() as ShadowRoot).host as Element | undefined) || undefined;
     }
     return false;
@@ -1564,8 +1687,12 @@ if (!window.__applicationLane) {
   }
   // An option component whose role="option" is drawn in its own shadow root
   // (SmartRecruiters' spl-select-option), its text slotted from outside.
+  // Entries a list only slots in from the component around it count as its
+  // own: SmartRecruiters' phone Country code list is a <slot> drawing the
+  // spl-select-options of its spl-select.
   function shadowedOptions(list: Element): HTMLElement[] {
-    return [...list.children].filter((child): child is HTMLElement =>
+    const children = [...list.children].flatMap((child) => child instanceof HTMLSlotElement ? child.assignedElements({ flatten: true }) : [child]);
+    return children.filter((child): child is HTMLElement =>
       child instanceof HTMLElement && !child.matches('[role="option"]') && Boolean(deepOption(child)));
   }
   function deepOption(host: Element): HTMLElement | null {
@@ -1610,8 +1737,18 @@ if (!window.__applicationLane) {
     // A link with no address goes nowhere: iCIMS draws every list as an
     // <a role="combobox"> without one, and each job's Country and State were
     // refused as able to navigate.
+    // A button with no form to submit that opens the list it names is a
+    // list: SmartRecruiters' phone Country code is a <button role="combobox">
+    // of no type inside its spl-select's shadow root, where no form reaches,
+    // and was refused as able to submit. One in a form,
+    // or naming no list in the page, is still refused.
+    const formlessList =
+      element instanceof HTMLButtonElement &&
+      !element.form &&
+      element.matches('[role="combobox"][aria-haspopup="listbox"]') &&
+      controlledList(element)?.getAttribute("role") === "listbox";
     if (
-      (element instanceof HTMLButtonElement && element.type !== "button") ||
+      (element instanceof HTMLButtonElement && element.type !== "button" && !formlessList) ||
       element.closest("a[href]")
     )
       throw new Error(
@@ -1628,15 +1765,17 @@ if (!window.__applicationLane) {
     // A combobox that says typing filters its list (aria-autocomplete="list")
     // may hold the answer only behind a search: C3's school list asks its
     // server for what is typed. Searched once, and only after the open list
-    // had no exact option.
-    const typeahead = !ashbyLocation && element instanceof HTMLInputElement &&
+    // had no exact option. An empty box, or one the site filled in itself and
+    // is to be replaced (Higher's address, "22 Mustang Dr").
+    let typeahead = !ashbyLocation && element instanceof HTMLInputElement &&
       element.getAttribute("role") === "combobox" &&
       element.getAttribute("aria-autocomplete") === "list" &&
       (element.getAttribute("aria-controls") || ashbyToggle(element)) &&
-      proposal.expectedValue === "" ? element : undefined;
+      (proposal.expectedValue === "" || record.siteValue) ? element : undefined;
     let searchInput: HTMLInputElement | undefined = ashbyLocation;
     let searchValue: string | undefined;
     let searchWritten = false;
+    let searchCleared = false;
     const changedReason = (): string | undefined => {
       const invalid = invalidCommandReason(command);
       if (invalid) return invalid;
@@ -1650,7 +1789,11 @@ if (!window.__applicationLane) {
       if (searchWritten && searchInput?.value !== searchValue) return "The autocomplete search changed during selection.";
     };
     const unsafeReason = () => changedReason() ||
-      (document.activeElement === element && !ownsFocus ? "The field has focus outside this selection." : undefined);
+      // Only while the applicant is there: a box that kept the focus of an old
+      // click is not in use (Meta's Current location).
+      (document.activeElement === element && !ownsFocus && performance.now() - lastApplicantInput < 10_000
+        ? "The field has focus outside this selection."
+        : undefined);
     const safe = () => !unsafeReason();
     const assertSafe = (message: string) => {
       const reason = unsafeReason();
@@ -1709,7 +1852,8 @@ if (!window.__applicationLane) {
     let picked = false;
     let openingInterrupted = false;
     const interruptOpeningFocus = (event: Event) => {
-      if (event.isTrusted) {
+      // Not the keys this fill types itself (a search typed with real keys).
+      if (event.isTrusted && !(trustedWrite && event.composedPath().includes(trustedWrite))) {
         openingInterrupted = true;
         ownsFocus = false;
       }
@@ -1874,10 +2018,19 @@ if (!window.__applicationLane) {
         writing = true;
         try {
           record.writePendingAt = performance.now();
-          const searched = await requestMainWorld(typeahead!,
-            { applicationId, operation, documentId },
-            { method: "defaultWithoutBlur", values: [searchValue] }, undefined, safe);
-          if (!searched.ok) throw new Error(searched.reason || "The autocomplete search could not be written.");
+          // Oracle's lists (cx-select) take a search only from keys: an
+          // assigned value is read back empty and the list stays unloaded
+          // (Higher's School). Typed with real keys, the box kept
+          // focused for the pick; assigned only where keys cannot be sent.
+          const typed = typeahead!.matches("input.cx-select-input") &&
+            await typeTrusted(command, typeahead!, searchValue, safe, new AbortController().signal, true, false, true);
+          assertSafe("Custom selection paused or superseded.");
+          if (!typed) {
+            const searched = await requestMainWorld(typeahead!,
+              { applicationId, operation, documentId },
+              { method: "defaultWithoutBlur", values: [searchValue] }, undefined, safe);
+            if (!searched.ok) throw new Error(searched.reason || "The autocomplete search could not be written.");
+          }
           searchWritten = true;
           unsearched = listed;
           searchedAt = Date.now();
@@ -1959,8 +2112,28 @@ if (!window.__applicationLane) {
               const allowed = () => !changedReason() && !userAttention();
               const active = () => element.getAttribute("aria-activedescendant") || "";
               const at = (id: string) => options.findIndex((candidate) => candidate.id === id);
+              // A Down can move focus out of the box onto the option itself:
+              // the page focuses it a moment after the key, and the next key
+              // (the Enter that takes it) lands on the option. Held to the
+              // box alone, that Enter was stopped as a stray key and work
+              // authorization stayed empty (Microsoft's careers form). The keys are this write's anywhere in its list
+              // too: the box's wrapper where it holds the list, else the
+              // list while focus is in it.
+              const list = () => document.getElementById(option.id)?.closest('[role="listbox"]') || option.closest('[role="listbox"]');
+              let holder: Element | null = element.parentElement;
+              while (holder && holder !== document.body && !holder.contains(list())) holder = holder.parentElement;
+              const keysTo = (): Element => {
+                const shown = list();
+                if (holder && holder !== document.body && shown && holder.contains(shown)) return holder;
+                return shown && shown.contains(document.activeElement) ? shown : element;
+              };
+              // The page moves focus some 300 ms after the key: the light is
+              // read once it has moved, or the next Down went past the option.
+              const settle = async (before: string) => {
+                for (let waited = 0; waited < 600 && active() === before; waited += 60) await pause(60);
+              };
               writing = true;
-              trustedWrite = element;
+              trustedWrite = keysTo();
               try {
                 record.writePendingAt = performance.now();
                 openingRequested = true;
@@ -1968,21 +2141,27 @@ if (!window.__applicationLane) {
                 acquireOpenedFocus();
                 const target = at(option.id);
                 for (let steps = 0; steps <= options.length + 1 && active() !== option.id && allowed(); steps++) {
-                  await requestTrustedType(element, { applicationId, operation, documentId }, "", 0, keys.signal, allowed, false, at(active()) > target ? -1 : 1, true);
+                  const before = active();
+                  trustedWrite = keysTo();
+                  await requestTrustedType(element, { applicationId, operation, documentId }, "", 0, keys.signal, allowed, false, at(before) > target ? -1 : 1, true);
                   await pause(120);
+                  await settle(before);
                 }
+                trustedWrite = keysTo();
                 if (active() === option.id)
                   await requestTrustedType(element, { applicationId, operation, documentId }, "", 0, keys.signal, allowed, true, 0);
                 else if (window === window.top && allowed()) {
                   // Down moved nothing on the live list: a real click on the
-                  // option, as the applicant would.
-                  option.scrollIntoView({ block: "nearest" });
+                  // option, as the applicant would. The list is
+                  // drawn again as it opens: the option shown now is clicked.
+                  const shown = (document.getElementById(option.id) as HTMLElement | null) || option;
+                  shown.scrollIntoView({ block: "nearest" });
                   await pause(100);
-                  const box = option.getBoundingClientRect();
+                  const box = shown.getBoundingClientRect();
                   if (!box.width || !box.height) throw new Error("The dropdown did not highlight the option. Choose it manually.");
                   // Its list is drawn elsewhere on the page: the click there is
                   // this write's, not the applicant's.
-                  trustedWrite = option.closest('[role="listbox"]') || option.parentElement || element;
+                  trustedWrite = shown.closest('[role="listbox"]') || shown.parentElement || element;
                   await requestTrustedType(element, { applicationId, operation, documentId }, "", 0, keys.signal, allowed, false, 0, false,
                     { x: Math.round(box.left + box.width / 2), y: Math.round(box.top + box.height / 2) });
                 } else throw new Error("The dropdown did not highlight the option. Choose it manually.");
@@ -2163,7 +2342,13 @@ if (!window.__applicationLane) {
             }
             if (!valid(command) || record.protected || !element.isConnected)
               throw new Error("Custom selection was superseded.");
-            if (normalize(valueOf(element)) !== normalize(expected) ||
+            // Oracle's lists keep only the first part of the entry they take:
+            // "323 EAST VETERANS WAY" for "323 EAST VETERANS WAY, TEMPE,
+            // ARIZONA", "+1" for "+1 (United States)".
+            const keptWhole = normalize(valueOf(element)) === normalize(expected) ||
+              (element.matches("input.cx-select-input") && Boolean(valueOf(element).trim()) &&
+                normalize(valueOf(element)) === normalize(expected.split(/[,(]/)[0]));
+            if (!keptWhole ||
               (ashbyLocation && element.getAttribute("aria-expanded") === "true"))
               throw new Error(
                 "The dropdown did not confirm the exact selection. Verify it manually.",
@@ -2176,8 +2361,43 @@ if (!window.__applicationLane) {
             return;
           }
           const listed = options.map((o) => o.textContent || "").join("\n");
+          // A list button that opens a popover with its own search box and
+          // moves focus into it: Meta's Current location lists its offices
+          // first and any other city only once searched. The box this opening focused is searched as a
+          // typeahead's own.
+          if (!typeahead && !ashbyLocation && options.length && element instanceof HTMLButtonElement &&
+              element.getAttribute("role") === "combobox" && openingRequested && !openingInterrupted) {
+            const active = document.activeElement;
+            if (active instanceof HTMLInputElement && active !== element && /^(text|search)$/.test(active.type) &&
+                list.contains(active) && rendered(active) && !active.value) {
+              typeahead = active;
+              ownsFocus = true;
+            }
+          }
           if (options.length && canSearch()) {
             await search(listed);
+            continue;
+          }
+          // A search that left "No results were found." (Oracle's Desired
+          // Salary Range lists ranges, and "$100,000" is in none of their
+          // words): the text is taken out again, and the whole
+          // list is read and chosen from by what each entry covers.
+          if (!options.length && typeahead && searchWritten && !searchCleared && Date.now() - searchedAt > 1200 &&
+              list.querySelector('[class*="no-results"]')) {
+            searchCleared = true;
+            writing = true;
+            try {
+              record.writePendingAt = performance.now();
+              const cleared = await requestMainWorld(typeahead,
+                { applicationId, operation, documentId },
+                { method: "defaultWithoutBlur", values: [""] }, undefined, safe);
+              if (!cleared.ok) throw new Error(cleared.reason || "The autocomplete search could not be cleared.");
+              searchValue = "";
+              ownedAutocompleteSearches.set(typeahead, "");
+              assertSafe("Custom selection paused or superseded.");
+            } finally {
+              writing = false;
+            }
             continue;
           }
           if (options.length && !(typeahead && searchWritten && listed === unsearched && Date.now() - searchedAt < 2500))
@@ -2187,8 +2407,16 @@ if (!window.__applicationLane) {
         }
         await pause(50);
       }
+      // Whether the street was ever typed, and if not, why: Higher's address
+      // box was clicked and then failed five seconds later with no search in
+      // its trace.
+      const searchNote = !typeahead
+        ? " (no search box found)"
+        : searchWritten
+          ? ""
+          : ` (the search was never typed: focus was on ${document.activeElement ? `${document.activeElement.tagName.toLowerCase()}${document.activeElement.id ? `#${document.activeElement.id}` : ""}` : "nothing"}${ownsFocus ? "" : ", and the fill did not hold focus"})`;
       throw new Error(
-        `Dropdown options were not available within ${successFactorsPicklist(element) ? 15 : 5} seconds. Search or select manually.`,
+        `Dropdown options were not available within ${successFactorsPicklist(element) ? 15 : 5} seconds${searchNote}. Search or select manually.`,
       );
     } finally {
       if (searchInput && searchValue !== undefined) {
@@ -2235,6 +2463,15 @@ if (!window.__applicationLane) {
       }
       if (ripplingSelect(element) && openingRequested && !openingInterrupted && valid(command) && element.isConnected &&
           element.getAttribute("aria-expanded") === "true") pressOutside();
+      // An Oracle list this selection opened and picked nothing from is
+      // closed, not left over the form (Country code, Address Line 1 and
+      // Desired Salary Range): a press on the
+      // page, as the applicant's own click elsewhere, takes it away.
+      if (element.matches("input.cx-select-input") && openingRequested && !picked && !openingInterrupted && valid(command) && element.isConnected &&
+          element.getAttribute("aria-expanded") === "true") {
+        pressOutside();
+        element.blur();
+      }
       // A Workday list this selection opened and picked nothing from is
       // closed, not left over the form: its own Escape, then a press on the
       // page as the site's rules make (one employer's Phone Device Type, with no exact option to pick).
@@ -2346,6 +2583,36 @@ if (!window.__applicationLane) {
     if (host.shadowRoot) visit(host.shadowRoot);
     return found.filter((option) => option.getAttribute("aria-disabled") !== "true");
   }
+  // The middle of a menu entry where a click there reaches it: the topmost
+  // element drawn at that point, followed down through the shadow roots it
+  // hosts, is the entry or inside it. Anything else (a header drawn over
+  // the menu) would take the click instead.
+  function entryPoint(entry: HTMLElement): { x: number; y: number } | undefined {
+    const box = entry.getBoundingClientRect();
+    if (!(box.width > 0 && box.height > 0)) return;
+    const x = Math.round(box.left + box.width / 2);
+    const y = Math.round(box.top + box.height / 2);
+    if (x < 0 || y < 0 || x >= innerWidth || y >= innerHeight) return;
+    let hit: Element | null = document.elementFromPoint(x, y);
+    for (let depth = 0; hit?.shadowRoot && depth < 8; depth++) {
+      const inner = hit.shadowRoot.elementFromPoint(x, y);
+      if (!inner || inner === hit) break;
+      hit = inner;
+    }
+    if (!hit) return;
+    // The entry, or an element inside it: inside its shadow roots, or
+    // slotted into it from the option component around it.
+    for (let node: Node | null = hit, depth = 0; node && depth < 40; depth++) {
+      if (node === entry) return { x, y };
+      node = (node as Element).assignedSlot || node.parentNode || ((node as ShadowRoot).host ?? null);
+    }
+    const around = (entry.getRootNode() as ShadowRoot).host;
+    for (let node: Node | null = hit, depth = 0; around && node && depth < 40; depth++) {
+      if (node === around) return { x, y };
+      node = (node as Element).assignedSlot || node.parentNode || ((node as ShadowRoot).host ?? null);
+    }
+    return;
+  }
   async function listedPosition(element: Element, values: string[], signal: AbortSignal): Promise<number> {
     const plain = (text: string) => text.replace(/\s+/g, " ").trim().toLowerCase();
     const wanted = values.map(plain).filter(Boolean);
@@ -2361,6 +2628,26 @@ if (!window.__applicationLane) {
       }
       return "";
     };
+    // The list for the text as finally typed, not an earlier one: a site
+    // that searches on a debounce answers the first letters' query while the
+    // keys are still going and the whole text's a second or so after them.
+    // Down and Enter on the early list were lost when the late answer
+    // replaced it, and the box dropped what was typed (Wise's SmartRecruiters
+    // City, Title and Institution). The menu is
+    // waited on until it has been quiet for 0.6 s, and for at least
+    // 1.5 s after the typing.
+    const signature = () => options().map(label).join("|");
+    const began = performance.now();
+    let seen = signature();
+    let changed = began;
+    while (!signal.aborted && performance.now() - began < 4_000 && (performance.now() - began < 1_500 || performance.now() - changed < 600)) {
+      await pause(100);
+      const now = signature();
+      if (now !== seen) {
+        seen = now;
+        changed = performance.now();
+      }
+    }
     for (let waited = 0; waited < 2_500 && !signal.aborted; waited += 150) {
       const listed = options();
       const names = listed.map((option) => (/\bmanual/i.test(label(option)) ? "" : plain(label(option))));
@@ -2382,7 +2669,15 @@ if (!window.__applicationLane) {
     retry = true,
     enter = false,
     choose = false,
+    insert = false,
   ): Promise<boolean> {
+    // A click of the applicant's moments ago (Save and Continue, which loads
+    // the step this fill is for) holds keys back for its few seconds only:
+    // they are waited out, and one employer's signing date, refused at once, was
+    // left empty. One in a field of theirs still refuses.
+    if (text && userAttention() && !applicantControl?.isConnected)
+      for (let waited = 0; userAttention() && !applicantControl?.isConnected && waited < attentionSpan + 500 && !signal.aborted; waited += 150)
+        await pause(150);
     if (!text || userAttention()) return false;
     const focusable = element as HTMLElement;
     if (typeof focusable.focus !== "function") return false;
@@ -2417,6 +2712,10 @@ if (!window.__applicationLane) {
         signal,
         () => safe() && !userAttention() && focused(),
         enter,
+        false,
+        false,
+        undefined,
+        insert,
       );
       if (!result.ok) return false;
     } catch (error) {
@@ -2437,6 +2736,173 @@ if (!window.__applicationLane) {
     if (misdirected)
       return retry && typeTrusted(command, element, text, safe, signal, false, enter, choose);
     return true;
+  }
+
+  // Paylocity's address line (paylocityAddressBox): the line is typed as the
+  // applicant types it, and the site's suggestion that is this address (its
+  // street, and the city or ZIP this fill gives the same address) is picked,
+  // which fills the address's City, County, State and ZIP the site's way.
+  // With none, the typed line stays: the box keeps free text when it loses
+  // focus, and the other parts are filled as the text boxes they are.
+  // Returns the fields of the same address the pick left holding this
+  // fill's own answers, done with it.
+  async function fillPaylocityAddress(command: Command, proposal: Proposal, record: RecordEntry): Promise<string[]> {
+    const element = record.element as HTMLInputElement;
+    const wanted = proposal.value.trim();
+    const words: Record<string, string> = {
+      street: "st", avenue: "ave", road: "rd", drive: "dr", boulevard: "blvd", lane: "ln", court: "ct", place: "pl",
+      highway: "hwy", parkway: "pkwy", circle: "cir", terrace: "ter", suite: "ste", apartment: "apt",
+      north: "n", south: "s", east: "e", west: "w",
+    };
+    const plain = (text: string) => normalize(text).replace(/[.,#]/g, " ").split(/\s+/).filter(Boolean)
+      .map((word) => words[word] || word).join(" ");
+    const safe = () => valid(command) && !record.protected && element.isConnected;
+    // The same address's other parts this fill answers: City and ZIP (or
+    // Postal Code) say which suggestion is this address.
+    const base = element.id.replace(/-(address-1|postal-code)$/, "");
+    const siblings = (command.proposals || []).flatMap((other) => {
+      const entry = records.get(other.fieldId);
+      return entry && entry.element !== element && entry.element.id.startsWith(`${base}-`) ? [{ proposal: other, record: entry }] : [];
+    });
+    const partOf = (pattern: RegExp) => siblings.find((sibling) => pattern.test(sibling.record.element.id))?.proposal.value.trim() || "";
+    const places = [partOf(/-(city|locality)$/), partOf(/-(zip|postal-code)$/)].filter(Boolean).map(plain);
+    if (plain(element.value) !== plain(wanted)) {
+      const typed = await typeTrusted(command, element, wanted, safe, new AbortController().signal, true, false, true, true);
+      if (!safe()) throw new Error("Custom selection was superseded.");
+      if (!typed || plain(element.value) !== plain(wanted)) {
+        // Keys could not be sent (the page out of view): written as text.
+        element.focus({ preventScroll: true });
+        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(element, wanted);
+        changed(record);
+      }
+    }
+    record.writePendingAt = performance.now();
+    const street = plain(wanted);
+    const listed = () => {
+      const list = document.getElementById(element.getAttribute("aria-controls") || "");
+      return list && rendered(list) ? [...list.querySelectorAll<HTMLElement>('[role="option"]')].filter(rendered) : [];
+    };
+    const matches = (option: HTMLElement) => {
+      const text = plain(option.textContent || "");
+      return (text === street || text.startsWith(`${street} `)) && (!places.length || places.some((place) => text.includes(place)));
+    };
+    let choice: HTMLElement | undefined;
+    let seenSince = 0;
+    // The site asks for suggestions a moment after the keys (300 ms) and
+    // waits on its address service: up to 4 s, and 1.5 s once a list that
+    // holds none of this address is shown.
+    for (let waited = 0; waited < 4_000 && safe(); waited += 150) {
+      const options = listed();
+      choice = options.find(matches);
+      if (choice) break;
+      if (options.length && !seenSince) seenSince = waited || 1;
+      if (seenSince && waited - seenSince >= 1_500) break;
+      await pause(150);
+    }
+    // The site sets the box back to the text of each search it answers, and
+    // an answer arriving after later keys drops them: "323 E. Veterans Way"
+    // was left as "323 E. Veterans " (Enovation). Typed again,
+    // twice at most, once the answers have come in.
+    for (let attempt = 0; !choice && attempt < 2 && safe() && plain(element.value) !== plain(wanted); attempt++) {
+      await typeTrusted(command, element, wanted, safe, new AbortController().signal, true, false, true, true);
+      for (let waited = 0; waited < 1_500 && safe(); waited += 150) {
+        await pause(150);
+        choice = listed().find(matches);
+        if (choice) break;
+      }
+    }
+    if (!safe()) throw new Error("Custom selection was superseded.");
+    const before = new Map(siblings.map((sibling) => [sibling.record, valueOf(sibling.record.element)]));
+    if (choice) {
+      choice.click();
+      for (let waited = 0; waited < 1_500 && listed().length; waited += 100) await pause(100);
+      // The site fills the address's other parts from the suggestion.
+      await pause(300);
+    }
+    // Leaving the box commits it with a trusted change of our own making: the
+    // wait for suggestions above outlasts the typing's own allowance, and that
+    // change paused the fill as the applicant's edit (Enovation's work row).
+    searchSettle = { element, until: performance.now() + 1000 };
+    if (document.activeElement === element) element.blur();
+    await pause(0);
+    if (!safe()) throw new Error("Custom selection was superseded.");
+    if (!element.value.trim())
+      throw new Error("The address line was not kept. Type it, or pick it from the site's suggestions.");
+    record.last = valueOf(element);
+    record.revision++;
+    record.automationWritten = true;
+    // Parts the pick changed are the site's doing, not the applicant's; those
+    // that now hold this fill's answer need no write of their own.
+    const settled: string[] = [];
+    for (const sibling of siblings) {
+      const now = valueOf(sibling.record.element);
+      if (now === before.get(sibling.record)) continue;
+      sibling.record.last = now;
+      sibling.record.revision++;
+      sibling.record.automationWritten = true;
+      sibling.record.writePendingAt = performance.now();
+      if (plain(now) === plain(sibling.proposal.value)) settled.push(sibling.proposal.fieldId);
+    }
+    return settled;
+  }
+
+  // Rippling's Location (ripplingLocation): typed as an applicant types it,
+  // then the suggestion that starts with the saved place is picked. With none,
+  // the list is closed and the typed text stays for the site to keep or drop.
+  async function fillRipplingLocation(command: Command, proposal: Proposal, record: RecordEntry) {
+    const element = record.element as HTMLInputElement;
+    const wanted = proposal.value.trim();
+    const plain = (text: string) => normalize(text).replace(/[.,]/g, " ").split(/\s+/).filter(Boolean).join(" ");
+    const safe = () => valid(command) && !record.protected && element.isConnected;
+    if (element.value !== wanted) {
+      const typed = await typeTrusted(command, element, wanted, safe, new AbortController().signal, true, false, true, true);
+      if (!safe()) throw new Error("Custom selection was superseded.");
+      if (!typed || element.value !== wanted) {
+        element.focus({ preventScroll: true });
+        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(element, wanted);
+        changed(record);
+      }
+    }
+    record.writePendingAt = performance.now();
+    const dialogs = () => [...document.querySelectorAll<HTMLElement>('[role="dialog"]')].filter((dialog) => rendered(dialog) && !dialog.contains(element));
+    // The entry itself: the innermost element of a dialog that begins with the place.
+    const entries = () => dialogs().flatMap((dialog) => [...dialog.querySelectorAll<HTMLElement>("*")]
+      .filter((node) => rendered(node) && plain(node.textContent || "").startsWith(plain(wanted)) &&
+        ![...node.children].some((child) => plain(child.textContent || "").startsWith(plain(wanted)))));
+    let choice: HTMLElement | undefined;
+    let seenSince = 0;
+    // Google answers a moment after the keys (the site's list was drawn 1 s
+    // later in the capture): up to 6 s, and 1.5 s once a list that holds
+    // nothing of this place is shown.
+    for (let waited = 0; waited < 6_000 && safe(); waited += 150) {
+      choice = entries()[0];
+      if (choice) break;
+      if (dialogs().length && !seenSince) seenSince = waited || 1;
+      if (seenSince && waited - seenSince >= 1_500) break;
+      await pause(150);
+    }
+    if (!safe()) throw new Error("Custom selection was superseded.");
+    searchSettle = { element, until: performance.now() + 2000 };
+    if (choice) {
+      for (const type of ["mousedown", "mouseup", "click"])
+        choice.dispatchEvent(new MouseEvent(type, { bubbles: true, cancelable: true, view: window, button: 0 }));
+      for (let waited = 0; waited < 1_500 && dialogs().length; waited += 100) await pause(100);
+      await pause(200);
+    } else if (dialogs().length) {
+      // Nothing fits: closed as a person closes it, never left hanging.
+      element.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", code: "Escape", keyCode: 27, bubbles: true, cancelable: true }));
+      pressOutside();
+      await pause(200);
+    }
+    if (document.activeElement === element) element.blur();
+    await pause(0);
+    if (!safe()) throw new Error("Custom selection was superseded.");
+    if (choice && !plain(element.value).startsWith(plain(wanted)))
+      throw new Error("The location was not kept. Pick it from the site's suggestions.");
+    if (!choice) throw new Error("No suggestion matched the location. Pick it from the site's suggestions.");
+    record.last = valueOf(element);
+    record.revision++;
+    record.automationWritten = true;
   }
 
   let boxesWanted: { operation: number; boxes: Map<HTMLInputElement, { element: HTMLInputElement; wanted: boolean; fieldId: string }> } = { operation: -1, boxes: new Map() };
@@ -2498,8 +2964,34 @@ if (!window.__applicationLane) {
         // It failed as "a custom control" instead (one employer's KPMG question).
         // Not a native list given the role (one employer's iCIMS screening questions):
         // it is set as a select.
+        if (paylocityAddressBox(element)) {
+          for (const settled of await fillPaylocityAddress(command, proposal, record)) typedWhole.add(settled);
+          await awaitSiteSave(savesBefore);
+          record.fillWarning = undefined;
+          results.push({ id: proposal.fieldId, ok: true });
+          continue;
+        }
+        if (ripplingLocation(element)) {
+          await fillRipplingLocation(command, proposal, record);
+          await awaitSiteSave(savesBefore);
+          record.fillWarning = undefined;
+          results.push({ id: proposal.fieldId, ok: true });
+          continue;
+        }
         if ((element.getAttribute("role") === "combobox" && !(element instanceof HTMLSelectElement) && !calendarBox(element)) || element.closest(".pcty-input-select__input") || element.matches(legacyReactSelect) || listButton(element)) {
           await selectCustom(command, proposal, record);
+          await awaitSiteSave(savesBefore);
+          record.fillWarning = undefined;
+          results.push({ id: proposal.fieldId, ok: true });
+          continue;
+        } else if (tdsDateBox(element)) {
+          // A date set from its calendar (Tesla's): the month found, the day
+          // clicked.
+          if (!(await pickTdsDate(element as HTMLInputElement, proposal.value)))
+            throw new Error("The calendar did not take the date. Pick it there.");
+          record.last = valueOf(element);
+          record.revision++;
+          record.automationWritten = true;
           await awaitSiteSave(savesBefore);
           record.fillWarning = undefined;
           results.push({ id: proposal.fieldId, ok: true });
@@ -2810,8 +3302,14 @@ if (!window.__applicationLane) {
       // address typed before it.
       const chosen = Boolean(name) && [...document.querySelectorAll<HTMLInputElement>('input[role="combobox"]')]
         .some((box) => box.value.trim() === name && shown(box));
+      // SmartRecruiters' dropzone lists its upload in its files attribute,
+      // the name drawn in its shadow root.
+      const dropped = Boolean(name) && [...document.querySelectorAll("spl-dropzone")].some((zone) => {
+        const input = zone.shadowRoot?.querySelector('input[type="file"]');
+        return shown(zone) && Boolean(input) && currentFileName(input as HTMLInputElement).split(", ").includes(name);
+      });
       return {
-        attached: chosen || named.some((element) => {
+        attached: chosen || dropped || named.some((element) => {
           let scope: Element | null = element;
           for (let depth = 0; scope && depth < 4; depth++, scope = scope.parentElement)
             if ([...scope.querySelectorAll('button, a, [role="button"]')].some((control) => control !== element && removes(control)))
@@ -2844,6 +3342,38 @@ if (!window.__applicationLane) {
       // A row the site added from a parsed resume, removed with the site's
       // own "Delete Education (3)" control. Nothing else is ever clicked.
       const section = String(command.section || "");
+      // iCIMS' group loop: its own "Remove Additional" button takes the last
+      // block off in the page's script and never posts the form, and is used
+      // only where the page says to keep the highest degree alone.
+      if (command.groupLoop) {
+        const member = [...records.values()].find((record) => {
+          const place = sectionFor(record.element);
+          return place.section === section && place.index === Number(command.index);
+        })?.element;
+        const loop = member?.closest<HTMLElement>(".icims_group_loop[data-group-loop-name]");
+        const name = loop?.getAttribute("data-group-loop-name") || "";
+        const same = [...document.querySelectorAll(".icims_group_loop[data-group-loop-name]")]
+          .filter((other) => other.getAttribute("data-group-loop-name") === name);
+        const remover = [...document.querySelectorAll<HTMLInputElement>("input.group-loop-remove[data-group-loop]")]
+          .find((input) => input.getAttribute("data-group-loop") === name);
+        const form = loop?.closest("form");
+        const saysSo = same.some((other) => /\bremove all others\b/i.test(other.textContent || ""));
+        if (!loop || !remover || !form || same.length < 2 || same.at(-1) !== loop || !saysSo ||
+            remover.disabled || remover.getClientRects().length === 0)
+          return { removed: false };
+        // Whatever the page's script does, this click never posts the form.
+        const hold = (event: Event) => event.preventDefault();
+        form.addEventListener("submit", hold, true);
+        writing = true;
+        try {
+          remover.click();
+        } finally {
+          writing = false;
+          for (let waited = 0; waited < 1500 && loop.isConnected; waited += 100) await pause(100);
+          form.removeEventListener("submit", hold, true);
+        }
+        return { removed: !loop.isConnected };
+      }
       const number = Number(command.index) + 1;
       const wanted = new RegExp(
         `^(delete|remove)\\s+${section.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*\\(?${number}\\)?$`,
@@ -3061,7 +3591,7 @@ if (!window.__applicationLane) {
       }
       return {
         observation,
-        html: html.slice(0, 2_000_000),
+        html: boundSnapshotMarkup(html),
       };
     }
     if (command.type === "BIND") {
@@ -3076,6 +3606,7 @@ if (!window.__applicationLane) {
       // Dependent fields can appear after binding; their defaults follow the
       // same prefilled-value policy as the fields already visible.
       replaceSiteValues = Boolean(command.replaceSiteValues);
+      ownWrites = Array.isArray(command.ownWrites) ? command.ownWrites.slice(0, 300) : [];
       clearPendingWrites();
       if (operation !== command.operation) {
         configController.abort();
@@ -3141,15 +3672,26 @@ if (!window.__applicationLane) {
       // one employer's form was read as one Language field and nothing was filled
       //. Each is opened, as the applicant would
       // open it, before the pass reads the form.
-      const folded = [...document.querySelectorAll<HTMLButtonElement>('.rcmFormSection button.rcmFormSectionTopBar[aria-expanded="false"]')];
-      if (folded.length && !paused) {
+      // Sections drawn once those above them open (PACCAR's Language Skills
+      // and Geographic Mobility) come folded after the first
+      // round: the applicant had to open them. Rounds go on until none is
+      // left folded, four at most.
+      for (let round = 0, waitedLate = false; round < 4 && !paused; round++) {
+        let folded = [...document.querySelectorAll<HTMLButtonElement>('.rcmFormSection button.rcmFormSectionTopBar[aria-expanded="false"]')];
+        // After opening some, a moment for those drawn late.
+        if (!folded.length && round > 0 && !waitedLate) {
+          waitedLate = true;
+          await pause(1000);
+          folded = [...document.querySelectorAll<HTMLButtonElement>('.rcmFormSection button.rcmFormSectionTopBar[aria-expanded="false"]')];
+        }
+        if (!folded.length) break;
         writing = true;
         try {
           for (const bar of folded) if (bar.isConnected && bar.getAttribute("aria-expanded") === "false") bar.click();
         } finally {
           writing = false;
         }
-        for (let waited = 0; waited < 2_000 && document.querySelector('.rcmFormSection button.rcmFormSectionTopBar[aria-expanded="false"]'); waited += 100)
+        for (let waited = 0; waited < 2_000 && folded.some((bar) => bar.isConnected && bar.getAttribute("aria-expanded") === "false"); waited += 100)
           await pause(100);
         await pause(300);
       }
@@ -3203,7 +3745,10 @@ if (!window.__applicationLane) {
             // A read-only box with its own picker button is filled from that
             // picker, as Tesla's start date is: the site
             // writes it, never this.
-            ((node as HTMLInputElement).readOnly && !pickerBox(node)) ||
+            // Nor is TikTok's UD select box, read-only until its list is
+            // opened: it is chosen from.
+            ((node as HTMLInputElement).readOnly && !pickerBox(node) &&
+              !(node as Element).matches?.("input.ud__select__selector__search__input")) ||
             node.getAttribute("aria-disabled") === "true" ||
             node.getAttribute("aria-readonly") === "true"
           );
@@ -3371,7 +3916,10 @@ if (!window.__applicationLane) {
                 signal,
                 true,
                 method === "trustedSearch",
-                method === "trustedChoose",
+                // Oracle's lists (cx-select) load results only while the box
+                // keeps focus and close when it blurs: typed for a pick, not
+                // committed (Higher's School).
+                method === "trustedChoose" || element.matches("input.cx-select-input"),
               );
               // The entry the menu lists for it: the site's own one where it
               // has it (SmartRecruiters' "Michigan State University" under its
@@ -3381,6 +3929,37 @@ if (!window.__applicationLane) {
                 // The site's own entry where it lists one, else the first
                 // (the text as typed): Down to it, then Enter.
                 const position = await listedPosition(element, values, signal);
+                // A moment of the applicant's on the page (a click to watch
+                // it) is waited out, as before typing: a pick skipped for it
+                // left the typed city unchosen, and the box dropped it
+                // (one employer's SmartRecruiters City).
+                for (let waited = 0; safe() && userAttention() && !applicantControl?.isConnected && waited < attentionSpan + 500 && !signal.aborted; waited += 150)
+                  await pause(150);
+                // A box the site holds for a moment while it loads its
+                // suggestions reads as locked: one employer's City was typed, then
+                // refused "locked before the pick" 380 ms later and dropped
+                //. Two seconds are waited out;
+                // an edit lock of the applicant's stays one after them.
+                for (let waited = 0; !safe() && valid(command) && !userAttention() && waited < 2000 && !signal.aborted; waited += 100)
+                  await pause(100);
+                // Why nothing was picked, for the recording: that City's
+                // trace showed only the typing and the Escape after it.
+                if (!safe() || userAttention())
+                  stopRecording?.note({ refused: element.id || method, reason: !valid(command) ? "stale command" : userAttention() ? "the applicant's attention" : `locked before the pick (${(() => {
+                      // Which hold it was: Wise's City was refused here with
+                      // none of them showing on the box afterwards.
+                      const record = nodeRecords.get(element as HTMLElement);
+                      const input = element as HTMLInputElement;
+                      return [
+                        record?.protected ? "protected" : "",
+                        record && hasEditLock(record.element, record.label) ? "edit lock" : "",
+                        input.disabled ? "disabled" : "",
+                        input.readOnly ? "readonly" : "",
+                        element.getAttribute("aria-disabled") === "true" ? "aria-disabled" : "",
+                        element.getAttribute("aria-readonly") === "true" ? "aria-readonly" : "",
+                        !element.isConnected ? "detached" : "",
+                      ].filter(Boolean).join(", ") || "another control of the component";
+                    })()})` });
                 if (safe() && !userAttention()) {
                   // Down moves focus into the menu, so the Enter lands on its
                   // entry, not the box: the whole component is the write's,
@@ -3427,14 +4006,64 @@ if (!window.__applicationLane) {
                       if (entry) {
                         entry.scrollIntoView({ block: "nearest" });
                         await pause(100);
-                        const box = entry.getBoundingClientRect();
-                        if (box.width > 0 && box.height > 0)
-                          await requestTrustedType(element, guard, "", 0, signal, allowed, false, 0, false,
-                            { x: Math.round(box.left + box.width / 2), y: Math.round(box.top + box.height / 2) });
+                        // The click lands on whatever is drawn at that point:
+                        // a menu opened above its box sat under the page's
+                        // sticky job header, and the click went to the header,
+                        // not the school (one employer's SmartRecruiters
+                        // Institution). Covered, the box is brought
+                        // to the middle of the window so its menu has room,
+                        // and a menu still covered is not clicked at all.
+                        let point = entryPoint(entry);
+                        if (!point && allowed()) {
+                          (element as HTMLElement).scrollIntoView({ block: "center" });
+                          await pause(300);
+                          point = entryPoint(entry);
+                        }
+                        // A cover that passes is waited out while the menu
+                        // still lists the entry: the toast the site shows on
+                        // saving the entry before ("Experience saved") lay over
+                        // the Institution's menu for three seconds, the pick
+                        // was refused, and the school's Save failed for it
+                        // (one employer's SmartRecruiters form).
+                        for (let waited = 0; !point && waited < 6_000 && entry.isConnected && allowed() && !signal.aborted; waited += 250) {
+                          await pause(250);
+                          point = entryPoint(entry);
+                        }
+                        // A click that found another box at its point was
+                        // kept from the page (see ownClickAt), and is made
+                        // again once the entry is drawn there.
+                        let clicked = false;
+                        for (let attempt = 0; point && attempt < 3; attempt++) {
+                          // Where entryPoint takes a hit as the entry's: in it, or in the
+                          // option component drawing it.
+                          const click = (ownClickAt = { ...point, target: (entry.getRootNode() as ShadowRoot).host || entry, until: Infinity, missed: false });
+                          clicked = true;
+                          try {
+                            await requestTrustedType(element, guard, "", 0, signal, allowed, false, 0, false, point);
+                          } finally {
+                            click.until = performance.now() + 400;
+                          }
+                          await pause(150);
+                          if (!click.missed || !entry.isConnected || !allowed()) break;
+                          stopRecording?.note({ refused: element.id || method, reason: "the click on its menu entry reached another control; tried again" });
+                          point = undefined;
+                          for (let waited = 0; !point && waited < 3_000 && entry.isConnected && allowed() && !signal.aborted; waited += 250) {
+                            await pause(250);
+                            point = entryPoint(entry);
+                          }
+                        }
+                        if (!clicked) {
+                          // What lies over it, for the next capture (Wise's City).
+                          const box = entry.getBoundingClientRect();
+                          const over = document.elementFromPoint(Math.round(box.left + box.width / 2), Math.round(box.top + box.height / 2));
+                          const named = over ? `${over.tagName.toLowerCase()}${over.id ? `#${over.id}` : ""}${typeof over.className === "string" && over.className ? `.${over.className.split(/\s+/)[0]}` : ""}` : "nothing";
+                          stopRecording?.note({ refused: element.id || method, reason: `its menu entry is covered by ${named} (entry at ${Math.round(box.left)},${Math.round(box.top)} ${Math.round(box.width)}x${Math.round(box.height)}, window ${innerWidth}x${innerHeight})` });
+                        }
                       }
                     }
-                  } catch {
+                  } catch (error) {
                     /* Left as typed: the check after says so. */
+                    stopRecording?.note({ refused: element.id || method, reason: `pick: ${(error as Error)?.message || error}`.slice(0, 200) });
                   } finally {
                     trustedWrite = undefined;
                   }
@@ -3448,6 +4077,9 @@ if (!window.__applicationLane) {
               // Real keystrokes were refused (this tab has the user's
               // attention, or the debugger is unavailable). Assigning the
               // value is what the engine did before; some widgets accept it.
+              // A Workday date section does not: given "11" as a value it kept
+              // no Month and set its Year to 2011 (one employer's signing date). It is left for a fill that can type.
+              if (element.matches('input[role="spinbutton"][data-automation-id^="dateSection"],input[role="spinbutton"][id*="dateSection"]')) return false;
             }
             // Saving one entry of the section being filled (see entrySave in
             // the interpreter). Its button can be a submit button of the whole
@@ -3705,6 +4337,29 @@ if (!window.__applicationLane) {
           if (options.length) read.push({ id, options: options.slice(0, 300) });
           continue;
         }
+        // A SuccessFactors pick list: its options asked of the list's own
+        // model, as the page asks for them when it opens, so nothing is
+        // opened, also during a fill (see sfPicklistOptions in mainWorld.ts).
+        // Where there is no model, it is opened below for the AI pass.
+        if (record && record.element instanceof HTMLInputElement && record.element.classList.contains("rcmpaginatedselectinput") &&
+            !record.protected && record.element.isConnected && !valueOf(record.element)) {
+          const input = record.element;
+          writing = true;
+          try {
+            const listed = await requestMainWorld(input, guard, { method: "sfPicklistOptions", values: [] }, undefined,
+              () => current() && input.isConnected && !record.protected).catch(() => undefined);
+            const options = listed?.ok
+              ? (JSON.parse(listed.value || "[]") as unknown[])
+                .filter((option): option is string => typeof option === "string" && !/^no selection$/i.test(option.trim()))
+              : [];
+            if (options.length) {
+              read.push({ id, options: options.slice(0, 300) });
+              continue;
+            }
+          } finally {
+            writing = false;
+          }
+        }
         if (command.listButtonsOnly) continue;
         const arrow = record && ashbyToggle(record.element);
         if (record && arrow && !record.protected && record.element.isConnected && !valueOf(record.element) &&
@@ -3852,7 +4507,13 @@ if (!window.__applicationLane) {
           type: "CONFIG_FILL",
           uploads: { [artifact.kind]: artifact },
         }) as { statuses?: { status: string }[] };
-        const attached = result.statuses?.some((status) => status.status === "filled") && valueOf(record.element) === artifact.name;
+        const filled = result.statuses?.some((status) => status.status === "filled");
+        // SmartRecruiters' spl-dropzone lists the file only once its own
+        // upload is done, a few seconds on.
+        const holds = () => valueOf(record.element) === artifact.name || currentFileName(record.element).split(", ").includes(artifact.name);
+        if (filled && (record.element.getRootNode() as ShadowRoot).host?.localName === "spl-dropzone")
+          for (let waited = 0; !holds() && waited < 8_000; waited += 250) await pause(250);
+        const attached = filled && holds();
         if (attached) record.attachmentId = artifact.id;
         return { attached: Boolean(attached), observation: inspect() };
       }
@@ -3967,8 +4628,19 @@ if (!window.__applicationLane) {
         if (shown !== errorBefore) siteError = shown;
       }
       const shownName = Boolean(uploadGroup?.isConnected && uploadGroup.textContent?.includes(artifact.name));
+      // SmartRecruiters' spl-dropzone empties its input and lists the file
+      // in its files attribute once its own upload is done, a few seconds
+      // on: read as not attached, the resume was "Verify upload"
+      // (one employer's SmartRecruiters form).
+      const listed = () => currentFileName(record.element).split(", ").includes(artifact.name);
+      let listedName = listed();
+      const dropzone = (record.element.getRootNode() as ShadowRoot).host?.localName === "spl-dropzone";
+      for (let waited = 0; dropzone && !listedName && !siteError && record.element.files?.[0]?.name !== artifact.name && waited < 8_000; waited += 250) {
+        await pause(250);
+        listedName = listed();
+      }
       return {
-        attached: (record.element.files?.[0]?.name === artifact.name || shownName) && !siteError,
+        attached: (record.element.files?.[0]?.name === artifact.name || shownName || listedName) && !siteError,
         siteError,
         observation: inspect(),
       };
@@ -3992,6 +4664,12 @@ if (!window.__applicationLane) {
   }
   chrome.runtime.onMessage.addListener((message: Command, sender, respond) => {
     if (sender.id !== chrome.runtime.id || sender.tab) return;
+    // The page's own progress badge (badge.ts), in the top frame only.
+    if ((message as unknown as { type: string }).type === "LANE_BADGE") {
+      showBadge((message as unknown as { info: BadgeInfo | null }).info);
+      respond({ ok: true });
+      return;
+    }
     void executeCommand(message).then(
       (data) => respond({ ok: true, data }),
       (error) => respond({ ok: false, error: error.message }),
@@ -4053,6 +4731,66 @@ if (!window.__applicationLane) {
       closeUnaskedLists();
     });
   }).observe(document.documentElement, { childList: true, subtree: true });
+  // SuccessFactors ends an idle session, first asking "Your session is about
+  // to time out.", and an expired one signs the applicant in again onto their
+  // Candidate Profile, away from the application (PACCAR's SuccessFactors). On a page bound to an application, the site's own
+  // keep-working button is pressed: only a button of a dialog that says the
+  // session is about to end, never one that signs out, and not while the
+  // applicant is typing in a field. An expired session is said on the badge.
+  const successFactorsSite = /(^|\.)(successfactors\.(com|eu)|sapsf\.(com|eu)|ns2cloud\.com)$/i.test(location.hostname);
+  const sessionEnding = /session (is |will be )?(about to|going to|soon) (time ?out|expire|end)|session will (time ?out|expire|end) (in|soon)/i;
+  const sessionEnded = /session (has )?(expired|timed out|ended)/i;
+  const keepWorking = /^(continue( working| session)?|extend( my)?( session)?|keep (working|me signed in|my session)|stay (signed|logged) in|i'?m still here|yes|ok)$/i;
+  const signOff = /sign ?out|log ?out|log ?off|end session|exit/i;
+  let sessionCheck = false;
+  let sessionToldExpired = false;
+  const checkSession = (): void => {
+    if (!successFactorsSite || !applicationId) return;
+    const dialogs = [...document.querySelectorAll<HTMLElement>('[role="dialog"], [role="alertdialog"], .sfDialog')]
+      .filter((dialog) => rendered(dialog));
+    for (const dialog of dialogs) {
+      const text = (dialog.innerText || dialog.textContent || "").replace(/\s+/g, " ");
+      if (!sessionEnding.test(text)) continue;
+      const button = [...dialog.querySelectorAll<HTMLElement>('button, [role="button"], input[type="button"], input[type="submit"]')]
+        .filter((candidate) => rendered(candidate) && !(candidate as HTMLButtonElement).disabled)
+        .find((candidate) => {
+          const name = (candidate instanceof HTMLInputElement ? candidate.value : candidate.innerText || candidate.textContent || candidate.getAttribute("aria-label") || "")
+            .replace(/\s+/g, " ").trim();
+          return keepWorking.test(name) && !signOff.test(name);
+        });
+      if (!button) continue;
+      // A key of theirs may still be landing in their field; looked at again
+      // when they pause.
+      if (applicantControl?.isConnected && performance.now() - applicantGesture < 2000) {
+        void pause(2100).then(checkSession);
+        return;
+      }
+      button.click();
+      sessionToldExpired = false;
+      noteSession("extended");
+      return;
+    }
+    if (!sessionToldExpired && (sessionEnded.test(document.title) ||
+      dialogs.some((dialog) => sessionEnded.test(dialog.innerText || dialog.textContent || "")))) {
+      sessionToldExpired = true;
+      noteSession("expired");
+    }
+  };
+  if (successFactorsSite)
+    new MutationObserver(() => {
+      if (sessionCheck || !applicationId) return;
+      sessionCheck = true;
+      void pause(300).then(() => {
+        sessionCheck = false;
+        checkSession();
+      });
+    }).observe(document.documentElement, {
+      childList: true,
+      subtree: true,
+      characterData: true,
+      attributes: true,
+      attributeFilter: ["style", "class", "hidden", "aria-hidden", "open"],
+    });
   window.__applicationLane = { inspect, version: CONTENT_VERSION };
   setEngineWait(pause);
   setMonthPickerWait(pause);

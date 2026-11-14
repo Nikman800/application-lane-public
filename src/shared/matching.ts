@@ -21,6 +21,7 @@ import { schoolNames } from "./schools";
 import { salaryAnswer } from "./salary";
 import { dialCodes, dialCountry, splitPhone } from "./phone";
 import { isFluent, levelChoices, profileLanguages } from "./languages";
+import { profileFactAnswer, profileFactQuestion } from "./profile-facts";
 import globals from "../engine/config/globals.json" with { type: "json" };
 import { countriesNamed, countryCode, countryNamesOf, findRegion, placeCountry, type Geography } from "./geography";
 import { askedCountry, authorizationAnswer, authorizationEntry, citizenOf, citizenshipsOf, jobCountry, usCitizen, workAuthorizations } from "./authorization";
@@ -99,10 +100,12 @@ function dateAnswer(
 }
 
 // "Address line 2", "Home address line two", "Street address 2".
-const secondAddressLine = /^(street |mailing |home )?address( line)? (2|two)$/;
+// (Oracle's "Apt/Flat#" is the same box: "apt flat".)
+const secondAddressLine = /^(street |mailing |home )?address( line)? (2|two)$|^(apt|apartment|flat|suite|unit)( (apt|apartment|flat|suite|unit|number|no))*$/;
+const firstAddressLine = /^(street |mailing |home )?address( line)?( 1| one)?$/;
 // "Country", or asked as a question: Amazon's "What country/region are you
 // currently located?".
-const countryLabel = /^country( of residence)?$|^(what|which) country( region)? (are|do) you( currently)? (located|based|live|reside)( in)?$/;
+const countryLabel = /^country( (or )?region)?( of (residence|residency))?$|^(what|which) country( region)? (are|do) you( currently)? (located|based|live|reside)( in)?$/;
 
 
 // Exact school-name prompts observed in real forms. Dates, GPA, status,
@@ -124,12 +127,18 @@ const schoolNamePrompts = new Set([
   "what university do you currently attend",
   "what college university did you attend",
   "what school do you currently attend",
+  "what school are you currently attending",
 ]);
 const schoolNameQuestion = (label: string) => {
   const question = normalize(label.split("?")[0]);
   // "College or University" (one employer's JazzHR form).
-  return /^(school|university|college|institution)( or (school|university|college|institution))?( name)?$/.test(question) || schoolNamePrompts.has(question);
+  // "School/Institution Name", "Current School/Institution Name" (iCIMS).
+  return /^(current )?(school|university|college|institution)( (or )?(school|university|college|institution))?( name)?$/.test(question) || schoolNamePrompts.has(question);
 };
+
+// "State", "Province", "State/Province/Parish" (SuccessFactors),
+// "State / District", "State / Province / Region".
+const stateLabel = /^(state|province)( (province|district|territory|region|parish))*$/;
 
 const citizenAuthorizationQuestion = /^are you currently authorized to work for any employer in the (united states|us|u s)$/;
 const [citizenAuthorizationOption, visaAuthorizationOption] = qualifiedBinarySentences.workAuthorization;
@@ -185,12 +194,13 @@ export function deterministicAnswer(
     if (
       /^(company|employer|organization|school|university|institution)( name| dropdown)?$/.test(
         label,
-      )
+      ) || (/education/.test(section) && schoolNameQuestion(field.label))
     )
       return row.organization;
-    if (/^(job )?title$|^position$|^degree( dropdown)?$/.test(label))
+    // iCIMS: "Type of Degree (High School/GED/Bachelor/etc.)".
+    if (/^(job )?title$|^position$|^degree( dropdown)?$/.test(label) || (/education/.test(section) && /^type of degree\b/.test(label)))
       return row.title;
-    if (/^(major|discipline|field of study)( dropdown)?$/.test(label))
+    if (/^(major|discipline|field of study)( dropdown)?$|^major area of study$/.test(label))
       return row.fieldOfStudy;
     if (/^(start|from)( date)?( month| day| year)?$/.test(label))
       return dateAnswer(row.startDate, label, field, profile);
@@ -214,7 +224,7 @@ export function deterministicAnswer(
     // nothing: the applicant's home address is never an employer's.
     if (/^(street |company |employer )?address( line)?( 1| one)?$/.test(label)) return row.address || undefined;
     if (/^city$/.test(label)) return row.city || (row.location.includes(",") ? row.location.split(",")[0].trim() : undefined);
-    if (/^(state|province)$/.test(label)) return row.state || row.location.split(",")[1]?.trim() || undefined;
+    if (/^(state|province|state province)$/.test(label)) return row.state || row.location.split(",")[1]?.trim() || undefined;
     if (/^county$/.test(label)) return row.county || undefined;
     if (/^(zip|postal)( code)?$/.test(label)) return row.postalCode || undefined;
     if (/^country$/.test(label)) return row.country || undefined;
@@ -230,7 +240,9 @@ export function deterministicAnswer(
       if (row.endDate.slice(0, 7) > currentMonth() && /\breceived\b/.test(label)) return;
       return writtenDate(row.endDate, field, profile);
     }
-    if (/^(description|responsibilities|details)$/.test(label))
+    // Or as SuccessFactors names it, "Summary of Work Performed": its
+    // resume parser's own summary was kept over the profile's (PACCAR).
+    if (/^(description|responsibilities|details|(job |role |position )?(description|summary)|duties|(duties|key responsibilities)( and (responsibilities|achievements))?|summary of (work|duties|responsibilities)( performed)?|work (performed|summary))$/.test(label))
       return row.details;
     return;
   }
@@ -242,13 +254,15 @@ export function deterministicAnswer(
     // The profile keeps one last name: the one the applicant goes by too.
     [/^preferred (last|family|sur) ?name$/, "lastName"],
     [/^e ?mail( address)?$/, "email"],
+    // The address typed twice (SuccessFactors' "Retype Email Address").
+    [/^(re ?type|confirm|verify|re ?enter|repeat)( your)? e ?mail( address)?$|^e ?mail( address)? (confirmation|again)$/, "email"],
     // (The national number: the country code is asked apart, or is the
     // profile's phoneCountryCode.)
     [/^((home|cell|cellular|mobile|primary) )?(phone|mobile|telephone)( number)?$/, "phone"],
     [/^(city|current city|location city|current location)$/, "city"],
     [/^where (do you( currently)? live|are you( currently)? (located|based))$/, "city"],
     // "State / District", "State / Province / Region".
-    [/^(state|province)( (province|district|territory|region))*$/, "state"],
+    [stateLabel, "state"],
     [countryLabel, "country"],
     [/^county( of residence)?$/, "county"],
     [/^(street |mailing |home )?address( line 1)?$/, "address"],
@@ -301,6 +315,12 @@ export function deterministicAnswer(
       .join("\n");
   if (/^preferred( first)? name$/.test(label))
     return profile.preferredName || profile.firstName || undefined;
+  // Workday's box that shows the preferred-name fields: ticked only for a
+  // name that differs from the first one. The model ticked it from a saved
+  // preferred name equal to the first name, and
+  // the box stayed ticked through refills for want of an answer to give.
+  if (field.kind === "checkbox" && /^i have a preferred name$/.test(label))
+    return profile.preferredName?.trim() && normalize(profile.preferredName) !== normalize(profile.firstName) ? "Yes" : "No";
   // An area code asked apart from the number (SuccessFactors' "Home/Area
   // Code"): a North American number's first three digits. Others have none
   // to tell apart.
@@ -313,7 +333,7 @@ export function deterministicAnswer(
   // The phone number's country, apart from the number: a code ("+44") or a
   // country list ("United Kingdom (+44)"). The code's country when one is
   // saved, else where the applicant lives.
-  if (/^(phone |mobile |telephone )?(country|dial(l?ing)?|calling) code$|^(phone|mobile|telephone) (country|prefix)( code)?$|^country( phone)? code$/.test(label)) {
+  if (/^(phone |mobile |telephone )?(country|dial(l?ing)?|calling) code$|^(phone|mobile|telephone) (country|prefix)( code)?$|^country( region)?( phone)? code$/.test(label)) {
     const residence = countryCode(geography, profile.country);
     const country = dialCountry(phone.code, residence) || residence;
     const code = phone.code || (country ? dialCodes[country] : undefined);
@@ -331,7 +351,7 @@ export function deterministicAnswer(
     }
 }
 
-type Answer = Pick<Proposal, "value" | "choices" | "decline" | "numeric">;
+type Answer = Pick<Proposal, "value" | "choices" | "decline" | "numeric" | "scale">;
 
 // The phone's country code and national number; an older profile kept the
 // code in the number.
@@ -386,9 +406,14 @@ export function nameVariants(value: string): string[] {
 // for Virginia Polytechnic Institute and State University, "The Ohio State
 // University", "Purdue University-Main Campus"). Another campus is another
 // option and is never chosen in its place.
-function schoolChoices(row: { organization: string; location?: string }): string[] {
+function schoolChoices(row: { organization: string; location?: string; state?: string }): string[] {
   const city = (row.location || "").split(",")[0].trim();
-  return [...new Set([...nameVariants(row.organization), ...schoolNames(row.organization), ...(city ? [`${row.organization} ${city}`, `${row.organization} ${city} Campus`] : [])])];
+  // A list that names a school with its state ("Example State University -
+  // Arizona", Oracle's School list).
+  const place = (row.state || (row.location || "").split(",").at(-1) || "").trim();
+  const region = place ? findRegion(geography, place, undefined) : undefined;
+  const withState = region ? [...new Set([...region.names, region.code])].flatMap((state) => [`${row.organization} - ${state}`, `${row.organization}, ${state}`]) : [];
+  return [...new Set([...nameVariants(row.organization), ...schoolNames(row.organization), ...(city ? [`${row.organization} ${city}`, `${row.organization} ${city} Campus`] : []), ...withState])];
 }
 
 // Profile answers whose portal wording varies: range dropdowns ("3.5 - 3.74"),
@@ -401,13 +426,19 @@ function schoolChoices(row: { organization: string; location?: string }): string
 function screeningQuestion(
   label: string,
 ): { field: "workAuthorization" | "sponsorship"; invert: boolean } | undefined {
+  const authorized =
+    /\b(authorized|authorised|eligible|permitted|entitled|legally able|legally allowed)\b( \w+){0,2} to work\b|\bright to work\b|\bwork authori[sz]ation\b|\b(legal )?authori[sz]ation to work\b/.test(label);
+  // "Are you legally authorized to work in the United States? In other
+  // words, do you currently hold or can you obtain valid US work
+  // authorization…" asks whether the applicant may work, not for sponsorship
+  // (Oracle).
+  const mayObtain = /\b(authorized|authorised|eligible|permitted|entitled)\b( \w+){0,2} to work\b/.test(label) &&
+    /\b(can|could|able to) (you )?obtain\b/.test(label) && !/\b(require|requires|need|needs)\b/.test(label);
   const sponsorship =
-    /\bsponsor/.test(label) || (/\b(require|requires|need|needs|obtain)\b/.test(label) && /\b(authoriz|authoris|visa)/.test(label)) ||
+    /\bsponsor/.test(label) || (/\b(require|requires|need|needs|obtain)\b/.test(label) && /\b(authoriz|authoris|visa)/.test(label) && !mayObtain) ||
     // "…ask an employer to commence an immigration case in order to
     // employ you? (e.g. H-1B…)" (SuccessFactors).
     /\b(commence|file|start|begin|open)\b( \w+){0,2} immigration (case|petition)/.test(label);
-  const authorized =
-    /\b(authorized|authorised|eligible|permitted|entitled|legally able|legally allowed)\b( \w+){0,2} to work\b|\bright to work\b|\bwork authori[sz]ation\b|\b(legal )?authori[sz]ation to work\b/.test(label);
   if (sponsorship) {
     const without = /\bwithout\b/.test(label);
     // "Are you authorized to work here, and will you need sponsorship?" asks
@@ -419,6 +450,10 @@ function screeningQuestion(
     return { field: "sponsorship", invert: without };
   }
   if (authorized) return { field: "workAuthorization", invert: false };
+  // "Do you have any legal restrictions to working in the country where
+  // this position is located?": authorization asked the other way round
+  // (ICE's iCIMS form).
+  if (/\b(legal )?restrictions? (to|on) (your )?(working|work)\b/.test(label)) return { field: "workAuthorization", invert: true };
 }
 
 
@@ -440,6 +475,10 @@ function rowAtLevel(profile: Profile, asked: "undergraduate" | "graduate" | "hig
 const plainAnswer = (text: string | undefined): "Yes" | "No" | undefined =>
   /^\s*yes\b/i.test(text || "") ? "Yes" : /^\s*no\b/i.test(text || "") ? "No" : undefined;
 
+// A question whether the applicant's gender differs from the one assigned at
+// birth: the saved transgender answer, not the gender topic of the
+// demographic rule (Wise).
+const genderAtBirth = /\bgender\b.*\b(different|differs?|not the same)\b.*\b(assigned|sex)\b.*\bbirth\b|\b(assigned|sex)\b.*\bbirth\b.*\b(different|differs?)\b.*\bgender\b/;
 export function profileAnswer(
   field: Field,
   profile: Profile,
@@ -455,13 +494,42 @@ export function profileAnswer(
         !saved.every((a) => normalize(a.answer) === answer) ||
         normalize(authorizationAnswer(profile, field.label, qualified) || "") !== answer) return;
   }
+  const fact = profileFactAnswer(field, profile);
+  if (fact) return fact;
+  // A recognized calculation with missing or contradictory inputs stays
+  // unanswered; a broader keyword rule must not turn it into a guess.
+  if (profileFactQuestion(field)) return;
+  // "How are you eligible to work in this location?" as a list of ways: a
+  // citizen or permanent resident of the job's country is the one that needs
+  // no visa (Wise). Left when the job's country
+  // is not known or the applicant holds another status there.
+  if (/^how (are|would) you (be )?(eligible|authori[sz]ed) to work (in|at) (this|the) (location|country|role|position)$/.test(label) && field.options.length) {
+    const country = jobCountry(profile);
+    const entry = country ? workAuthorizations(profile).find((held) => held.country === country) : undefined;
+    if (entry && (entry.status === "citizen" || entry.status === "permanent-resident"))
+      return {
+        value: "I hold citizenship or permanent residency (No visa/sponsorship required)",
+        choices: ["I hold citizenship or permanent residency", "Citizen or permanent resident", "Citizen", "Permanent resident"],
+      };
+  }
   // A citizen or permanent resident of the job's country holds no temporary
   // authorization there: "Do you have temporary authorization (e.g., OPT,
   // CPT…)?" is No, and "If you are currently in OPT, are you eligible for a
   // STEM extension?" is not theirs to answer, so N/A where the list has it
   // (one employer's Workday). Anyone else is left to answer them.
   const temporaryAsked = normalize(askedPart(field.label));
-  if (/\b(opt|cpt|optional practical training|curricular practical training|temporary (work )?authori[sz]ation)\b/.test(temporaryAsked)) {
+  // Not when the question asks whether the applicant may work and only names
+  // OPT as an example of how one might ("Are you legally authorized to work in
+  // the United States? … (e.g., … F-1 Optional Practical Training (OPT))"):
+  // that was answered No for a citizen, and written over the Yes the page held
+  // (Oracle).
+  // Nor when the question asks about sponsorship and lists visa types after it
+  // ("Will you in the future need visa sponsorship? This will typically apply
+  // to F1/OPT, F-1/STEM OPT, H-1B…"): the list's "STEM OPT" was read as asking
+  // about an extension and left the question unanswered (iCIMS).
+  const sponsorAsked = /\bsponsor/.test(normalize(askedPart(field.label).split("?")[0]));
+  if (!sponsorAsked && !/\b(authori[sz]ed|eligible|permitted|entitled)\b( \w+){0,2} to work\b/.test(label) &&
+      /\b(opt|cpt|optional practical training|curricular practical training|temporary (work )?authori[sz]ation)\b/.test(temporaryAsked)) {
     const entry = authorizationEntry(profile, askedPart(field.label));
     if (entry && (entry.status === "citizen" || entry.status === "permanent-resident")) {
       if (/^if you are\b|\b(extension|stem)\b/.test(temporaryAsked)) {
@@ -535,8 +603,11 @@ export function profileAnswer(
       if (pattern.test(asked)) {
         const answer = canonicalAnswer(key, profile[key]);
         if (!answer || answer === "Decline") return;
-        const own = readOption(key, field.label);
-        return { value: own === answer || (choiceSynonyms[answer] || []).some((synonym) => normalize(synonym) === label) ? "Yes" : "No" };
+        // The box's own option, without the question its label carries
+        // ("Pronouns: He/him", Lever's).
+        const option = field.label.startsWith(field.question!) ? field.label.slice(field.question!.length).replace(/^\s*[:\-–]\s*/, "") : field.label;
+        const own = readOption(key, option);
+        return { value: own === answer || (choiceSynonyms[answer] || []).some((synonym) => normalize(synonym) === normalize(option)) ? "Yes" : "No" };
       }
   }
   // Acknowledgement boxes ("I agree to the privacy policy", "I certify the
@@ -556,6 +627,20 @@ export function profileAnswer(
   // question. A current address does not confirm a separate permanent one.
   if (/^(please )?(provide|enter)\b.*\bpermanent address\b/.test(label)) return;
   if (/\bable to commute\b|\bwilling and able\b.*\bon site\b/.test(label)) return;
+  // "What is your preferred geographic location?" as a box to type in: where
+  // the applicant would work, not how. A model wrote "I prefer onsite work and
+  // am also comfortable with hybrid or remote roles" (Salesforce's Workday). An applicant willing to relocate is open to any location.
+  if (/\bpreferred (geographic(al)? )?(work )?locations?\b/.test(label) && !field.options.length && /^(text|textarea)$/.test(field.kind) && /^yes\b/i.test(profile.willingToRelocate || ""))
+    return { value: profile.city ? `Open to any location; currently in ${[profile.city, profile.state].filter(Boolean).join(", ")}` : "Open to any location" };
+  // "Are you a citizen, national or permanent resident of Iran, Cuba, North
+  // Korea or Syria?" asked Yes or No: No for an applicant whose citizenships
+  // and home are all elsewhere (Salesforce's Workday). Left when the profile does not say.
+  // (Its question follows a paragraph with no space after the full stop:
+  // "…if you are hired.Are you a citizen…".)
+  if (/\b(are|have) you (been |ever been )?(a |an )?(citizen|national|permanent resident|resident)\b/.test(label) && sanctionedPlaces.test(label)) {
+    const tie = sanctionedTie(profile);
+    if (tie !== undefined) return { value: tie ? "Yes" : "No" };
+  }
   const standing = standingAnswer(field, profile);
   if (standing) return standing;
   // Inside one row of an education section, a question is about that row's
@@ -613,6 +698,12 @@ export function profileAnswer(
       ? { value: standing || `${ordinal} Year`, choices: [`${ordinal} Year`, `${year}${["st", "nd", "rd"][year - 1] || "th"} Year`] }
       : { value: standing ? `${ordinal} year (${standing})` : `${ordinal} year` };
   }
+  // "Will you have completed 30 college credit hours at the time of the
+  // internship term…?": a finished bachelor's degree is well past any such
+  // count. Otherwise left alone.
+  if (/\bcompleted (at least )?\d+ (college |semester |university )?credit hours\b/.test(label) &&
+      profile.education.some((row) => /\bbachelor|\bb\.?\s?(s|a|sc|eng)\b\.?/i.test(`${row.title} ${row.details || ""}`) && /^\d{4}-\d{2}/.test(row.endDate) && row.endDate.slice(0, 7) < currentMonth()))
+    return field.options.length ? { value: "Yes" } : undefined;
   // "Anticipated graduation month/year" comes from the latest education end
   // date; an ongoing program without an end date leaves it to the user.
   // "What year did you or, if you have not graduated, will you receive your
@@ -623,7 +714,8 @@ export function profileAnswer(
   // and also names "your most recent graduation date" in the preamble of a
   // question that asks the highest degree received, which is not this
   // (report).
-  if ((/\b(anticipated|expected|projected)\b.*\bgraduat|\bgraduation (date|month|year)\b|\bwill you (receive|earn|complete|be awarded) (your|the|a) degree\b|\bexpect to graduate\b|\b(anticipated|expected|projected) (degree )?completion date\b/.test(label)) &&
+  // SmartRecruiters' "Which year did/do you Graduate?".
+  if ((/\b(anticipated|expected|projected)\b.*\bgraduat|\bgraduation (date|month|year)\b|\b(which|what) year (did |do |will |would )+you graduate\b|\bwill you (receive|earn|complete|be awarded) (your|the|a) degree\b|\b(month|year|date) in which you will (receive|earn|complete|be awarded) (your|the|a) degree\b|\bexpect to graduate\b|\b(anticipated|expected|projected) (degree )?completion date\b/.test(label)) &&
       !/\bwhat is (the |your )?highest (level of )?(education|degree|diploma)\b/.test(label)) {
     // Only a date still ahead is an anticipated graduation; a finished
     // degree's end date is not.
@@ -645,7 +737,12 @@ export function profileAnswer(
     // the whole date, or the year.
     // (Workday's carry it as "<question>: Month".)
     // Or after a sentence: one employer's "…input the first of the month.: Month".
-    const part = field.label.match(/(?:\?\s*:?|[.:]\s*:)\s*(month|day|year)\s*$/i)?.[1].toLowerCase();
+    // Or after a plain colon: Workday's questionnaire "Please input your
+    // anticipated graduation date: Month" got "May 2027" in its Month and
+    // Day (read back as 02/20, Salesforce).
+    // Also with no colon: Oracle's "Projected Completion Date Month" was
+    // written "May 2027" (eihu).
+    const part = field.label.match(/(?:\?\s*:?|[.:]\s*:|\bdate\s*:|\bdate\s+)\s*(month|day|year)\s*$/i)?.[1].toLowerCase();
     if (part === "year") return { value: year };
     if (part === "month") return { value: month, choices: [month.slice(0, 3), monthNumber, String(Number(monthNumber))] };
     // A day the profile does not hold is the 1st where the question says so.
@@ -664,7 +761,9 @@ export function profileAnswer(
     if (day && /\b(year month day|yyyy mm dd)\b/.test(label)) return { value: `${year}-${monthNumber}-${day}` };
     if (field.kind === "datepicker" && day) {
       const written = writtenDate(latest, { ...field, kind: "text" }, profile);
-      return written ? { value: written } : undefined;
+      // A calendar's box with no format the profile names takes the date
+      // itself; the calendar is driven to it (Tesla's).
+      return { value: written || latest.slice(0, 10) };
     }
     if (/\byear\b/.test(label) && !/\bmonth\b/.test(label))
       return { value: year };
@@ -693,7 +792,9 @@ export function profileAnswer(
   // row's end date says which, and a row without one says nothing.
   if (
     /education/.test(normalize(field.section || "")) &&
-    /^(education|degree|completion) status$/.test(label)
+    // SuccessFactors names it "Result": Did Not Complete, Graduated or In
+    // Progress (PACCAR).
+    /^((education|degree|completion) status|result|outcome)$/.test(label)
   ) {
     const end = profile.education[field.index || 0]?.endDate || "";
     if (!/^\d{4}-\d{2}/.test(end)) return;
@@ -701,7 +802,7 @@ export function profileAnswer(
       ? { value: "Completed", choices: ["Complete", "Graduated"] }
       : {
           value: "In progress",
-          choices: ["Currently attending", "Currently enrolled", "Ongoing"],
+          choices: ["In Progress", "Currently attending", "Currently enrolled", "Ongoing"],
         };
   }
   // "Share a link that showcases something you've built": a project or
@@ -716,7 +817,10 @@ export function profileAnswer(
   )
     return {
       value: fullURL(
-        /\b(portfolio|website)\b/.test(label)
+        // One naming GitHub gets the GitHub link, though it says "or
+        // portfolio" too: "GitHub or portfolio link" was given the profile's
+        // product website, which is neither (Bask Health).
+        /\b(portfolio|website)\b/.test(label) && !/\bgithub\b/.test(label)
           ? profile.website || profile.github || ""
           : profile.github || profile.website,
       ),
@@ -751,19 +855,26 @@ export function profileAnswer(
   // A school's or job's own City, State and Country are where it is, from its
   // row, never the applicant's home: Penn State's row got "Arizona", and the
   // school list it governs then held only Arizona's. Without a place for the row, nothing is said.
+  // A form with one school entry names its place "School City" and "School
+  // State" outside any row (iCIMS, International): the
+  // school last attended, where its row says so.
+  const schoolPlace = /^school (city|state)( province)?$/.exec(label);
   const history = normalize(field.section || "");
   if (
-    /work|employment|experience|education/.test(history) &&
-    (countryLabel.test(label) || /^city$/.test(label) || /^(state|province)( (province|district|territory|region))*$/.test(label))
+    schoolPlace ||
+    (/work|employment|experience|education/.test(history) &&
+      (countryLabel.test(label) || /^city$/.test(label) || stateLabel.test(label)))
   ) {
-    const row = (/education/.test(history) ? profile.education : profile.work)[field.index || 0];
+    const row = schoolPlace
+      ? latestRow(profile.education.filter((entry) => entry.organization))
+      : (/education/.test(history) ? profile.education : profile.work)[field.index || 0];
     if (!row) return;
     const parts = (row.location || "").split(",").map((part) => part.trim()).filter(Boolean);
     const city = row.city || (parts.length > 1 ? parts[0] : "");
     const region = row.state || (parts.length > 1 ? parts[1] : "");
     const country = row.country || (parts.length > 2 ? parts[2] : placeCountry(geography, { region }));
     const found = findRegion(geography, region, country);
-    if (/^city$/.test(label)) return city ? { value: city } : undefined;
+    if (/^city$/.test(label) || schoolPlace?.[1] === "city") return city ? { value: city } : undefined;
     if (countryLabel.test(label))
       return country ? { value: country, choices: countryNames(country) } : undefined;
     if (!region) return;
@@ -797,6 +908,9 @@ export function profileAnswer(
       profile.country,
       /united states|^usa?$/i.test(profile.country) ? "United States" : "",
     ].filter(Boolean);
+    // Meta's list words each place "City, ST" ("Menlo Park, CA"): the state's code too.
+    const region = profile.state ? findRegion(geography, profile.state, profile.country || undefined) : undefined;
+    const regionCode = region && normalize(region.code) !== normalize(profile.state) ? region.code : undefined;
     return {
       value: profile.city,
       choices: [
@@ -804,10 +918,11 @@ export function profileAnswer(
           [profile.city, profile.state, country].filter(Boolean).join(", "),
         ),
         [profile.city, profile.state].filter(Boolean).join(", "),
+        ...(regionCode ? [[profile.city, regionCode].join(", ")] : []),
       ],
     };
   }
-  if (/^(state|province)( (province|district|territory|region))*$/.test(label) && profile.state) {
+  if (stateLabel.test(label) && profile.state) {
     const found = findRegion(geography, profile.state, profile.country || undefined);
     const code = found && normalize(found.code) !== normalize(profile.state) ? found.code : undefined;
     if (code) return { value: profile.state, choices: [code] };
@@ -856,19 +971,63 @@ export function profileAnswer(
   // take its level, and "I am fluent in this language" says whether it is
   // fluent. an employer names the overall
   // level "All".
-  if (/^languages?$/.test(normalize(field.section || "")) && profile.languages?.length) {
+  // SuccessFactors' "Language Skills" rows: Language, then Speak, Read and
+  // Write (PACCAR).
+  if (/^languages?( skills?| proficiency)?$/.test(normalize(field.section || "")) && profile.languages?.length) {
     const row = profileLanguages(profile.languages)[field.index || 0];
     if (row && /\bfluent\b/.test(label) && field.kind === "checkbox") return { value: isFluent(row) ? "Yes" : "No" };
-    if (row?.level && /^(all|comprehension|overall|reading|speaking|writing|listening|level|proficiency)$/.test(label)) {
+    if (row && /^language( name)?$/.test(label)) return { value: row.language };
+    if (row?.level && /^(all|comprehension|overall|reading|speaking|writing|listening|read|speak|write|listen|level|proficiency)$/.test(label)) {
       const choices = levelChoices(row.level);
       return { value: choices[0], choices };
     }
+  }
+  // A bare "Language" list, its section not named (Oracle's hdde form): the language the applicant knows best.
+  if (label === "language" && /^(combobox|select)$/.test(field.kind) && !field.section && profile.languages?.length) {
+    const known = profileLanguages(profile.languages);
+    const best = known.find((row) => row.level === "native") || known.find((row) => row.level === "fluent") || known[0];
+    // Its list names each language by country ("English (Australia)", "English
+    // (Canada)", …, no plain "English"): the applicant's own country's.
+    if (best)
+      return {
+        value: best.language,
+        choices: [
+          ...(profile.country ? [`${best.language} (${profile.country})`] : []),
+          ...(/united states|^usa?$/i.test(profile.country || "") ? [`${best.language} (United States)`, `${best.language} (United States of America)`, `${best.language} (US)`] : []),
+        ],
+      };
   }
   // "Languages" or "What languages do you speak?" as one text box: each
   // language with how well, from the profile's list.
   if (/^(languages?( spoken)?|(what|which) languages? (do|can) you (speak|read|write)\b.*)$/.test(label) && profile.languages?.length && /^(text|textbox|textarea)$/.test(field.kind) && !field.options.length) {
     const spoken = profileLanguages(profile.languages).map((row) => (row.level ? `${row.language} (${row.level[0].toUpperCase()}${row.level.slice(1)})` : row.language));
     return spoken.length ? { value: spoken.join(", ") } : undefined;
+  }
+  // "What languages are you fluent in?" as a list (one employer's Ashby radios): the languages the applicant speaks natively or fluently,
+  // or all they speak when the question asks only what they speak. One
+  // choice takes the first of them the list has; a box of a checkbox list
+  // is ticked when its language is one of them.
+  // "In which language(s) are you business fluent?" as a Greenhouse
+  // multi-select, its options unread until it opens: the first fluent
+  // language, picked from the list's own options as it opens (Riot Games).
+  // "Language Skill(s) (Check all that apply)" as one box per language, each
+  // named with a code ("English (ENG)", one employer's Workday): a box is ticked for each language the profile lists.
+  if (field.kind === "checkbox" && field.question && profile.languages?.length && /^language skills?\b/.test(normalize(field.question))) {
+    const named = normalize((field.label.startsWith(field.question) ? field.label.slice(field.question.length) : field.label).replace(/^\s*:\s*/, "").replace(/\s*\([^)]*\)\s*$/, ""));
+    return { value: profileLanguages(profile.languages).some((row) => normalize(row.language) === named) ? "Yes" : "No" };
+  }
+  const languagesAsked = (field.question ? normalize(field.question) : label).match(/^(?:in )?(?:(?:what|which) languages?(?: s)? (?:are you|do you|can you) (?:business )?(fluent in|speak)|languages? (?:you are |you re )?(fluent in|spoken)|(?:what|which) languages?(?: s)? (?:are you|do you) (?:speak )?(?:business )?fluent(?:ly)?)\b/);
+  if (languagesAsked && profile.languages?.length && (field.options.length || field.kind === "checkbox" || field.kind === "combobox")) {
+    const fluentOnly = /fluent/.test(languagesAsked[0]);
+    const known = profileLanguages(profile.languages).filter((row) => !fluentOnly || isFluent(row)).map((row) => row.language);
+    if (!known.length) return;
+    if (field.kind === "checkbox" && field.question) {
+      const option = normalize(field.label.startsWith(field.question) ? field.label.slice(field.question.length) : field.label);
+      return { value: known.some((language) => normalize(language) === option) ? "Yes" : "No" };
+    }
+    if (!field.options.length) return { value: known[0], choices: known.slice(1) };
+    const offered = known.filter((language) => field.options.some((option) => normalize(option) === normalize(language)));
+    return offered.length ? { value: offered[0], choices: offered.slice(1) } : undefined;
   }
   // "What area was your major in?": the program being studied now,
   // the one ending last. The model answered with the finished degree's.
@@ -889,8 +1048,10 @@ export function profileAnswer(
   if (/\b(salary|compensation|pay|wage|rate)\b/.test(label) &&
       /\b(expect\w*|desired|requirements?|range|target|looking for)\b/.test(label) &&
       !field.options.length && !/^(checkbox|radio|select)$/.test(field.kind)) {
-    // A box that takes only a number gets the figure alone.
-    return salaryAnswer(profile.salary, { label, numeric: numberOnly(field) });
+    // A box that takes only a number gets the figure alone, as does one the
+    // site has refused the written figure in ("Invalid number." for "USD
+    // 100,000", PACCAR's SuccessFactors).
+    return salaryAnswer(profile.salary, { label, numeric: numberOnly(field) || (!!field.invalid && !!field.value) });
   }
   // A GPA is its own row's, on that row's scale: the row asked about, or
   // the program held now or ended last.
@@ -920,6 +1081,18 @@ export function profileAnswer(
     if (!gpa || !Number.isFinite(value) || !scale || gpaRow?.gpaScale !== scale) return;
     return { value: value >= threshold ? "Yes" : "No" };
   }
+  // The system a grade is kept in, a list of its own ("Cumulative GPA
+  // (Grading System)" over "Cumulative GPA (Grade/Mark/GPA)", Oracle's
+  // education form): the scale of the GPA saved, chosen before the
+  // grade. Its wording names the scale; none is chosen for a scale it lacks.
+  if (/\b(c?gpa|grade point average)\b/.test(label) && /\b(grading|grade) (system|scale)\b/.test(label) && gpa) {
+    const scale = gpaRow?.gpaScale && gpaRow.gpaScale !== "other" ? gpaRow.gpaScale : Number(gpa) <= 4 ? "4" : undefined;
+    if (!scale) return;
+    const choices = scale === "100"
+      ? ["GPA (out of 100)/Percentage", "Percentage", "GPA (out of 100)"]
+      : [`GPA/Grade (out of ${scale})`, `GPA (out of ${scale})`, `Grade (out of ${scale})`, `${scale}.0 scale`];
+    return { value: choices[0], choices: choices.slice(1) };
+  }
   if (
     /\b(c?gpa|grade point average)\b/.test(label) &&
     !/\b(scale|maximum|max|weighted)\b/.test(label) &&
@@ -931,7 +1104,8 @@ export function profileAnswer(
     const asked = statedScale(label);
     if (asked && asked !== gpaRow?.gpaScale) return;
     if (!asked && field.options.length && gpaRow?.gpaScale !== "4") return;
-    return { value: gpa, ...(gpaRow?.gpaScale === "4" || asked ? { numeric: Number(gpa) } : {}) };
+    const scale = Number(gpaRow?.gpaScale);
+    return { value: gpa, ...(gpaRow?.gpaScale === "4" || asked ? { numeric: Number(gpa), ...(Number.isFinite(scale) && scale > 0 ? { scale } : {}) } : {}) };
   }
   // The scale itself, when asked: "GPA scale", "out of".
   if (/\b(c?gpa|grade point average)\b/.test(label) && /\b(scale|out of|maximum|max)\b/.test(label) && gpaRow?.gpaScale && gpaRow.gpaScale !== "other" && gpa)
@@ -955,6 +1129,15 @@ export function profileAnswer(
   // "Did you obtain this degree in the last 24 months?" after a question for
   // the highest degree received: that degree, finished,
   // and when.
+  // "Did you complete the most recent degree listed, and receive notice of
+  // your graduation?" (ICE's iCIMS form): the
+  // profile's latest school row, finished or not. One with no end date and
+  // not marked current says nothing.
+  if (/^(?:did|have) you (?:complete|finish|earn|receive|obtain)\w* (?:the |your )?(?:most recent|latest|last) degree\b/.test(label)) {
+    const latest = latestRow(profile.education);
+    const done = latest ? graduated(latest) : undefined;
+    if (done !== undefined) return { value: done ? "Yes" : "No" };
+  }
   const recent = label.match(/\b(?:did you )?(?:obtain|receive|earn|complete|get)\w* (?:this|that|the|your) degree (?:in|within) the (?:last|past) (\d+) (month|year)s?\b/);
   if (recent) {
     const thisMonth = currentMonth();
@@ -1017,7 +1200,7 @@ export function profileAnswer(
       // categories after its name, "Hispanic or Latino" first among them,
       // and was read as the Hispanic question and left.
       .map(([pattern, topic]) => ({ topic, at: label.search(pattern) }))
-      .filter((found) => found.at >= 0)
+      .filter((found) => found.at >= 0 && !(found.topic === "gender" && genderAtBirth.test(label)))
       .sort((a, b) => a.at - b.at)[0]?.topic ||
     (["Yes", "No"].every((answer) =>
       disabilityOptions.some((option) => readOption("disabilityStatus", option) === answer),
@@ -1246,18 +1429,14 @@ export function profileAnswer(
   // How the applicant says their name, in their own spelling of it.
   if (/\b(pronunciation|pronounciation|phonetic)\b/.test(label) && profile.namePronunciation && !field.options.length)
     return { value: profile.namePronunciation };
-  // Their age today, from the date of birth: a number, or the range a list offers.
-  if (/^(what is )?(your )?(current )?age( range| group| bracket)?$|^how old are you$/.test(label) && /^\d{4}-\d{2}-\d{2}$/.test(profile.dateOfBirth)) {
-    const [year, month, day] = profile.dateOfBirth.split("-").map(Number);
-    const now = new Date();
-    const age = now.getFullYear() - year - (now.getMonth() + 1 < month || (now.getMonth() + 1 === month && now.getDate() < day) ? 1 : 0);
-    if (age >= 14 && age < 120) return { value: String(age), numeric: age };
-    return;
-  }
   for (const [pattern, key] of [
     [/\bpronouns?\b/, "pronouns"],
     [/\bsexual orientation\b|^orientation$/, "sexualOrientation"],
     [/\btransgender\b/, "transgender"],
+    // "Do you identify with a gender that is different to the gender assigned
+    // to you at birth?" (Wise): the same saved
+    // answer, asked without the word.
+    [genderAtBirth, "transgender"],
   ] as const)
     if (pattern.test(label)) {
       const answer = canonicalAnswer(key, profile[key]);
@@ -1293,24 +1472,39 @@ export function historyRowMap(fields: Field[], profile: Profile) {
       Boolean(value && wanted) &&
       (value === wanted || value.includes(wanted) || wanted.includes(value));
     const pairs: { page: number; row: number; score: number }[] = [];
+    const saidBy = (pageFields: Field[], pattern: RegExp) =>
+      pageFields
+        .filter(
+          (field) =>
+            pattern.test(normalize(field.label)) && field.value && !field.siteValue,
+        )
+        .map((field) => normalize(field.value));
+    // A value several page rows say tells none of them apart: the fill gave
+    // both of a person's schools "Computer Science", the closest field a
+    // site listed for one, and it then paired the first page row with the
+    // school whose field that was (Workday).
+    const sharedBy = (pattern: RegExp) => {
+      const counts = new Map<string, number>();
+      for (const pageFields of pageRows.values())
+        for (const value of new Set(saidBy(pageFields, pattern)))
+          counts.set(value, (counts.get(value) || 0) + 1);
+      return new Set([...counts].filter(([, count]) => count > 1).map(([value]) => value));
+    };
+    const nameKey =
+      collection === "education"
+        ? /school|university|institution|college/
+        : /company|employer|organization/;
+    const detailKey =
+      collection === "education" ? /major|discipline|field of study/ : /title|position/;
+    const sharedNames = sharedBy(nameKey);
+    const sharedDetails = sharedBy(detailKey);
     for (const [page, pageFields] of pageRows) {
       // A site's guesses from a parsed resume are no evidence of which
       // profile row a page row holds; only the applicant's entries are.
-      const said = (pattern: RegExp) =>
-        pageFields
-          .filter(
-            (field) =>
-              pattern.test(normalize(field.label)) && field.value && !field.siteValue,
-          )
-          .map((field) => normalize(field.value));
-      const names = said(
-        collection === "education"
-          ? /school|university|institution|college/
-          : /company|employer|organization/,
-      );
-      const details = said(
-        collection === "education" ? /major|discipline|field of study/ : /title|position/,
-      );
+      const said = (pattern: RegExp, shared: Set<string>) =>
+        saidBy(pageFields, pattern).filter((value) => !shared.has(value));
+      const names = said(nameKey, sharedNames);
+      const details = said(detailKey, sharedDetails);
       rows.forEach((row, index) => {
         const score =
           (names.some((value) => matches(value, normalize(row.organization))) ? 2 : 0) +
@@ -1362,12 +1556,15 @@ function otherSchool(fields: Field[], profile: Profile, answered: Set<string>): 
     const leveled = label.match(/^(?:name of (?:the |your )?)?(?:school|university|college|institution)(?: name)? (?:for )?(?:your )?(undergraduate|bachelor s?|graduate(?: mba)?(?: phd)?|master s?) degree$/);
     const row = leveled
       ? rowAtLevel(profile, /^(undergraduate|bachelor)/.test(leveled[1]) ? "undergraduate" : "graduate")
-      : schoolNameQuestion(field.label) && !field.section ? profile.education[field.index || 0] : undefined;
+      : schoolNameQuestion(field.label) && (!field.section || normalize(field.section) === label) ? profile.education[field.index || 0] : undefined;
     if (!row?.organization) return [];
     const named = fields.slice(index + 1, index + 3).find((next) =>
       /^(text|textbox)$/.test(next.kind) && !next.options.length &&
       /^if you (selected|chose|picked) other\b.*\b(name|school|university|college|institution)\b/.test(normalize(next.label)));
-    if (!named || !open(named)) return [];
+    // A list of schools after the question itself (SuccessFactors' "What
+    // school are you currently attending?") has no box for a
+    // name: its Other alone is the answer. A level of study's list keeps its box.
+    if (leveled ? !named || !open(named) : named && !open(named)) return [];
     const others = field.options.filter((option) => /^other\b/.test(normalize(option)));
     const us = usSchool(row);
     const other = others.length === 1
@@ -1378,12 +1575,35 @@ function otherSchool(fields: Field[], profile: Profile, answered: Set<string>): 
     if (!other) return [];
     return [
       { fieldId: field.id, value: other, expectedValue: field.value, revision: field.revision, source: "confirmed-profile" as const },
-      { fieldId: named.id, value: row.organization, expectedValue: named.value, revision: named.revision, source: "confirmed-profile" as const },
+      ...(named ? [{ fieldId: named.id, value: row.organization, expectedValue: named.value, revision: named.revision, source: "confirmed-profile" as const }] : []),
     ];
   });
 }
 
+// A form's "Education (Completed)" part asks for the highest level the
+// applicant has graduated from and says to remove all others (iCIMS): the highest finished degree in its first row, never
+// one still under way, and the rest of its rows are left.
+const completedEducation = (field: Field) => {
+  const section = normalize(field.section || "");
+  return /education/.test(section) && /\bcompleted\b/.test(section);
+};
+function highestFinished(profile: Profile) {
+  const thisMonth = currentMonth();
+  const finished = profile.education.filter((row) => !row.current && /^\d{4}-\d{2}/.test(row.endDate) && row.endDate.slice(0, 7) <= thisMonth);
+  const rank = (row: Profile["education"][number]) => levelRank[degreeLevel(row.title)] || 0;
+  return finished.reduce<Profile["education"][number] | undefined>((best, row) => (!best || rank(row) > rank(best) ? row : best), undefined);
+}
+
 export function proposals(fields: Field[], profile: Profile): Proposal[] {
+  if (!fields.some(completedEducation)) return proposalsFor(fields, profile);
+  const top = highestFinished(profile);
+  return [
+    ...proposalsFor(fields.filter((field) => !completedEducation(field)), profile),
+    ...proposalsFor(fields.filter(completedEducation), { ...profile, education: top ? [top] : [] }),
+  ];
+}
+
+function proposalsFor(fields: Field[], profile: Profile): Proposal[] {
   const found = ownProposals(fields, profile);
   const answered = new Set(found.map((proposal) => proposal.fieldId));
   return [...found, ...otherSchool(fields, profile, answered).filter((proposal) => !answered.has(proposal.fieldId))];
@@ -1398,6 +1618,13 @@ function ownProposals(fields: Field[], profile: Profile): Proposal[] {
       : /work|experience|employment/.test(section)
         ? "work"
         : "";
+    // A web address the site holds and calls invalid for want of its scheme
+    // (Oracle's "Work and Education History Link 1" held the address its profile
+    // import made, "linkedin.com/in/…"): the same address, given
+    // its scheme.
+    if (original.kind === "url" && original.invalid && original.value && !original.protected &&
+        /^(www\.)?[a-z0-9-]+(\.[a-z0-9-]+)+(\/|$)/i.test(original.value.trim()) && !/^[a-z][a-z0-9+.-]*:/i.test(original.value.trim()))
+      return [{ fieldId: original.id, value: `https://${original.value.trim()}`, expectedValue: original.value, revision: original.revision, source: "confirmed-profile" as const }];
     const mapped = rowMap.get(`${collection}:${original.index || 0}`);
     // Answers come from the profile row paired with this page row.
     const field = mapped === undefined ? original : { ...original, index: mapped };
@@ -1405,6 +1632,35 @@ function ownProposals(fields: Field[], profile: Profile): Proposal[] {
     // which the site's rules choose when the list lacks the answer; written
     // beside a list holding the school, it reads as two answers (Expand
     // Energy).
+    // "Please specify" beside a "How did you hear" list set to Other: where
+    // the applicant heard of it (see hearAbout).
+    // An address asked only if an earlier numbered question was Yes, "N/A"
+    // otherwise (one employer's "If you answered "Yes" to question 1, please provide
+    // your permanent address…", question 1 being "Are you currently enrolled
+    // in a degree seeking program?").
+    const conditional = conditionalAddress(field, fields, profile);
+    if (conditional) {
+      // A list searched for a major takes a shorter name of it too: "M.S. Data
+      // Science, Analytics & Engineering (Human-Centered Applications)" as
+      // "Data Science, Analytics & Engineering", then "Data Science".
+      const plain = conditional.replace(/^(?:[A-Z]\.){1,3}\s*[A-Z]?\.?\s+(?=[A-Z])/, "").replace(/\s*\([^)]*\)\s*/g, " ").trim();
+      // Lists join a major's parts with slashes: GlobalHR's Workday offers
+      // "Data Science/Analytics".
+      const parts = plain.split(/,| & | and /).map((part) => part.trim()).filter(Boolean);
+      const forms = [plain, parts.slice(0, 2).join("/"), parts.join("/"), parts[0]];
+      const choices = field.kind === "combobox" && conditional !== "N/A" ? [...new Set(forms)].filter((choice) => choice && choice !== conditional) : [];
+      return [{ fieldId: field.id, value: conditional, ...(choices.length ? { choices } : {}), expectedValue: field.value, revision: field.revision, source: "confirmed-profile" as const }];
+    }
+    // A list asked only "If yes" to the question before it, that question
+    // answered No: the list's N/A (Riot Games' "If yes, can you please
+    // indicate the last month you worked for Tencent…", required, with "n/a"
+    // before the months).
+    const notApplicable = conditionalNotApplicable(field, fields);
+    if (notApplicable) return [{ fieldId: field.id, ...notApplicable, expectedValue: field.value, revision: field.revision, source: "confirmed-profile" as const }];
+    const spoken = spokenLanguage(field, fields, profile);
+    if (spoken) return [{ fieldId: field.id, value: spoken.value, ...(spoken.choices ? { choices: spoken.choices } : {}), expectedValue: field.value, revision: field.revision, source: "confirmed-profile" as const }];
+    const specified = hearAboutSpecify(field, fields, profile);
+    if (specified) return [{ fieldId: field.id, value: specified, expectedValue: field.value, revision: field.revision, source: "confirmed-profile" as const }];
     if (/^if other\b/.test(normalize(field.label))) return [];
     // One box of a "select all that apply" list is a choice, not a
     // question of its own: one employer's sanctions list had "Ordinarily a
@@ -1413,11 +1669,20 @@ function ownProposals(fields: Field[], profile: Profile): Proposal[] {
     // citizenship. Such lists are read as what they are (see
     // listChoice); other legal lists, and those depending on an earlier
     // answer, are the applicant's.
-    const choice = listChoice(field, profile);
+    // A bare "Start Date" on a form that also has "End Date" boxes is a row's
+    // (a job's, a school's), not when the applicant could start: PACCAR's
+    // job rows, their section not yet read, were each given today's date
+    // over the start dates their site rule had typed.
+    if (/^(start|from) date$/.test(normalize(field.label)) && !/\b(employment|experience|work|education|history)\b/.test(normalize(field.section || "")) &&
+        fields.some((other) => /^(end|to) date$/.test(normalize(other.label))))
+      return [];
+    const choice = listChoice(field, profile) ?? hearAbout(field, profile);
     if (choice === "leave") return [];
     if (
       field.protected ||
-      (field.value && !field.siteValue) ||
+      // A box the site refused its value in is answered again, if the
+      // answer is now another (below).
+      (field.value && !field.siteValue && !field.invalid) ||
       /file|password|hidden/.test(field.kind)
     )
       return [];
@@ -1432,7 +1697,13 @@ function ownProposals(fields: Field[], profile: Profile): Proposal[] {
       // A second line the site kept belongs to the address it kept, not to
       // the profile's, which has none: under the profile's street it is
       // wrong, so it is emptied.
-      const keptSecondLine = Boolean(profile.address) && secondAddressLine.test(normalize(field.label));
+      // A box named by its unit alone ("Apt/Flat#") is taken for that line
+      // only beside a street the site kept that is not the profile's
+      // (Oracle's Higher, "22 Mustang Dr" with "Apt 22").
+      const unitOnly = /^(apt|apartment|flat|suite|unit)\b/.test(normalize(field.label));
+      const keptSecondLine = Boolean(profile.address) && secondAddressLine.test(normalize(field.label)) &&
+        (!unitOnly || fields.some((other) => other !== field && other.siteValue && firstAddressLine.test(normalize(other.label)) &&
+          normalize(other.value) !== normalize(profile.address)));
       // A job the profile says was remote has no place: a city the site's
       // parser gave it is another job's ("Hyderabad" under a remote job,
       // one employer's iCIMS), so it is emptied.
@@ -1457,6 +1728,24 @@ function ownProposals(fields: Field[], profile: Profile): Proposal[] {
             ? schoolChoices(profile.education[field.index || 0] || { organization: answer.value, location: "" })
             : nameVariants(answer.value),
       };
+    // Oracle's Address Line 1 is a search box listing whole addresses
+    // ("323 EAST VETERANS WAY, TEMPE, ARIZONA"): the street with the city
+    // and state beside it picks the listing, the street alone any listing.
+    if (field.kind === "combobox" && !field.options.length && !special && firstAddressLine.test(normalize(field.label)) &&
+        answer.value === profile.address && profile.city) {
+      const region = findRegion(geography, profile.state, profile.country);
+      const states = [...new Set([profile.state, ...(region?.names || [])].filter(Boolean))];
+      const places = states.length ? states : [""];
+      answer = {
+        ...answer,
+        choices: [...new Set([...(answer.choices || []),
+          ...places.flatMap((state) => [
+            [profile.address, profile.city, state].filter(Boolean).join(", "),
+            [profile.address, profile.city, state, profile.postalCode].filter(Boolean).join(", "),
+            [profile.address, profile.city, state, profile.postalCode, profile.country].filter(Boolean).join(", "),
+          ])])],
+      };
+    }
     // A list that shows its options only once opened is given the standing
     // question's wordings too, to pick by there.
     if (!field.options.length && !special && /combobox|listbox|select/.test(field.kind)) {
@@ -1487,12 +1776,21 @@ function ownProposals(fields: Field[], profile: Profile): Proposal[] {
       if (!option && !((field.optionCount || 0) > field.options.length)) return [];
       if (option) answer = { value: option };
     }
+    // A web address box (type url) takes a scheme: the profile's "linkedin.com/in/…"
+    // was refused as written ("Work and Education History Link 1", Oracle's
+    // hdde form).
+    if (field.kind === "url" && /^(www\.)?[a-z0-9-]+(\.[a-z0-9-]+)+(\/|$)/i.test(answer.value) && !/^[a-z][a-z0-9+.-]*:/i.test(answer.value))
+      answer = { ...answer, value: `https://${answer.value}` };
     // An unchecked box already says No; writing it again changes nothing.
     if (field.kind === "checkbox" && answer.value === "No" && !field.value) return [];
+    // The value the site refused is not written again.
+    if (field.invalid && field.value && !field.siteValue && normalize(answer.value) === normalize(field.value)) return [];
     // A value the site pre-filled is replaced only when it differs, from the
     // answer and from every wording of it ("Masters" for "Masters of
     // Science", an employer).
-    if (field.siteValue && [answer.value, ...(answer.choices || [])].some((wording) => normalize(wording) === normalize(field.value)))
+    // (Not a list the site calls invalid: Oracle's cx-select shows text typed
+    // into it and refuses it until an entry is picked.)
+    if (field.siteValue && !(field.kind === "combobox" && field.invalid) && [answer.value, ...(answer.choices || [])].some((wording) => normalize(wording) === normalize(field.value)))
       return [];
     return [
       {
@@ -1549,6 +1847,10 @@ export function postingGuess(raw: string): string | undefined {
     const pid = url.searchParams.get("pid");
     if (/\/careers\/apply\/?$/i.test(url.pathname) && pid && /^\d{6,}$/.test(pid))
       return `${url.origin}${url.pathname.replace(/\/apply\/?$/i, "")}/job/${pid}`;
+    // Paylocity applies at /Recruiting/Jobs/Apply/<id> and shows the job at
+    // /Recruiting/Jobs/Details/<id>.
+    const paylocity = /(^|\.)paylocity\.com$/.test(url.hostname) && url.pathname.match(/^(.*\/Jobs)\/Apply\/(\d+)\/?$/i);
+    if (paylocity) return `${url.origin}${paylocity[1]}/Details/${paylocity[2]}`;
     const path = url.pathname.replace(/\/(apply|application)\/?$/i, "");
     if (path === url.pathname || path.replace(/\//g, "").length < 2) return;
     url.pathname = path;
@@ -1661,4 +1963,118 @@ function listChoice(field: Field, profile: Profile): Answer | "leave" | undefine
   }
   if (legalQuestion(field.question) || /\b(prior|previous|above) question\b|\bif you (selected|answered|chose|checked)\b/.test(asked)) return "leave";
   return undefined;
+}
+
+// How the applicant heard of an opening: their own sources
+// ("Where you hear about jobs" in the profile), else Application Lane, which
+// a list names under its Other, with the name in the box beside it.
+export const HEARD_DEFAULT = "Application Lane";
+const hearQuestion = /\bhow did you (first )?(hear|learn|find out|come to know) (about|of)\b|\bhow you (first )?(heard|learned|found out|came to know) (about|of)\b|\bwhere did you (first )?(hear|learn|find out|see|find)\b|\bhow did you (find|discover|come across)\b|^(source|referral source|recruitment source|candidate source|application source|how did you hear)$/;
+export function heardSources(profile: Profile): string[] {
+  const people = new Set((profile.references || []).map((reference) => normalize(reference.name || "")).filter(Boolean));
+  const own = (profile.referralSource || []).map((source) => source.trim()).filter((source) => source && !people.has(normalize(source)));
+  return own.length ? own : [HEARD_DEFAULT];
+}
+function hearAbout(field: Field, profile: Profile): Answer | "leave" | undefined {
+  const asked = normalize(field.question || field.label);
+  if (!hearQuestion.test(asked) || /\b(referred|referral from|employee referral name|who referred)\b/.test(asked)) return undefined;
+  const sources = heardSources(profile);
+  const fallback = sources.includes(HEARD_DEFAULT);
+  // Riot Games' Greenhouse form names its Other "None of the above /
+  // Other", and the list was left for no option matching.
+  const others = ["Other", "Other (please specify)", "Other - please specify", "Other (Please Specify)", "Others", "None of the above / Other", "Other / None of the above",
+    // Vizient's list: the applicant picked it.
+    "Source not in list", "Not in list", "Not listed", "Source not listed", "Not listed above"];
+  // One box of a "select all that apply" list: the applicant's source, or Other.
+  if (field.kind === "checkbox" && field.question) {
+    const option = normalize(field.label.startsWith(field.question) ? field.label.slice(field.question.length) : field.label);
+    const ours = sources.some((source) => normalize(source) === option) || (fallback && /^others?\b/.test(option));
+    return ours ? { value: "Yes" } : "leave";
+  }
+  if (field.kind === "checkbox" || field.kind === "radio" && !field.options.length) return undefined;
+  // A box to type in takes the source as written.
+  if (!field.options.length && /^(text|textarea)$/.test(field.kind)) return { value: sources[0] };
+  return { value: sources[0], choices: [...sources.slice(1), ...(fallback ? others : [])] };
+}
+// "If you answered "Yes" to question N, please provide your (permanent)
+// address. If you did not answer "Yes", please enter "N/A".": the full address
+// when question N of the form (its Nth question, counted from the first a
+// Yes or No answers) says Yes, "N/A" when it says No, else nothing.
+function conditionalAddress(field: Field, fields: Field[], profile: Profile): string | undefined {
+  if (!/^(text|textarea|combobox)$/.test(field.kind) || field.value) return undefined;
+  const label = normalize(field.label);
+  const asked = label.match(/^if you answered yes to question (\d+) please (?:provide|enter|list) your (?:permanent |home |current |mailing )?(address|major|field of study|area of study)\b.*\bn a\b/);
+  if (!asked) return undefined;
+  const questions = fields.filter((other) => other !== field && /^(yes|no)$/i.test(other.value.trim()) && !/^(language|settings)selectorbutton$/i.test(other.label));
+  const answer = questions[Number(asked[1]) - 1]?.value.trim().toLowerCase();
+  if (answer === "no") return "N/A";
+  if (answer !== "yes") return undefined;
+  if (field.kind === "combobox" && asked[2] === "address") return undefined;
+  // Its major asked the same way (GlobalHR's Workday): question 1 asks whether the applicant is in a degree
+  // program, so the major is the program still under way, else the latest.
+  if (asked[2] !== "address") {
+    const thisMonth = currentMonth();
+    const rows = profile.education.filter((row) => row.fieldOfStudy);
+    const ongoing = rows.find((row) => row.current || (/^\d{4}-\d{2}/.test(row.endDate) && row.endDate.slice(0, 7) >= thisMonth));
+    return (ongoing || [...rows].sort((a, b) => (a.endDate || "").localeCompare(b.endDate || "")).at(-1))?.fieldOfStudy || undefined;
+  }
+  const street = [profile.address, profile.addressLine2].filter(Boolean).join(", ");
+  const region = [profile.state, profile.postalCode].filter(Boolean).join(" ");
+  const parts = [street, profile.city, region, profile.country].filter(Boolean);
+  return street && profile.city ? parts.join(", ") : undefined;
+}
+// "If yes, …" as a list, after a question answered No: the list's N/A-like
+// option, never one of its real answers (a month, a name). Follow-ups to the
+// same question in between are passed over; any other question before it,
+// or one not answered, leaves the list alone.
+const notApplicableChoices = ["N/A", "Not applicable", "None", "Not Applicable (N/A)", "N/A - Not applicable"];
+function conditionalNotApplicable(field: Field, fields: Field[]): { value: string; choices: string[] } | undefined {
+  if (field.value || field.protected || !/^(combobox|select|radio)$/.test(field.kind)) return undefined;
+  if (!/^if (yes|so)\b/.test(normalize(field.question || field.label))) return undefined;
+  const at = fields.indexOf(field);
+  const before = fields.slice(0, Math.max(0, at)).reverse().find((other) => !/^if\b/.test(normalize(other.question || other.label)));
+  if (!before || !/^no$/i.test(before.value.trim())) return undefined;
+  const offered = field.options.length
+    ? field.options.filter((option) => notApplicableChoices.some((choice) => normalize(choice) === normalize(option)))
+    : notApplicableChoices;
+  return offered.length ? { value: offered[0], choices: offered.slice(1) } : undefined;
+}
+// The box beside a "How did you hear" list that asks to name the source
+// once the list says Other.
+// SmartRecruiters' language pair: "Please type in a language that you speak", then "Select your
+// level" beside it. The profile's first language, and how well.
+function spokenLanguage(field: Field, fields: Field[], profile: Profile): { value: string; choices?: string[] } | undefined {
+  if (field.value) return undefined;
+  const languages = profileLanguages(profile.languages);
+  if (!languages.length) return undefined;
+  const asksLanguage = (label: string) => /^(please )?(type|enter|write|list|name)( in)? an?( other)? language (that )?you (speak|know)$/.test(normalize(label));
+  if (asksLanguage(field.label) && /^(text|textbox)$/.test(field.kind) && !field.options.length) return { value: languages[0].language };
+  const at = fields.indexOf(field);
+  if (/^(select |choose )?(your )?(language |proficiency )?level$/.test(normalize(field.label)) && at > 0 && asksLanguage(fields[at - 1].label) && languages[0].level) {
+    const choices = levelChoices(languages[0].level);
+    return { value: choices[0], choices };
+  }
+  return undefined;
+}
+function hearAboutSpecify(field: Field, fields: Field[], profile: Profile): string | undefined {
+  if (!/^(text|textarea)$/.test(field.kind) || field.value) return undefined;
+  const label = normalize(field.label);
+  // A box that says itself it follows the list, for a source the list does
+  // not offer: "Where else did you hear about this opportunity, that is not
+  // listed above as an option?" (TikTok). Its
+  // list may have no name the page gives it.
+  if (/\b(where|how) else did you (hear|learn|find out)\b/.test(label) && /\bnot (listed|shown|included)\b/.test(label)) {
+    const sources = heardSources(profile);
+    return sources.includes(HEARD_DEFAULT) ? HEARD_DEFAULT : sources[0];
+  }
+  // Or a box asking for more about Other, among the list's other choices
+  // ("If "Industry Conference" or "Other," please provide more details",
+  // one employer's Ashby).
+  if (!/^(please specify|specify|if other|other|if other please specify|please specify other|other please specify|if you selected other)\b/.test(label) && !/\bplease specify\b/.test(label) &&
+      !(/^if\b.*\bother\b/.test(label) && /\b(specify|provide (more |further |additional )?details?|explain|tell us more|describe|elaborate)\b/.test(label))) return undefined;
+  const at = fields.indexOf(field);
+  const before = fields.slice(Math.max(0, at - 3), at).reverse().find((other) => hearQuestion.test(normalize(other.question || other.label)));
+  if (!before || !/^others?\b/i.test((before.value || "").trim())) return undefined;
+  const sources = heardSources(profile);
+  return sources.includes(HEARD_DEFAULT) ? HEARD_DEFAULT : sources[0];
 }

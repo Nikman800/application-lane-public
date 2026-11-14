@@ -19,7 +19,7 @@ You need [Node.js 22](https://nodejs.org/) and desktop Chrome, Edge, Brave or an
 
 1. **Install Node 22, then get Application Lane.** Either clone this repository:
    ```bash
-   git clone https://github.com/Nikman800/application-lane-public.git application-lane
+   git clone https://github.com/Nikman800/application-lane.git application-lane
    cd application-lane
    ```
    or download the two files from the latest GitHub release: `application-lane-extension-<version>.zip` (the extension) and `application-lane-backend-<version>.tgz` (the backend).

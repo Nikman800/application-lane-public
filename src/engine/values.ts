@@ -1,6 +1,6 @@
 import type { GlobalConfig, JsonValue, SelectorConfig } from "./config/schema";
 import { normalize, type Profile } from "../shared/model";
-import { canonicalAnswer, type ChoiceField } from "../shared/answers";
+import { canonicalAnswer, rankOption, type ChoiceField } from "../shared/answers";
 import { schoolNames } from "../shared/schools";
 import { degreeAliases, graduated, highestRow, studying } from "../shared/education";
 import { askedCountry, authorizationAnswer, jobCountry } from "../shared/authorization";
@@ -23,7 +23,7 @@ export type ValueContext = {
 // Keys whose suffix is part of the name, not a repetition index.
 const suffixKeys = new Set(["address_line_2", "address_line_3", "address_line_4"]);
 const baseKey = (key: string) =>
-  suffixKeys.has(key) ? key : key.replace(/_[234]$/, "");
+  suffixKeys.has(key) ? key : key.replace(/_[2-5]$/, "");
 const asString = (value: JsonValue | undefined): string[] => {
   if (value === undefined || value === null) return [];
   if (Array.isArray(value)) return value.flatMap(asString);
@@ -211,7 +211,10 @@ export function canonicalValues(
   // for them; that name is not how they found a posting.
   if (key === "source") {
     const people = new Set((profile.references || []).map((reference) => normalize(reference.name || "")).filter(Boolean));
-    return unique(profile.referralSource.filter((source) => !people.has(normalize(source))));
+    const own = unique(profile.referralSource.filter((source) => source.trim() && !people.has(normalize(source))));
+    // None saved: Application Lane, which a list names under its Other
+    // (shared/matching.ts, hearAbout).
+    return own.length ? own : ["Application Lane", "Other", "Other (please specify)"];
   }
   const now = new Date();
   const currentDate = {
@@ -746,6 +749,14 @@ export function matchOption(
     (option, value) => {
       const bare = option.label.replace(/\s*\([^()]*\)\s*$/, "");
       return bare !== option.label && Boolean(normalize(value)) && normalize(bare) === normalize(value);
+    },
+    // A degree listed by its level with examples after it: Oracle's "Graduate
+    // Master's Degrees (e.g., Master of Arts, …)" for a Master of Science
+    // (the answer ranking's own reading of such a list, answers.ts).
+    (option, value) => {
+      if (!/\(\s*e\.?\s*g\.?/i.test(option.label)) return false;
+      const rank = rankOption({ value, choices: [] }, option.label);
+      return rank !== undefined && rank >= 44.7 && rank < 44.71;
     },
     // A binary answer may be worded as one sentence. Generic word
     // containment cannot establish a school, degree, country or status.

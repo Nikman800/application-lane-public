@@ -1,4 +1,5 @@
 import { normalize, type Field } from "./model";
+import { missingOptionalProfileField, profileFactQuestion } from "./profile-facts";
 
 const identity =
   /^(first|last|full|legal|preferred|middle|given|family)?\s*name\b|\be-?mail\b|\bphone\b|\bmobile\b|linkedin|github|\bwebsite\b|portfolio|\burl\b|\baddress\b|^(city|state|province|zip|postal|country)\b|twitter|behance|dribbble|pronoun|\bzip\b|postal code|post code|street|residen(ce|tial) address/i;
@@ -20,6 +21,7 @@ export function applicationQuestion(field: Field): boolean {
   if (field.protected || field.value.trim() || field.options.length)
     return false;
   if (!["textarea", "text"].includes(field.kind)) return false;
+  if (profileFactQuestion(field)) return false;
   const label = field.label.trim();
   if (
     !label ||
@@ -54,7 +56,13 @@ export function applicationQuestion(field: Field): boolean {
 export function structuredFallbackField(field: Field, legalToo = false): boolean {
   if (field.protected || field.value.trim() || applicationQuestion(field))
     return false;
+  if (profileFactQuestion(field) || missingOptionalProfileField(field)) return false;
   if (!legalToo && legalQuestion(`${field.question || ""} ${field.label}`)) return false;
+  // "Education (Completed)" asks for the highest degree only and says to
+  // remove all other rows: the model never fills a row after the first
+  // (iCIMS: it copied the first school into a
+  // second block and left its required Country empty).
+  if (/\beducation\b/i.test(field.section || "") && /\bcompleted\b/i.test(field.section || "") && (field.index || 0) > 0) return false;
   if (
     manualOnly.test(field.label) ||
     /file|password|hidden|submit|button/.test(field.kind)
@@ -78,6 +86,14 @@ export function structuredFallbackField(field: Field, legalToo = false): boolean
     field.label.length <= 60 &&
     /\b(date|from|to|start|end|month|year)\b/i.test(field.label)
   )
+    return false;
+  // Fields the profile has nothing to say to: a social profile it holds no
+  // address for, and the number of an employer's own staff. Each was sent to
+  // the model, which answered none, 8 to 32 s a page while the fill waited
+  // (Vizient). (A box asking for an employer, a site or GitHub is the
+  // profile's own, and is still asked.)
+  if (/^(facebook|twitter|x|x twitter|instagram|tiktok|snapchat|youtube|pinterest|reddit|twitch)( (url|link|profile|handle|username|page|account))?$/i.test(field.label.trim().replace(/[^a-z ]+/gi, " ").replace(/\s+/g, " ")) ||
+      /^employee (id|number)\b/i.test(field.label.trim()) && !field.required)
     return false;
   // So is a school's GPA: one the profile leaves out is left out on purpose.
   // The model put one school's GPA on another (Workday).
@@ -131,4 +147,21 @@ export function fitAnswerLength(
     kept = next;
   }
   return kept;
+}
+
+// Why the fill left a question, said in the panel's list of unfilled fields
+// in place of "Normal fill could not match this field…", which read as a
+// failure for questions it leaves on purpose (Salesforce's attestations and
+// legal questions). Undefined: no reason of its own.
+export function leftReason(label: string): string | undefined {
+  const text = label.toLowerCase();
+  if (/\b(i (acknowledge|attest|certify|confirm|understand|agree)|acknowledg\w*|attest\w*|certif\w*|truthfully and accurately|signature|sign\w* (here|below)|e-?signature)\b/.test(text))
+    return "An attestation or acknowledgment: yours to confirm. Application Lane never signs for you.";
+  if (/\b(relatives?|family members?|close personal connections?|referred|know anyone)\b/.test(text))
+    return "About people you know: yours to answer. Save an answer in your profile to reuse it.";
+  if (/\b(debar\w*|suspended|government (employ\w*|official)|special government employee|armed (services|forces)|post-government|export control|criminal|convict\w*|felon\w*|security clearance|clearance|non-?compete|conflicts? of interest)\b/.test(text))
+    return "A legal question your profile does not answer. Save an answer once in your profile, and every application will use it.";
+  if (/\b(future positions|willing to travel|how often .*travel|preferred|preference|select one of the following options)\b/.test(text))
+    return "A preference your profile does not record. Save an answer once in your profile, and every application will use it.";
+  return undefined;
 }

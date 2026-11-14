@@ -123,12 +123,19 @@
       "education",
       [
         {
-          "addButtonPath": ".//button[contains(@class,'new-tile') or starts-with(@id,'profileItemsAddButton')][normalize-space(.)='Add Education']",
-          "containerPath": ".//div[@role='region'][starts-with(normalize-space(@aria-label),'Education')]//div[contains(@class,'profile-item-content')]",
-          "confirmAddedPath": [
-            ".//div[@role='region'][starts-with(normalize-space(@aria-label),'Education')]//div[contains(@class,'profile-item-content')]"
+          "addButtonPath": [
+            "//div[contains(@class,'apply-flow-section')][not(contains(translate(@style,' ',''),'display:none'))]//button[contains(@class,'new-tile') or starts-with(@id,'profileItemsAddButton')][normalize-space(.)='Add Education']",
+            "//div[contains(@class,'apply-flow-section')][not(contains(translate(@style,' ',''),'display:none'))]//div[contains(@class,'work-and-education-timeline__actions-container')][not(contains(@class,'--disabled'))]//button[contains(@class,'timeline-education-add-button')]"
           ],
-          "savedRowPath": ".//div[@role='region'][starts-with(normalize-space(@aria-label),'Education')]//*[contains(@class,'apply-flow-profile-item-tile__summary')]",
+          "containerPath": [
+            "//div[contains(@class,'apply-flow-section')][not(contains(translate(@style,' ',''),'display:none'))]//div[@role='region'][starts-with(normalize-space(@aria-label),'Education') or .//button[normalize-space(.)='Add Education'] or .//input[starts-with(@name,'educationalEstablishment')]]//div[contains(@class,'profile-item-content')]",
+            "//div[contains(@class,'apply-flow-section')][not(contains(translate(@style,' ',''),'display:none'))]//div[contains(@class,'standard-apply-flow-timeline-form')][.//input[starts-with(@name,'educationalEstablishment') or @name='contentItemId' or @name='major']][not(.//input[@name='employerName'])]"
+          ],
+          "confirmAddedPath": [
+            "//div[contains(@class,'apply-flow-section')][not(contains(translate(@style,' ',''),'display:none'))]//div[@role='region'][starts-with(normalize-space(@aria-label),'Education') or .//button[normalize-space(.)='Add Education'] or .//input[starts-with(@name,'educationalEstablishment')]]//div[contains(@class,'profile-item-content')]",
+            "//div[contains(@class,'apply-flow-section')][not(contains(translate(@style,' ',''),'display:none'))]//div[contains(@class,'standard-apply-flow-timeline-form')][.//input[starts-with(@name,'educationalEstablishment') or @name='contentItemId' or @name='major']][not(.//input[@name='employerName'])]"
+          ],
+          "savedRowPath": ["//div[contains(@class,'apply-flow-section')][not(contains(translate(@style,' ',''),'display:none'))]//div[@role='region'][starts-with(normalize-space(@aria-label),'Education') or .//button[normalize-space(.)='Add Education'] or .//input[starts-with(@name,'educationalEstablishment')]]//*[contains(@class,'apply-flow-profile-item-tile__summary')]", "//div[contains(@class,'apply-flow-section')][not(contains(translate(@style,' ',''),'display:none'))]//*[@data-profile-item-tile='true'][contains(@class,'beautiful-timeline-item--education')]"],
           "allowReuse": true,
           "time": 5000,
           "inputSelectors": [
@@ -150,6 +157,10 @@
                       "time": 3000
                     }
                   ]
+                },
+                {
+                  "path": ".//ul[@role='radiogroup'][contains(@class,'cx-select-pills-container')][contains(@aria-label,'Degree')]//button[@role='radio']",
+                  "method": "click"
                 }
               ]
             ],
@@ -163,18 +174,18 @@
               "school",
               [
                 {
-                  "path": ".//input[@name='educationalEstablishment']",
+                  "path": ".//input[starts-with(@name,'educationalEstablishment')]",
                   "actions": [
                     {
                       "method": "trustedType"
                     },
                     {
                       "path": [
-                        "//*[@role='gridcell' and contains(@class,'cx-select__list-item')][normalize-space(.)='%VALUE%']",
-                        "//*[contains(@class,'cx-select__list')]//*[@role='row' or @role='gridcell'][normalize-space(.)='%VALUE%']"
+                        "//*[@role='gridcell' and contains(@class,'cx-select__list-item')]"
                       ],
+                      "rankedPick": true,
                       "method": "click",
-                      "time": 3000
+                      "time": 6000
                     }
                   ]
                 }
@@ -281,7 +292,10 @@
               "save",
               [
                 {
-                  "path": ".//*[contains(@class,'app-dialog__footer') or contains(@class,'profile-item-footer')]//button[contains(@class,'save-btn') or contains(@class,'app-dialog__footer-button')]",
+                  "path": [
+                    "./self::*[not(.//ul[@role='radiogroup'][contains(@class,'cx-select-pills-container')][not(.//button[@aria-checked='true'])])]//*[contains(@class,'app-dialog__footer') or contains(@class,'profile-item-footer') or contains(@class,'timeline-form-footer')]//button[contains(@class,'save-btn') or contains(@class,'app-dialog__footer-button')][not(contains(@class,'cancel-btn'))]",
+                    "./following-sibling::*[contains(@class,'profile-item-footer')]//button[contains(@class,'save-btn')]"
+                  ],
                   "valueRequired": false,
                   "actions": [
                     {
@@ -305,12 +319,19 @@
       "experience",
       [
         {
-          "addButtonPath": ".//button[contains(@class,'new-tile') or starts-with(@id,'profileItemsAddButton')][normalize-space(.)='Add Experience']",
-          "containerPath": ".//div[@role='region'][starts-with(normalize-space(@aria-label),'Experience')]//div[contains(@class,'profile-item-content')]",
-          "confirmAddedPath": [
-            ".//div[@role='region'][starts-with(normalize-space(@aria-label),'Experience')]//div[contains(@class,'profile-item-content')]"
+          "addButtonPath": [
+            "//div[contains(@class,'apply-flow-section')][not(contains(translate(@style,' ',''),'display:none'))]//button[contains(@class,'new-tile') or starts-with(@id,'profileItemsAddButton')][normalize-space(.)='Add Experience']",
+            "//div[contains(@class,'apply-flow-section')][not(contains(translate(@style,' ',''),'display:none'))]//div[contains(@class,'work-and-education-timeline__actions-container')][not(contains(@class,'--disabled'))]//button[contains(@class,'timeline-work-add-button')]"
           ],
-          "savedRowPath": ".//div[@role='region'][starts-with(normalize-space(@aria-label),'Experience')]//*[contains(@class,'apply-flow-profile-item-tile__summary')]",
+          "containerPath": [
+            "//div[contains(@class,'apply-flow-section')][not(contains(translate(@style,' ',''),'display:none'))]//div[@role='region'][contains(normalize-space(@aria-label),'Experience') or .//button[normalize-space(.)='Add Experience']][not(.//button[normalize-space(.)='Add Language'])]//div[contains(@class,'profile-item-content')]",
+            "//div[contains(@class,'apply-flow-section')][not(contains(translate(@style,' ',''),'display:none'))]//div[contains(@class,'standard-apply-flow-timeline-form')][.//input[@name='employerName' or @name='jobTitle']]"
+          ],
+          "confirmAddedPath": [
+            "//div[contains(@class,'apply-flow-section')][not(contains(translate(@style,' ',''),'display:none'))]//div[@role='region'][contains(normalize-space(@aria-label),'Experience') or .//button[normalize-space(.)='Add Experience']][not(.//button[normalize-space(.)='Add Language'])]//div[contains(@class,'profile-item-content')]",
+            "//div[contains(@class,'apply-flow-section')][not(contains(translate(@style,' ',''),'display:none'))]//div[contains(@class,'standard-apply-flow-timeline-form')][.//input[@name='employerName' or @name='jobTitle']]"
+          ],
+          "savedRowPath": ["//div[contains(@class,'apply-flow-section')][not(contains(translate(@style,' ',''),'display:none'))]//div[@role='region'][contains(normalize-space(@aria-label),'Experience') or .//button[normalize-space(.)='Add Experience']][not(.//button[normalize-space(.)='Add Language'])]//*[contains(@class,'apply-flow-profile-item-tile__summary')]", "//div[contains(@class,'apply-flow-section')][not(contains(translate(@style,' ',''),'display:none'))]//*[@data-profile-item-tile='true'][contains(@class,'beautiful-timeline-item--experiences')]"],
           "allowReuse": true,
           "time": 5000,
           "inputSelectors": [
@@ -447,7 +468,10 @@
               "save",
               [
                 {
-                  "path": ".//*[contains(@class,'app-dialog__footer') or contains(@class,'profile-item-footer')]//button[contains(@class,'save-btn') or contains(@class,'app-dialog__footer-button')]",
+                  "path": [
+                    ".//*[contains(@class,'app-dialog__footer') or contains(@class,'profile-item-footer') or contains(@class,'timeline-form-footer')]//button[contains(@class,'save-btn') or contains(@class,'app-dialog__footer-button')][not(contains(@class,'cancel-btn'))]",
+                    "./following-sibling::*[contains(@class,'profile-item-footer')]//button[contains(@class,'save-btn')]"
+                  ],
                   "valueRequired": false,
                   "actions": [
                     {
@@ -468,15 +492,38 @@
       ]
     ],
     [
+      "websites",
+      [
+        {
+          "array": true,
+          "addButtonPath": "//div[contains(@class,'apply-flow-section')][not(contains(translate(@style,' ',''),'display:none'))]//div[contains(@class,'candidate-links')]//button[contains(@class,'candidate-links__add-link')]",
+          "containerPath": "//div[contains(@class,'apply-flow-section')][not(contains(translate(@style,' ',''),'display:none'))]//div[contains(@class,'candidate-links__link')]",
+          "confirmAddedPath": [
+            "//div[contains(@class,'apply-flow-section')][not(contains(translate(@style,' ',''),'display:none'))]//div[contains(@class,'candidate-links__link')]"
+          ],
+          "time": 5000,
+          "inputSelectors": [
+            [
+              "url",
+              [
+                ".//input[@type='url']"
+              ]
+            ]
+          ]
+        }
+      ]
+    ],
+    [
       "language",
       [
         {
           "array": true,
-          "addButtonPath": ".//button[contains(@class,'new-tile') or starts-with(@id,'profileItemsAddButton')][normalize-space(.)='Add Language']",
-          "containerPath": ".//div[@role='region'][starts-with(normalize-space(@aria-label),'Languages')]//div[contains(@class,'profile-item-content')]",
+          "addButtonPath": "//div[contains(@class,'apply-flow-section')][not(contains(translate(@style,' ',''),'display:none'))]//button[contains(@class,'new-tile') or starts-with(@id,'profileItemsAddButton')][normalize-space(.)='Add Language']",
+          "containerPath": "//div[contains(@class,'apply-flow-section')][not(contains(translate(@style,' ',''),'display:none'))]//div[@role='region'][starts-with(normalize-space(@aria-label),'Language')]//div[contains(@class,'profile-item-content')]",
           "confirmAddedPath": [
-            ".//div[@role='region'][starts-with(normalize-space(@aria-label),'Languages')]//div[contains(@class,'profile-item-content')]"
+            "//div[contains(@class,'apply-flow-section')][not(contains(translate(@style,' ',''),'display:none'))]//div[@role='region'][starts-with(normalize-space(@aria-label),'Language')]//div[contains(@class,'profile-item-content')]"
           ],
+          "savedRowPath": "//div[contains(@class,'apply-flow-section')][not(contains(translate(@style,' ',''),'display:none'))]//div[@role='region'][starts-with(normalize-space(@aria-label),'Language')]//*[contains(@class,'apply-flow-profile-item-tile__summary')]",
           "time": 5000,
           "inputSelectors": [
             [
@@ -531,7 +578,10 @@
               "save",
               [
                 {
-                  "path": ".//*[contains(@class,'app-dialog__footer') or contains(@class,'profile-item-footer')]//button[contains(@class,'save-btn') or contains(@class,'app-dialog__footer-button')]",
+                  "path": [
+                    ".//*[contains(@class,'app-dialog__footer') or contains(@class,'profile-item-footer')]//button[contains(@class,'save-btn') or contains(@class,'app-dialog__footer-button')][not(contains(@class,'cancel-btn'))]",
+                    "./following-sibling::*[contains(@class,'profile-item-footer')]//button[contains(@class,'save-btn')]"
+                  ],
                   "valueRequired": false,
                   "actions": [
                     {

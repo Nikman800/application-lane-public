@@ -799,3 +799,39 @@ test("a box naming one part of Asia is ticked only when it is the applicant's ow
     assert.deepEqual(await page.locator("input:checked").evaluateAll((inputs) => inputs.map((input) => (input as HTMLInputElement).name)), ticked, ethnicity);
   }
 });
+
+test("Oracle's Work Experience is added and filled when the page's first step is not the one holding it", async () => {
+  // SAIC's apply form: one page of several
+  // sections, the import-profile one first. The rule's container was that
+  // first section, so no Add button was found inside it and no job or school
+  // was ever added. The region there is labelled "Work Experience", and its
+  // Save button is in a footer beside the fields' container, after a Cancel.
+  const oracle = JSON.parse(await readFile("src/engine/config/sites/oracle.json", "utf8"));
+  const experience = oracle.inputSelectors.find(([key]: [string]) => key === "experience");
+  await fixture(`<form novalidate onsubmit="event.preventDefault()"><div class="apply-flow-section" data-section-number="1"><h2>Import your profile</h2></div>
+    <div class="apply-flow-section" data-section-number="3">
+      <div role="region" aria-label="Work Experience ">
+        <div class="profile-add-item"><button type="button" class="button apply-flow-profile-item-tile__new-tile" id="profileItemsAddButton-1"
+          onclick="document.getElementById('editor').hidden = false; document.getElementById('footer').hidden = false"><span class="button__label">Add Experience</span></button></div>
+        <div class="profile-item-content" id="editor" hidden>
+          <div class="profile-item-content--form">
+            <div class="input-row"><label for="employerName-79">Employer Name</label><input id="employerName-79" name="employerName"></div>
+            <div class="input-row"><label for="jobTitle-80">Job Title</label><input id="jobTitle-80" name="jobTitle"></div>
+          </div>
+        </div>
+        <div class="profile-item-footer" id="footer" hidden><div class="app-dialog__buttons-bar">
+          <button class="button app-dialog__footer-button cancel-btn" onclick="window.cancelled = true"><span class="button__label">Cancel</span></button>
+          <button class="button app-dialog__footer-button save-btn" id="save"
+            onclick="window.saved = [employerName.value, jobTitle.value]; document.getElementById('editor').hidden = true; document.getElementById('footer').hidden = true"><span class="button__label">Add Experience</span></button>
+        </div></div>
+      </div>
+    </div></form>`, [experience]);
+  await page.evaluate((containerPath) => {
+    const f = (window as any).fixture;
+    f.config.containerPath = containerPath;
+    f.profile.work = [{ organization: "Acme", title: "Software Engineer", startDate: "2020-01", endDate: "2022-05", location: "", details: "" }];
+  }, oracle.containerPath);
+  const results = await page.evaluate(() => (window as any).run({ pollMs: 20 }));
+  assert.deepEqual(await page.evaluate(() => (window as any).saved), ["Acme", "Software Engineer"], JSON.stringify(results));
+  assert.equal(await page.evaluate(() => (window as any).cancelled), undefined);
+});

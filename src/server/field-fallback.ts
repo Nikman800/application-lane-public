@@ -9,6 +9,7 @@ import type {
 } from "../shared/model";
 import { legalDetailLabels, normalize, type LegalDetailKey } from "../shared/model";
 import { legalQuestion, structuredFallbackField } from "../shared/questions";
+import { proposals } from "../shared/matching";
 import type { Config } from "./store";
 import {
   cliNotice,
@@ -64,7 +65,7 @@ export function fieldFallbackSources(
     github: "GitHub",
     currentCompany: "Current company",
     skills: "Skills",
-    referralSource: "Referral sources",
+    referralSource: "Where the applicant hears about jobs (sites or boards, not people)",
     disabilityStatus: "Disability status",
     veteranStatus: "Veteran status",
     gender: "Gender",
@@ -145,7 +146,7 @@ export function fieldFallbackSources(
     ],
     [/profile\.currentCompany/, /current company|current employer/],
     [/profile\.skills/, /skill|technolog|language|framework|tool/],
-    [/profile\.referralSource/, /hear about|referral|source/],
+    [/profile\.referralSource/, /hear about|learn about|find out about|how did you find|source/],
     [/profile\.internshipCount/, /internship|co op/],
     [/profile\.salary/, /salary|compensation|pay|wage|rate/],
     [
@@ -196,10 +197,12 @@ export async function writeFieldFallback(
   profile: Profile,
   signal: AbortSignal,
 ): Promise<FieldFallbackResult> {
+  const normal = new Set(proposals(request.fields, profile).map(proposal => proposal.fieldId));
   const fields = request.fields
     // Which legal questions may be asked is the extension's setting; the
     // fields it sends are the ones to answer.
     .filter((field) => structuredFallbackField(field, true))
+    .filter((field) => !normal.has(field.id))
     .filter(
       (field) => !request.questionIds || request.questionIds.includes(field.id),
     );
@@ -330,6 +333,22 @@ export async function writeFieldFallback(
     if (value && !field.required && /^(if (yes|so)\b|if you (answered|responded|selected|said|checked) ['"‘’“”]?yes)/i.test(field.label.trim())) {
       value = "";
       skipReason ||= "A follow-up to a Yes; left empty.";
+    }
+    // "I have a preferred name" reveals the preferred-name boxes. It is true
+    // only of an applicant who saved one; the model ticked it from the first
+    // name alone (Workday).
+    if (
+      value &&
+      field.kind === "checkbox" &&
+      /\b(preferred|nick|other|previous|former|maiden) names?\b/i.test(field.label) &&
+      // A preferred name saved as the first name is none:'s
+      // profile held the same name twice, and the box was ticked again.
+      (!citedIds.some((id) => /^preferred name:/i.test(sourceMap.get(id) || "")) ||
+        !profile.preferredName?.trim() ||
+        normalize(profile.preferredName) === normalize(profile.firstName))
+    ) {
+      value = "";
+      skipReason ||= "No preferred name, other than your first name, is saved in your profile.";
     }
     if (field.maxLength && value.length > field.maxLength) {
       value = "";

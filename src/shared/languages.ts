@@ -27,11 +27,13 @@ export function profileLanguages(lines: string[] = []): Language[] {
 
 // The ways a form's list may word a level, nearest first. Workday numbers
 // its scale ("1 - Beginner" to "5 - Fluent", an employer).
+// one employer's Workday rates each skill Average, Excellent or Not Qualified
+//: a native or fluent speaker is Excellent.
 export function levelChoices(level: Language["level"]): string[] {
   return {
-    native: ["Native", "5 - Fluent", "Native or bilingual", "Native speaker", "Bilingual", "Fluent", "Expert", "Advanced", "3 - High", "High", "5 - Complete Mastery", "Complete Mastery"],
-    fluent: ["Fluent", "5 - Fluent", "Full professional", "Advanced", "Proficient", "Expert", "3 - High", "High", "4 - Advanced Professional Competency", "Advanced Professional Competency"],
-    intermediate: ["Intermediate", "3 - Intermediate", "Professional working", "Working", "Conversational", "2 - Medium", "Medium", "3 - Professional Competency", "Professional Competency"],
+    native: ["Native", "5 - Fluent", "4 - Fluent", "Native or bilingual", "Native speaker", "Bilingual", "Fluent", "Expert", "Advanced", "Proficient", "3 - High", "High", "5 - Complete Mastery", "Complete Mastery", "Excellent"],
+    fluent: ["Fluent", "5 - Fluent", "4 - Fluent", "Full professional", "Advanced", "Proficient", "Expert", "3 - High", "High", "4 - Advanced Professional Competency", "Advanced Professional Competency", "Excellent"],
+    intermediate: ["Intermediate", "3 - Intermediate", "2 - Intermediate", "Professional working", "Working", "Conversational", "2 - Medium", "Medium", "3 - Professional Competency", "Professional Competency", "Average"],
     basic: ["Basic", "1 - Beginner", "Elementary", "Beginner", "Limited", "1 - Low", "Low", "2 - Limited Competency", "Limited Competency", "1 - Minimal Competency"],
     "": [],
   }[level];

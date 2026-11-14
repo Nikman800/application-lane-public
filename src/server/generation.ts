@@ -5,7 +5,7 @@ import { join, resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import {
+import { forRole,
   narrativeSchema,
   sensitiveQuestion,
   type Artifact,
@@ -120,6 +120,36 @@ export function tidyProse(text: string): string {
     .join("\n")
     .replace(/\bR ?2(?=\s*[~∼≈]?\s*0?\.\d)/gu, "R²")
     .trim();
+}
+
+// A question as a repeat fill asks it again: its words without case, spacing
+// or a required mark, and its limits (a shorter box takes a shorter answer).
+// A field's id may differ between fills of the same page; its question not.
+// A key for what an application's documents are made from. Every saved
+// answer bumps the profile's revision, and none of them is in a document.
+export function documentsKey(profile: Profile): string {
+  const { revision: _revision, answers: _answers, ...rest } = profile;
+  return createHash("sha256").update(JSON.stringify(rest)).digest("hex");
+}
+function questionKey(field: Field) {
+  const words = field.label.toLowerCase().replace(/\(required\)/gu, " ").replace(/[*\s]+/gu, " ").trim();
+  return JSON.stringify([words, field.maxLength ?? null, field.maxWords ?? null]);
+}
+
+// Lines that say drafts went out unchecked: they hold for every answer.
+const UNCHECKED = /^(A second model could not check|No other model in your Drafting order could check|A second model questioned every answer)\b/u;
+
+// The answers a job delivered, as a repeat fill finds them (see the reuse in
+// run): each with the lines about it, and those that say it was not checked.
+// A question left for the applicant is not among them and is drafted again.
+function answeredRecord(fields: Field[], answers: Narrative["answers"], warnings: string[]): GenerationJob["answered"] {
+  const unchecked = warnings.filter((warning) => UNCHECKED.test(warning));
+  return answers.flatMap((answer) => {
+    const field = fields.find((candidate) => candidate.id === answer.fieldId);
+    if (!field) return [];
+    const own = warnings.filter((warning) => !warning.startsWith("Left ") && warning.includes(`"${shortLabel(field.label)}"`));
+    return [{ question: questionKey(field), value: answer.value, factIds: answer.factIds, warnings: [...unchecked, ...own] }];
+  });
 }
 
 // Each warning once, and one per question left for the applicant (the first
@@ -925,7 +955,10 @@ const CLI_LIMIT_MS = 55000;
 // Codex took longer than 55s on a busy machine.
 const CODEX_LIMIT_MS = 120_000;
 const HTTP_LIMIT_MS = 60000;
-const CHECKING_BUDGET_MS = 120_000;
+// A minute, not two: the second model's check hit its two minutes on a step
+// and held every document back that long; what it has not
+// checked by then stays unchecked, and the card says so.
+export const CHECKING_BUDGET_MS = 60_000;
 
 const providerName = (provider: Config["provider"], model: string) =>
   provider === "claude-cli" ? "Claude" : provider === "codex-cli" ? "Codex" : model || "the configured endpoint";
@@ -1506,6 +1539,7 @@ export class GenerationQueue {
       applicationId: request.applicationId,
       operation: request.operation,
       profileRevision: profile.revision,
+      documentsKey: documentsKey(profile),
       status: "queued",
       artifacts: [],
       createdAt: Date.now(),
@@ -1698,7 +1732,11 @@ export class GenerationQueue {
     }
     let verdicts;
     try {
-      verdicts = await this.verify(items, { profile: profileText, posting: request.description }, signal, this.checkingDeadline(signal));
+      // The job applied for is the posting's too: one employer's "What full
+      // time job(s) are you applying for?" lost its own answer, the job's
+      // title, as found nowhere in the profile.
+      const posting = [request.title ? `Job title: ${request.title}` : "", request.description].filter(Boolean).join("\n");
+      verdicts = await this.verify(items, { profile: profileText, posting }, signal, this.checkingDeadline(signal));
     } catch (error) {
       signal.throwIfAborted();
       warnings.push(
@@ -1778,9 +1816,15 @@ export class GenerationQueue {
       const checkedBody = body.flatMap((paragraph, i) => {
         const verdict = verdicts.get(`letter:${i + 1}`);
         if (!verdict) return [paragraph];
-        const result = withoutSpans(paragraph.text, [...verdict.unsupported, ...verdict.filler]);
-        faulted += result.removed.length;
         const opening = sentences(paragraph.text)[0];
+        // Saying which role this is for is the letter's purpose, not a claim
+        // the profile could hold, whichever way the check faulted it ("I am
+        // applying for the Data Analyst Intern role at …" was held for the
+        // applicant to check on every letter).
+        const namesRole = Boolean(opening) && /^\s*(?:i am|i'm)\s+(?:applying|writing to apply)\s+(?:for|to)\b/iu.test(opening);
+        const faults = [...verdict.unsupported, ...verdict.filler].filter((span) => !namesRole || !(opening.includes(span) || span.includes(opening)));
+        const result = withoutSpans(paragraph.text, faults);
+        faulted += result.removed.length;
         if (result.text && opening && result.removed.includes(opening)) {
           held.push(opening);
           return [paragraph];
@@ -1907,6 +1951,9 @@ export class GenerationQueue {
       // same role at the same company is the same application. A real
       // posting's text is stable, and a change to it still starts over.
       if (!posting) job.postingRole = createHash("sha256").update(JSON.stringify([request.title, request.company])).digest("hex");
+      // The profile as this kind of job is answered from (its overrides by
+      // job title), as the extension fills it.
+      profile = forRole(profile, request.title);
       // Documents and answers state this application's graduation date.
       const graduation = await applicationGraduation(this.config, request.title);
       if (graduation) profile = withGraduation(profile, graduation);
@@ -1956,16 +2003,23 @@ export class GenerationQueue {
       // and cover letter come from the posting and the profile, not from the
       // step. Only the step's own written questions are answered, and a step
       // with none (demographics, a review page) needs no model at all.
+      const sameApplication = (candidate: GenerationJob, documentsOnly = false) =>
+        candidate.id !== job.id &&
+        candidate.applicationId === job.applicationId &&
+        candidate.status === "complete" &&
+        // The documents survive a saved answer: the profile's revision rose
+        // when one was saved, and the next step then drafted and checked
+        // everything again, 43 s, where reuse takes half a second
+        // (Verdantas). Written answers still follow the revision.
+        (candidate.profileRevision === job.profileRevision ||
+          (documentsOnly && Boolean(job.documentsKey) && candidate.documentsKey === job.documentsKey)) &&
+        (candidate.postingKey === job.postingKey || (Boolean(job.postingRole) && candidate.postingRole === job.postingRole));
       const previous = request.redraft ? undefined : this.store.data.jobs
         .filter(
           (candidate) =>
-            candidate.id !== job.id &&
-            candidate.applicationId === job.applicationId &&
-            candidate.status === "complete" &&
-            candidate.profileRevision === job.profileRevision &&
+            sameApplication(candidate, true) &&
             candidate.narrative &&
             candidate.artifacts.length > 0 &&
-            (candidate.postingKey === job.postingKey || (Boolean(job.postingRole) && candidate.postingRole === job.postingRole)) &&
             // A step that takes a cover letter after one that did not.
             (!letter || candidate.artifacts.some((artifact) => artifact.kind === "cover")),
         )
@@ -1983,8 +2037,31 @@ export class GenerationQueue {
           (warning) => !/^(Left "|Application answers could not)|^(Claude|Codex) could not draft this\b|^A second model could not check\b/.test(warning),
         );
         let answers: Narrative["answers"] = [];
-        if (questions.length) {
-          const written = await this.answer(request, profile, controller.signal).catch(
+        // Nor are the same questions drafted again: a later step's answers
+        // were drafted again on each fill of it, 49 s, 88 s and 102 s, with
+        // nothing changed. An answer this application already
+        // delivered for the same question, profile revision and posting is
+        // given again, with what was said about it; a question asked in other
+        // words, or left for the applicant, is drafted.
+        const asked = request.fields
+          .filter(applicationQuestion)
+          .filter((field) => !request.questionIds || request.questionIds.includes(field.id));
+        const delivered = new Map<string, NonNullable<GenerationJob["answered"]>[number]>();
+        for (const earlier of this.store.data.jobs.filter((candidate) => sameApplication(candidate)).sort((a, b) => b.createdAt - a.createdAt))
+          for (const answer of earlier.answered || [])
+            if (!delivered.has(answer.question)) delivered.set(answer.question, answer);
+        const fresh: string[] = [];
+        for (const field of questions.length ? asked : []) {
+          const before = delivered.get(questionKey(field));
+          if (!before) fresh.push(field.id);
+          else {
+            answers.push({ fieldId: field.id, value: before.value, factIds: before.factIds });
+            warnings.push(...before.warnings);
+            (job.answered ||= []).push(before);
+          }
+        }
+        if (fresh.length) {
+          const written = await this.answer({ ...request, questionIds: fresh }, profile, controller.signal).catch(
             (error: Error) => error,
           );
           if (written instanceof Error) {
@@ -1994,11 +2071,14 @@ export class GenerationQueue {
             );
           } else {
             const checked = await this.checkDrafts(request, profile, { written }, controller.signal);
-            answers = checked.written?.answers || [];
+            let drafted = checked.written?.answers || [];
             const noted = [...written.warnings, ...checked.warnings];
-            const retried = await this.secondAttempt(request, profile, this.rejectedAnswers(request, written, answers, noted), controller.signal);
-            if (retried) answers = [...answers, ...retried.answers];
-            warnings.push(...(retried ? [...this.withoutRetried(noted, retried.fields), ...retried.warnings] : noted));
+            const retried = await this.secondAttempt(request, profile, this.rejectedAnswers(request, written, drafted, noted), controller.signal);
+            if (retried) drafted = [...drafted, ...retried.answers];
+            const said = retried ? [...this.withoutRetried(noted, retried.fields), ...retried.warnings] : noted;
+            warnings.push(...said);
+            answers.push(...drafted);
+            job.answered = [...(job.answered || []), ...(answeredRecord(request.fields, drafted, said) || [])];
           }
         }
         if (
@@ -2119,6 +2199,7 @@ export class GenerationQueue {
             warnings: [...this.withoutRetried(narrative.warnings || [], retried.fields), ...retried.warnings],
           };
       }
+      job.answered = answeredRecord(request.fields, narrative.answers, narrative.warnings || []);
       lap("verifying");
       // A requirement the applicant does not meet leads the card.
       const eligibility = plan && !(plan instanceof Error) ? plan.eligibility : [];

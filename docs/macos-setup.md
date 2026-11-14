@@ -14,7 +14,7 @@ Check with `node --version` (expect v22). If you use nvm, `nvm install 22` works
 From a clone, in Terminal:
 
 ```bash
-git clone https://github.com/Nikman800/application-lane-public.git application-lane
+git clone https://github.com/Nikman800/application-lane.git application-lane
 cd application-lane
 npm ci
 npm run build

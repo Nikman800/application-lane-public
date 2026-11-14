@@ -84,6 +84,11 @@ export async function typeTrusted(
   // SmartRecruiters' menus let every Down pass now and then, and ignore a
   // script's click.
   click?: { x: number; y: number },
+  // The text as one insertion (one input event), not a key at a time: a
+  // search box that takes the text of a burst's first key to look up, and
+  // sets itself to that text when the answer comes, kept only "323" of
+  // "323 E. Veterans Way" (Paylocity's address).
+  insert = false,
 ): Promise<void> {
   if (!trustedTypingAvailable())
     throw new Error("Real keystrokes need the debugger permission.");
@@ -117,7 +122,8 @@ export async function typeTrusted(
       windowsVirtualKeyCode: 8,
       nativeVirtualKeyCode: 8,
     });
-  for (const character of text) {
+  if (insert && text) await chrome.debugger.sendCommand({ tabId }, "Input.insertText", { text });
+  for (const character of insert ? "" : text) {
     const code = keyCode(character);
     await send({
       type: "keyDown",

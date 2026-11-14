@@ -16,11 +16,20 @@ import {
   type RecurringAnswer,
   type TabContext,
   type IssueReport,
+  type IssueImage,
+  forRole,
+  ISSUE_IMAGE_LIMIT,
   type Recording,
   hasLegalDetails,
   normalize,
 } from "../shared/model";
 import { storeBuild } from "../shared/store-build";
+import { extensionBuild } from "../shared/build";
+import { badgeInfo } from "./badge-info";
+import { applicationWarning } from "../shared/duplicates";
+import { usableImages } from "../shared/issue-images";
+import { reportOpen } from "../shared/reload-gate";
+import { genericTitle, singlePostingUrl } from "../shared/titles";
 import { rowHolds } from "./row-holds";
 import { pickTranscript } from "../shared/transcripts";
 import { DRAFT_ONLY_NOTE, accessPattern, canonicalURL, draftOnlySite, sameOpening, historyRowMap, listAnswered, postingGuess, proposals } from "../shared/matching";
@@ -30,6 +39,7 @@ import globals from "../engine/config/globals.json" with { type: "json" };
 import {
   answerLimitError,
   applicationQuestion,
+  leftReason,
   legalQuestion,
   structuredFallbackField,
 } from "../shared/questions";
@@ -113,6 +123,8 @@ function sendQueue() {
     return {
       id: app.id,
       url: app.url,
+      ...(app.sourceUrl && app.sourceUrl !== app.url ? { sourceUrl: app.sourceUrl.slice(0, 2000) } : {}),
+      ...(app.postingUrl ? { postingUrl: app.postingUrl.slice(0, 2000) } : {}),
       company: app.company.slice(0, 300),
       title: app.title.slice(0, 500),
       status: app.status,
@@ -159,7 +171,7 @@ function connectLive() {
     liveBeat = setInterval(() => sendLive({ type: "ping" }), 20_000);
   };
   socket.onmessage = (event) => {
-    let message: { type?: string; id?: string; action?: string; applicationId?: string };
+    let message: { type?: string; id?: string; action?: string; applicationId?: string; data?: string };
     try {
       message = JSON.parse(String(event.data));
     } catch {
@@ -195,7 +207,51 @@ async function refreshPast(tabId: number) {
 // A command from the command line, as the side panel would carry it out:
 // fill is Fill this step (it never presses Next or Submit), switch brings the
 // application's tab and its window to the front.
-async function liveCommand(message: { action?: string; applicationId?: string }): Promise<string | undefined> {
+// Unlock empty fields (the panel's button, and the fixer's "lane unlock"
+// for a lock the fill caused itself: Salesforce's From Month, locked by the
+// fill's own keys read as the applicant's).
+async function unlockEmpty(app: Application) {
+    await clearFieldFallback(app);
+    delete locks[app.id];
+    await persist();
+    if (app.tabId) {
+      await Promise.allSettled(
+        (await allFrames(app.tabId)).map((frame) =>
+          chrome.tabs.sendMessage(
+            app.tabId!,
+            { type: "UNLOCK", applicationId: app.id, operation: app.operation },
+            { frameId: frame.frameId },
+          ),
+        ),
+      );
+    }
+    app.missing = app.missing.filter((item) => !/edit lock/.test(item));
+    app.note = "Empty fields are unlocked. Choose Fill this step to fill them.";
+    await persist();
+    return state;
+}
+async function liveCommand(message: { action?: string; applicationId?: string; data?: string }): Promise<string | undefined> {
+  // The fixer's "lane own": values on the application's pages that this
+  // extension wrote before it kept a record of its writes (ownWrites), so a
+  // later fill corrects them. Enovation's start dates, written as 11/2026 by
+  // an earlier build, were otherwise the applicant's to keep.
+  if (message.action === "unlock") {
+    const app = state.applications.find((candidate) => candidate.id === message.applicationId);
+    if (!app) throw new Error("No such application.");
+    await unlockEmpty(app);
+    return "Empty fields unlocked.";
+  }
+  if (message.action === "own") {
+    const app = state.applications.find((candidate) => candidate.id === message.applicationId);
+    if (!app) throw new Error("No such application.");
+    const entries = (JSON.parse(message.data || "[]") as unknown[]).flatMap((entry) => {
+      const { label, value } = (entry || {}) as { label?: unknown; value?: unknown };
+      return typeof label === "string" && typeof value === "string" && label && value ? [{ label: label.slice(0, 300), value: value.slice(0, 1000) }] : [];
+    });
+    app.ownWrites = [...(app.ownWrites || []).filter((own) => !entries.some((entry) => entry.label === own.label && entry.value === own.value)), ...entries].slice(-300);
+    await persist();
+    return `${entries.length} value${entries.length === 1 ? "" : "s"} marked as this extension's own.`;
+  }
   if (message.action === "pick-up") {
     await pickUpInbox();
     return;
@@ -203,9 +259,18 @@ async function liveCommand(message: { action?: string; applicationId?: string })
   // The fixer's reload (lane reload): a new build without a trip
   // to chrome://extensions. Never under a fill, which it would cut off.
   if (message.action === "reload") {
-    const busy = state.applications.filter((candidate) => ["inspecting", "preparing", "filling"].includes(candidate.status));
+    // Nor while AI is still filling what a fill left: a reload then lost the
+    // two Yes/No answers it had drafted for Bask Health's Workable form, and
+    // nothing said so.
+    // Nor while the applicant is writing a report: the reload closes it.
+    if (reportOpen(reportBeat, Date.now())) throw new Error("Not reloaded: the applicant is writing a report. Try again when it is sent.");
+    const busy = state.applications.filter((candidate) => ["inspecting", "preparing", "filling"].includes(candidate.status) || candidate.assisting);
     if (busy.length)
       throw new Error(`Not reloaded: ${busy.map((candidate) => candidate.company || candidate.title).slice(0, 3).join(", ")} ${busy.length === 1 ? "is" : "are"} being filled. Try again when ${busy.length === 1 ? "it finishes" : "they finish"}.`);
+    // What each tab has recorded is saved first: a reload drops it from
+    // memory, and a fill's recording was left with its first 9 events
+    // (Enovation's Paylocity rows).
+    await Promise.allSettled([...recordings.keys()].map((tabId) => saveRecording(tabId)));
     setTimeout(() => chrome.runtime.reload(), 300);
     return "Reloading the extension. A page open before it is on the old build until refreshed.";
   }
@@ -223,6 +288,11 @@ async function liveCommand(message: { action?: string; applicationId?: string })
     if (opened.id !== undefined) await attachTab(app, opened.id);
     return "Its tab was closed, so it was opened again.";
   }
+  // As the panel's Mark submitted (the TUI's m).
+  if (message.action === "submitted") {
+    await uiMessage({ type: "SET_WORKFLOW", id: app.id, stage: "submitted", reason: "" });
+    return "Marked submitted. Change its stage in the panel to undo.";
+  }
   // As the panel's Abandon: any fill stops, and it leaves the open list.
   if (message.action === "abandon") {
     await uiMessage({ type: "CANCEL_APP", id: app.id });
@@ -235,6 +305,31 @@ async function liveCommand(message: { action?: string; applicationId?: string })
     if (app.tabId === undefined) throw new Error("Its tab is closed. Switch to it first.");
     await refreshPast(app.tabId);
     return "Its page now runs the current build.";
+  }
+  // The fixer's checks before and after a refill (lane retry, lane check): which build runs, whether the page can be reached and on
+  // which build, and a capture of the page as it stands, apart from a fill.
+  if (message.action === "about") {
+    const tab = app.tabId !== undefined ? await chrome.tabs.get(app.tabId).catch(() => undefined) : undefined;
+    const page = tab?.id !== undefined
+      ? await frameCall(app, 0, { type: "ENGINE_INFO" }).then((reply: { version?: string } | undefined) => reply, () => undefined)
+      : undefined;
+    return JSON.stringify({
+      build: extensionBuild,
+      contentVersion: CONTENT_VERSION,
+      tab: tab ? { open: true, url: redactURL(tab.url || ""), loading: tab.status === "loading", discarded: Boolean(tab.discarded) } : { open: false },
+      // The page's own content script: absent on a page the extension cannot
+      // reach (closed, signed out to another site, no access).
+      page: page ? { contentVersion: page.version } : undefined,
+      status: app.status,
+      busy: ["inspecting", "preparing", "filling"].includes(app.status) || Boolean(app.assisting || app.explicitFill),
+    });
+  }
+  if (message.action === "capture") {
+    if (app.tabId === undefined) throw new Error("Its tab is closed.");
+    if (["inspecting", "preparing", "filling"].includes(app.status) || app.assisting) throw new Error("It is being filled. Check again when it finishes.");
+    const id = await captureFill(app, app.tabId, "check");
+    if (!id) throw new Error("The page shows no form fields to capture.");
+    return id;
   }
   if (message.action === "fill") {
     if (app.tabId === undefined) throw new Error("Its tab is closed. Switch to it first, then fill.");
@@ -298,6 +393,7 @@ async function pickUpOnce() {
 
 function persist() {
   syncQueueSoon();
+  badgesSoon();
   const snapshot = structuredClone({ queue: state, locks });
   // Document text lives in the backend; avoid repeatedly copying resumes into
   // Chrome's quota-limited queue storage for every status transition.
@@ -462,7 +558,7 @@ const readingOptions = (app: Application, request: MainWorldRequest | undefined)
   !request!.file &&
   !request!.event &&
   !request!.values?.some(Boolean) &&
-  (request!.method === "reactSelectOptions" || request!.method === "reactSelectChoose");
+  (request!.method === "reactSelectOptions" || request!.method === "reactSelectChoose" || request!.method === "sfPicklistOptions");
 // When each application was first seen waiting on a tab that is still loading.
 const loadingSince = new Map<string, number>();
 function frameDeadline<T>(work: Promise<T>, ms: number): Promise<T> {
@@ -514,7 +610,9 @@ async function reinspectNavigation(app: Application, frameId: number, before: st
   while (alive(app, operation) && Date.now() < deadline) {
     await new Promise((resolve) => setTimeout(resolve, 250));
     const tab = app.tabId && await chrome.tabs.get(app.tabId).catch(() => undefined);
-    if (!tab || canonicalURL(tab.url || "") !== canonicalURL(app.url)) throw error;
+    // The same form at a new query (iCIMS reloads its form's frame with a new
+    // csrf) is still this application's page.
+    if (!tab || (canonicalURL(tab.url || "") !== canonicalURL(app.url) && !sameFormPage(tab.url || "", app.url))) throw error;
     if (tab.status !== "complete") continue;
     const read = (await observations(app, operation)).frames;
     const sameFrame = read.find((candidate) => candidate.frameId === frameId);
@@ -522,10 +620,10 @@ async function reinspectNavigation(app: Application, frameId: number, before: st
     // a new frame ID. Only one exact old-URL match is eligible; ambiguity stays
     // a failure, and the original write is never resent.
     const relocated = !sameFrame && beforeURL
-      ? read.filter((candidate) => candidate.observation.url === beforeURL && candidate.observation.documentId !== before) : [];
+      ? read.filter((candidate) => (candidate.observation.url === beforeURL || sameFormPage(candidate.observation.url, beforeURL)) && candidate.observation.documentId !== before) : [];
     const fresh = sameFrame || (relocated.length === 1 ? relocated[0] : undefined);
     if (!alive(app, operation)) return;
-    if (!fresh || (beforeURL && fresh.observation.url !== beforeURL) || fresh.observation.documentId === before || fresh.observation.paused || fresh.observation.fields.length < 3) continue;
+    if (!fresh || (beforeURL && fresh.observation.url !== beforeURL && !sameFormPage(fresh.observation.url, beforeURL)) || fresh.observation.documentId === before || fresh.observation.paused || fresh.observation.fields.length < 3) continue;
     dirty.delete(app.id);
     return fresh;
   }
@@ -536,8 +634,24 @@ async function reinspectNavigation(app: Application, frameId: number, before: st
 // document on the same application URL, and leave the interrupted writes for
 // review. Never replay the original APPLY or change missing-field scoring.
 async function applyFrame(app: Application, frame: Frame, proposed: Proposal[], operation: number) {
+  const fields = new Map(frame.observation.fields.map((field) => [field.id, field.label]));
   return frameCall(app, frame.frameId, {
     type: "APPLY", documentId: frame.observation.documentId, proposals: proposed,
+  // frameCall answers with whatever the page sent: typed loosely here as
+  // before, and only its results read.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  }).then((result: any) => {
+    // Each value written, kept with the application (see ownWrites).
+    for (const written of (result?.results || []) as { id: string; ok: boolean }[]) {
+      const proposal = proposed.find((candidate) => candidate.fieldId === written.id);
+      const label = fields.get(written.id);
+      if (!written.ok || !proposal || !label || !proposal.value) continue;
+      // Rows share a label ("Start Date" in each job), so every value
+      // written under it is kept.
+      const entry = { label: label.slice(0, 300), value: proposal.value.slice(0, 1000) };
+      app.ownWrites = [...(app.ownWrites || []).filter((other) => !(other.label === entry.label && other.value === entry.value)), entry].slice(-300);
+    }
+    return result;
   }).catch(async (error: Error) => {
     const fresh = await reinspectNavigation(app, frame.frameId, frame.observation.documentId, operation, error, frame.observation.url);
     if (fresh) frame.frameId = fresh.frameId;
@@ -571,6 +685,73 @@ async function reviewInterruptedWrite(app: Application, observation: Observation
   app.explicitFill = false;
   await persist();
 }
+// Each application page's badge (badge.ts): sent when what it says changes,
+// to the top frame of the application's tab.
+// When the side panel last said its report dialog is open (reload-gate.ts).
+let reportBeat = 0;
+const badgeSent = new Map<number, string>();
+let badgeTimer: ReturnType<typeof setTimeout> | undefined;
+function badgesSoon() {
+  clearTimeout(badgeTimer);
+  badgeTimer = setTimeout(() => void sendBadges().catch(() => {}), 200);
+}
+// Which applications the fixer has (the backend's repair records), asked for
+// at most every ten seconds: the badge warns of one the applicant should leave
+// alone.
+let repairStates: Record<string, string> = {};
+let repairsAsked = 0;
+async function repairState(): Promise<Record<string, string>> {
+  if (Date.now() - repairsAsked < 10_000) return repairStates;
+  repairsAsked = Date.now();
+  try {
+    const repairs: Record<string, { state?: string }> = await api("/v1/repairs");
+    repairStates = Object.fromEntries(Object.entries(repairs).map(([id, repair]) => [id, repair.state || ""]));
+  } catch {
+    /* The last answer stands. */
+  }
+  return repairStates;
+}
+async function sendBadges() {
+  const shortcut = (await chrome.commands.getAll()).find((command) => command.name === "fill-step")?.shortcut || "";
+  const repairs = await repairState();
+  for (const app of state.applications) {
+    if (app.tabId === undefined || app.status === "cancelled") continue;
+    const info = badgeInfo(app, shortcut, applicationWarning(app, state.applications, repairs[app.id] as "needs-fixing" | "being-fixed" | "released" | undefined));
+    const key = JSON.stringify(info);
+    if (badgeSent.get(app.tabId) === key) continue;
+    badgeSent.set(app.tabId, key);
+    const tabId = app.tabId;
+    chrome.tabs.sendMessage(tabId, { type: "LANE_BADGE", info }, { frameId: 0 }).catch(() => badgeSent.delete(tabId));
+  }
+}
+// The fixer's records change on the backend, not in the extension: the badge
+// asks again every fifteen seconds (sendBadges sends only what changed).
+setInterval(() => badgesSoon(), 15_000);
+// A page that loads again draws its badge again.
+chrome.tabs.onUpdated.addListener((tabId, change) => {
+  if (change.status !== "complete" || !badgeSent.has(tabId)) return;
+  badgeSent.delete(tabId);
+  badgesSoon();
+});
+// Fill this step from the keyboard (manifest "fill-step"): the tab in view,
+// tracked first if it is not an application yet. What happens shows on the
+// page's badge; a step that cannot be filled says why there.
+chrome.commands.onCommand.addListener((command, tab) => {
+  if (command !== "fill-step") return;
+  void initial.then(async () => {
+    const tabId = tab?.id ?? (await chrome.tabs.query({ active: true, lastFocusedWindow: true }))[0]?.id;
+    if (tabId === undefined) return;
+    try {
+      if (!applicationForTab(tabId)) await trackTab(tabId);
+      const app = applicationForTab(tabId);
+      if (!app) return;
+      await uiMessage({ type: "FILL_STEP", id: app.id, tabId });
+    } catch (error) {
+      await chrome.tabs.sendMessage(tabId, { type: "LANE_BADGE", info: { tone: "attention", title: "Could not fill", detail: (error as Error).message.slice(0, 140) } }, { frameId: 0 }).catch(() => {});
+      badgeSent.delete(tabId);
+    }
+  });
+});
 async function broadcast(app: Application, type: string) {
   if (!app.tabId) return;
   await Promise.allSettled(
@@ -686,6 +867,7 @@ async function observations(
         type: "BIND",
         locks: locks[app.id] || [],
         replaceSiteValues: Boolean(app.siteFillPending) || state.settings.prefilled !== "keep",
+        ownWrites: app.ownWrites || [],
       });
       if (!alive(app, operation)) break;
       frames.push({ frameId: frame.frameId, observation });
@@ -1040,7 +1222,13 @@ async function clearFit(app: Application) {
 // sponsorship and "worked here before" questions are asked of this job.
 function forApplication(profile: Profile, app: Application): Profile {
   const country = locationCountry(globals as Geography, app.posting?.location);
-  return { ...profile, applyingTo: { ...(country ? { country } : {}), ...(app.company ? { company: app.company } : {}) } };
+  // An internship is answered with the internship end date where one is
+  // saved (Tesla's anticipated graduation date).
+  const title = app.posting?.title || app.title;
+  // Its tabs' titles too: Tesla's application was saved as "Tesla
+  // homepageCareers…" while its tab said "Internship, Software Engineer…".
+  const named = [app.posting?.title, app.title, ...app.tabs.map((tab) => tab.title)].filter(Boolean).join(" | ");
+  return { ...forRole(profile, named), applyingTo: { ...(country ? { country } : {}), ...(app.company ? { company: app.company } : {}), ...(title ? { title } : {}) } };
 }
 async function checkFit(app: Application) {
   if (app.fitJobId) return state;
@@ -1315,6 +1503,7 @@ const submissionRecord = (app: Application) => ({
   company: app.company.slice(0, 300),
   title: app.title.slice(0, 500),
   url: app.url.slice(0, 3000),
+  ...(app.sourceUrl && app.sourceUrl !== app.url ? { sourceUrl: app.sourceUrl.slice(0, 3000) } : {}),
   ...(app.ats ? { ats: app.ats.slice(0, 200) } : {}),
   submittedAt: app.submittedAt || app.stageUpdatedAt || app.updatedAt,
   confirmedBySite: Boolean(app.confirmedBySite),
@@ -1463,7 +1652,7 @@ function fallbackProblems(
         options: field.options,
         reason: planned.has(field.id)
           ? "Normal fill found a saved value, but the field remained empty."
-          : "Normal fill could not match this field to saved profile information or its available choices.",
+          : leftReason(field.question || field.label) || "Normal fill could not match this field to saved profile information or its available choices.",
       })),
     );
     if (problems.length >= 100) break;
@@ -1846,7 +2035,8 @@ async function readListOptions(app: Application, frame: { frameId: number; obser
     fieldIds: unread.map((field) => field.id),
     // Only list buttons (Workday's) during a fill: opening a SuccessFactors
     // or react-select list then got in the way of its own fill, which picks
-    // from the open list anyway (suite).
+    // from the open list anyway (suite). A SuccessFactors list
+    // is still read, from its own model without opening it.
     listButtonsOnly: true,
   }).catch(() => []);
   for (const { id, options } of Array.isArray(read) ? read : []) {
@@ -1860,7 +2050,12 @@ async function run(app: Application, operation: number) {
   // Each look at whether its documents are ready runs this again: one still
   // tailoring stays "Tailoring" rather than flicking to "Reading form" and
   // back every few seconds.
-  if (app.status !== "preparing") {
+  // Each of those looks also set "filling" before it read the form again,
+  // and "preparing" after: the status alternated every second or so for the
+  // whole 40 s a step's answers took, saying "Filling confirmed profile
+  // fields…" while nothing was written (Verdantas).
+  const waitingOnJob = app.status === "preparing";
+  if (!waitingOnJob) {
     touch(app, "inspecting", "Reading application fields…");
     await persist();
   }
@@ -2002,12 +2197,20 @@ async function run(app: Application, operation: number) {
   }
   const primary =
     frames.find((f) => f.observation.fields.length > 0) || frames[0];
-  // The posting's own title, once found, outranks the page's heading.
-  app.title = app.posting?.title || primary.observation.title || app.title;
+  // The posting's own title, once found, outranks the page's heading. A
+  // heading names the application only while it has no real name: a sign-in
+  // or profile page reached later is not the job (PACCAR's became "Your
+  // session has expired." and then "Candidate Profile", and its documents
+  // were drafted for a job of that name).
+  const heading = primary.observation.title || "";
+  app.title = app.posting?.title || (genericTitle(app.title, app.url) && heading && !genericTitle(heading, app.url) ? heading : app.title);
   namedByPage(app, primary.observation);
   app.ats = primary.observation.ats;
+  // A SuccessFactors page showing only folded sections and upload slots has
+  // its whole form behind them: the fill goes on and opens them (the
+  // full-page SuccessFactors test, filled nothing).
   const totalFields = frames.reduce(
-    (n, f) => n + fillable(f.observation),
+    (n, f) => n + fillable(f.observation) + (f.observation.foldedSections || 0) + (f.observation.documentSlots?.length || 0),
     0,
   );
   if (!totalFields) {
@@ -2049,7 +2252,14 @@ async function run(app: Application, operation: number) {
   // Some uploaders parse the resume and rewrite the whole form with it (iCIMS
   // reloads the page). Anything filled before that upload is lost, so the
   // resume goes first and alone; the next request fills what is left.
-  const resumeFirst = !app.siteFillTried && frames.some((frame) =>
+  // SuccessFactors does it in place: its parser wrote "UNSPECIFIED" as a
+  // company, its own job titles and dates over the profile's when the resume
+  // went up with or after the fill (PACCAR's SuccessFactors). An
+  // empty resume slot there (its rule's resumeFirstPaths) is uploaded to
+  // first, through the rule's dialog, and the form is filled once it settles.
+  const configResumeFirst = !app.siteFillTried && configEngineEnabled &&
+    frames.some((frame) => frame.observation.resumeSlotOpen);
+  const resumeFirst = configResumeFirst || (!app.siteFillTried && frames.some((frame) =>
     frame.observation.fields.some(
       (field) =>
         field.kind === "file" &&
@@ -2057,16 +2267,130 @@ async function run(app: Application, operation: number) {
         !field.value &&
         !field.protected,
     ),
-  );
+  ));
+  // The documents (and this step's drafted answers) are asked for: the
+  // posting looked for first if it never was. Started before the
+  // deterministic fill on an application's first step, so its tailoring runs
+  // while the fill types; one employer's was asked for only after its skills were
+  // typed, and the fill then waited for it.
+  const startDocuments = async (key?: string): Promise<boolean> => {
+    // Tracked before the page that led here was looked for (an application
+    // from before this was added): it is looked for once, before drafting.
+    if (!app.jobId && !app.postingUrl && !app.postingText && !app.postingSought && app.tabId !== undefined) {
+      app.postingSought = true;
+      const tab = await chrome.tabs.get(app.tabId).catch(() => undefined);
+      const led = tab && (await leadingPage(tab, frames[0]?.observation, app).catch(() => undefined));
+      if (!alive(app, operation)) return false;
+      if (led) {
+        app.postingUrl = led.url;
+        if (led.description) app.sourceDescription = `${led.description.slice(0, 12500)}\n${app.sourceDescription || ""}`;
+        await persist();
+      } else if (!app.postingText && guessedAgain(app)) {
+        app.postingUrl = postingGuess(app.url);
+        if (app.postingUrl) await persist();
+      }
+    }
+    // Looked for before its site's posting address could be guessed (Paylocity's
+    // Apply/<id> to Details/<id>): the guess now made, and what
+    // was drafted without a posting drafted again from it on this fill.
+    if (!app.postingUrl && !app.postingText && app.postingSought && postingGuess(app.url)) {
+      app.postingUrl = postingGuess(app.url);
+      await clearFit(app);
+      if (app.jobId) {
+        app.jobId = undefined;
+        app.artifacts = [];
+        app.narrative = undefined;
+        app.generationKey = undefined;
+      }
+      await persist();
+    }
+    // Tracked from a posting its site draws by script, read before it was
+    // drawn, and filled in the tab its Apply opened: the posting's own tab,
+    // still open, is read again for its words (Tesla: the backend
+    // is refused the page, and the letter said nothing about the job).
+    if (!app.jobId && wordCount(app.sourceDescription) < 80) {
+      const reread = await postingFromOwnTab(app, frames[0]?.observation).catch(() => undefined);
+      if (!alive(app, operation)) return false;
+      if (reread) {
+        app.sourceDescription = reread.description.slice(0, 12500);
+        app.postingUrl ||= reread.url;
+        await persist();
+      }
+    }
+    if (!app.jobId) {
+      const job: GenerationJob = await api("/v1/jobs", "POST", {
+        applicationId: app.id,
+        operation,
+        profileRevision: profile.revision,
+        url: app.url,
+        title: app.title,
+        company: app.company || undefined,
+        description: [
+          app.sourceDescription || "",
+          ...frames.map((f) => f.observation.description),
+        ]
+          .join("\n")
+          .slice(0, 25000),
+        fields: [
+          ...frames.flatMap((f) =>
+            f.observation.fields.map((field) => ({
+              ...field,
+              id: `${f.frameId}|${field.id}`,
+            })),
+          ),
+          // A cover letter slot drawn without a file box (SuccessFactors'
+          // attachment widget) still takes a letter: asked for by name, as
+          // draftDocuments does.
+          ...(frames.some((f) => f.observation.documentSlots?.includes("cover")) &&
+            !frames.some((f) => f.observation.fields.some((field) => field.documentKind === "cover"))
+            ? [{ id: "documents|cover", label: "Cover letter", kind: "file", required: false, value: "", options: [], revision: 0, protected: false, documentKind: "cover" as const }]
+            : []),
+        ].slice(0, 250),
+        // The pages being filled: one may lead to the posting when the
+        // tracked URL does not (Intel's was its account page).
+        // The listing it was tracked from, where none was given: PACCAR's own
+      // job page holds the posting the backend can read, and the form's
+      // pages never do. Only when it is one job's own page: the
+      // check was genericTitle("", url), true of any address, so the posting
+      // was never sent (Optimum's).
+      ...(app.postingUrl || (app.sourceUrl && app.sourceUrl !== app.url && singlePostingUrl(app.sourceUrl))
+        ? { postingUrl: app.postingUrl || app.sourceUrl }
+        : {}),
+        ...(app.postingText ? { postingText: app.postingText } : {}),
+        pageUrls: [
+          ...new Set([
+            ...frames.map((f) => f.observation.url),
+            ...frameUrls,
+            ...app.tabs.map((tab) => tab.url),
+          ]),
+        ]
+          .filter((url) => /^https:/.test(url) && url !== app.url && url.length <= 3000)
+          .slice(0, 10),
+      });
+      if (!alive(app, operation)) {
+        await api(`/v1/jobs/${job.id}`, "DELETE").catch(() => {});
+        return false;
+      }
+      app.jobId = job.id;
+      if (key) app.generationKey = key;
+      await persist();
+    }
+    return true;
+  };
+  // First step: no documents yet, and none being made.
+  const startedEarly = !app.jobId && !app.documentJobId && !resumeFirst;
+  if (startedEarly && !(await startDocuments())) return;
   // Fill deterministic fields while document generation runs independently.
-  touch(
-    app,
-    "filling",
-    resumeFirst
-      ? "Uploading your resume first; this site fills the form from it…"
-      : "Filling confirmed profile fields…",
-  );
-  await persist();
+  if (!waitingOnJob) {
+    touch(
+      app,
+      "filling",
+      resumeFirst
+        ? "Uploading your resume first; this site fills the form from it…"
+        : "Filling confirmed profile fields…",
+    );
+    await persist();
+  }
   const writeFailures: string[] = [];
   for (const frame of resumeFirst ? [] : frames) {
     if (!alive(app, operation)) return;
@@ -2133,6 +2457,23 @@ async function run(app: Application, operation: number) {
             );
         }
       frame.observation = result.observation;
+      // A value the site refused as written ("Invalid number." for "USD
+      // 100,000") is answered again at once, in the form it takes: the retry
+      // came only from a later pass, and a later step, its documents made,
+      // has none (PACCAR's salary).
+      const refusedNow = frame.observation.fields.filter((field) => field.invalid && field.value);
+      const again = refusedNow.length
+        ? proposals(frame.observation.fields, profile).filter((proposal) => refusedNow.some((field) => field.id === proposal.fieldId))
+        : [];
+      if (again.length) {
+        const retried = await applyFrame(app, frame, again, operation);
+        if (retried.navigationInterrupted) {
+          await reviewInterruptedWrite(app, retried.observation);
+          return;
+        }
+        if (!alive(app, operation)) return;
+        frame.observation = retried.observation;
+      }
     }
   }
   if (!alive(app, operation)) return;
@@ -2160,86 +2501,9 @@ async function run(app: Application, operation: number) {
     await persist();
     return;
   }
-  // Tracked before the page that led here was looked for (an application
-  // from before this was added): it is looked for once, before drafting.
-  if (!app.jobId && !app.postingUrl && !app.postingText && !app.postingSought && app.tabId !== undefined) {
-    app.postingSought = true;
-    const tab = await chrome.tabs.get(app.tabId).catch(() => undefined);
-    const led = tab && (await leadingPage(tab, frames[0]?.observation, app).catch(() => undefined));
-    if (!alive(app, operation)) return;
-    if (led) {
-      app.postingUrl = led.url;
-      if (led.description) app.sourceDescription = `${led.description.slice(0, 12500)}\n${app.sourceDescription || ""}`;
-      await persist();
-    } else if (!app.postingText && guessedAgain(app)) {
-      app.postingUrl = postingGuess(app.url);
-      if (app.postingUrl) await persist();
-    }
-  }
-  // Tracked from a posting its site draws by script, read before it was
-  // drawn, and filled in the tab its Apply opened: the posting's own tab,
-  // still open, is read again for its words (Tesla: the backend
-  // is refused the page, and the letter said nothing about the job).
-  if (!app.jobId && wordCount(app.sourceDescription) < 80) {
-    const reread = await postingFromOwnTab(app, frames[0]?.observation).catch(() => undefined);
-    if (!alive(app, operation)) return;
-    if (reread) {
-      app.sourceDescription = reread.description.slice(0, 12500);
-      app.postingUrl ||= reread.url;
-      await persist();
-    }
-  }
-  if (!app.jobId) {
-    const job: GenerationJob = await api("/v1/jobs", "POST", {
-      applicationId: app.id,
-      operation,
-      profileRevision: profile.revision,
-      url: app.url,
-      title: app.title,
-      company: app.company || undefined,
-      description: [
-        app.sourceDescription || "",
-        ...frames.map((f) => f.observation.description),
-      ]
-        .join("\n")
-        .slice(0, 25000),
-      fields: [
-        ...frames.flatMap((f) =>
-          f.observation.fields.map((field) => ({
-            ...field,
-            id: `${f.frameId}|${field.id}`,
-          })),
-        ),
-        // A cover letter slot drawn without a file box (SuccessFactors'
-        // attachment widget) still takes a letter: asked for by name, as
-        // draftDocuments does.
-        ...(frames.some((f) => f.observation.documentSlots?.includes("cover")) &&
-          !frames.some((f) => f.observation.fields.some((field) => field.documentKind === "cover"))
-          ? [{ id: "documents|cover", label: "Cover letter", kind: "file", required: false, value: "", options: [], revision: 0, protected: false, documentKind: "cover" as const }]
-          : []),
-      ].slice(0, 250),
-      // The pages being filled: one may lead to the posting when the
-      // tracked URL does not (Intel's was its account page).
-      ...(app.postingUrl ? { postingUrl: app.postingUrl } : {}),
-      ...(app.postingText ? { postingText: app.postingText } : {}),
-      pageUrls: [
-        ...new Set([
-          ...frames.map((f) => f.observation.url),
-          ...frameUrls,
-          ...app.tabs.map((tab) => tab.url),
-        ]),
-      ]
-        .filter((url) => /^https:/.test(url) && url !== app.url && url.length <= 3000)
-        .slice(0, 10),
-    });
-    if (!alive(app, operation)) {
-      await api(`/v1/jobs/${job.id}`, "DELETE").catch(() => {});
-      return;
-    }
-    app.jobId = job.id;
-    app.generationKey = key;
-    await persist();
-  }
+  if (!(await startDocuments(key))) return;
+  // A job begun before the fill is known by the form as the fill left it.
+  if (app.jobId && !app.generationKey) app.generationKey = key;
   const job: GenerationJob = await api(`/v1/jobs/${app.jobId}`);
   if (!alive(app, operation)) return;
   if (
@@ -2264,11 +2528,27 @@ async function run(app: Application, operation: number) {
     throw new Error(
       job.error || "Generation was cancelled. Retry this application.",
     );
-  if (job.status !== "complete") {
+  // A job begun before this pass's fill waits for the next pass even when it
+  // is already done: that pass fills the step again, and a value the site
+  // refused is retried in its accepted form (a salary of "USD 100,000"
+  // answered "Invalid number." is given as 100000). Applying the documents
+  // now would end the fill with the refused value left in place.
+  if (job.status !== "complete" || startedEarly) {
+    // The last field written is no longer what is being worked on: the
+    // panel said "Answering: What are your salary expectations?" for the
+    // whole minute and a half the drafts took (PACCAR).
+    // It joins those worked on, as the next label would have put it.
+    if (app.progress?.current)
+      app.progress = {
+        answered: app.progress.answered.at(-1) === app.progress.current ? app.progress.answered : [...app.progress.answered, app.progress.current].slice(-300),
+        current: undefined,
+      };
     touch(
       app,
       "preparing",
-      "Tailoring documents while other applications continue…",
+      app.documentJobId
+        ? "Getting this step's answers ready while other applications continue…"
+        : "Tailoring documents while other applications continue…",
     );
     await persist();
     return;
@@ -2288,9 +2568,33 @@ async function run(app: Application, operation: number) {
   if (!resumeFirst) {
     // Rows the site added from the resume that match no profile school.
     const allFields = frames.flatMap((frame) => frame.observation.fields);
+    // A form's "Education (Completed)" part takes only the highest finished
+    // degree and says to remove all others (iCIMS): the blocks
+    // after the first, the site's duplicates from the resume, are removed
+    // with the site's own remove control, last block first.
+    const removedFields = new Set<Observation["fields"][number]>();
+    for (const frame of frames) {
+      const blocks = new Map<string, Map<number, Observation["fields"]>>();
+      for (const field of frame.observation.fields) {
+        const place = normalize(field.section || "");
+        if (!/education/.test(place) || !/\bcompleted\b/.test(place) || !(field.index || 0)) continue;
+        const rows = blocks.get(field.section!) || new Map<number, Observation["fields"]>();
+        rows.set(field.index!, [...(rows.get(field.index!) || []), field]);
+        blocks.set(field.section!, rows);
+      }
+      for (const [section, rows] of blocks)
+        for (const [page, rowFields] of [...rows].sort((a, b) => b[0] - a[0])) {
+          const removed = await frameCall(app, frame.frameId, { type: "REMOVE_ROW", section, index: page, groupLoop: true })
+            .then((result: { removed?: boolean }) => Boolean(result?.removed))
+            .catch(() => false);
+          if (!removed) break;
+          for (const field of rowFields) removedFields.add(field);
+          issues.push(`Education row ${page + 1} was added by the site and is not the highest completed degree, so it was removed.`);
+        }
+    }
     const educationRows = new Map<number, Observation["fields"]>();
     for (const field of allFields)
-      if (/education/.test(normalize(field.section || "")))
+      if (/education/.test(normalize(field.section || "")) && !removedFields.has(field))
         educationRows.set(field.index || 0, [
           ...(educationRows.get(field.index || 0) || []),
           field,
@@ -2394,6 +2698,11 @@ async function run(app: Application, operation: number) {
     // the site filled in do, or when the applicant asks for it. Never one
     // this application uploaded: a site that rewrites the form from it
     // (iCIMS) reloads before the upload is confirmed, and shows it as its own.
+    // The answers on the page before a resume goes up, by field: a site that
+    // parses the upload in place can empty them (Microsoft's careers form
+    // blanked the typed address and zip 1.5 s after its resume_upload
+    // returned). Those are answered again below.
+    let filledBeforeResume: Map<string, string> | undefined;
     const heldBySite = (f: Field) => fileKind(f) === "resume" && Boolean(f.value) && !f.attachmentId &&
       !app.uploadedDocuments?.resume && !app.siteFillTried && !app.siteFillPending &&
       (f.siteValue || (Boolean(app.replaceDocuments) && f.protectedReason === "existing value"));
@@ -2473,6 +2782,8 @@ async function run(app: Application, operation: number) {
         issues.push(`Verify upload: ${field.label}`);
         continue;
       }
+      if (kind === "resume" && !filledBeforeResume)
+        filledBeforeResume = new Map(frame.observation.fields.filter((f) => f.kind !== "file" && f.value).map((f) => [f.id, f.value]));
       try {
         const result = await frameCall(app, frame.frameId, {
           type: "ATTACH",
@@ -2516,14 +2827,22 @@ async function run(app: Application, operation: number) {
     // Not in an embedded frame with nothing in it: Microsoft's near-empty
     // profile export frame, gone by then, turned the rule's uploads into a
     // résumé and cover letter reported as failed while the résumé was in.
-    if (configEngineEnabled && !resumeFirst && (frame.frameId === 0 || frame.observation.fields.length)) {
+    if (configEngineEnabled && (!resumeFirst || frame.observation.resumeSlotOpen) && (frame.frameId === 0 || frame.observation.fields.length)) {
       for (const field of frame.observation.fields.filter((f) => f.kind === "file")) fieldKinds.add(fileKind(field));
       // One document at a time: SuccessFactors saves an upload and then
       // reloads the whole form from its server (recording),
       // dropping whatever was filled and not yet saved, and an upload still
       // under way when that happens is lost.
       let uploaded = false;
-      for (const kind of ["resume", "cover"] as const) {
+      // Whatever the site writes from here is its parse, for the next pass
+      // to correct; and that pass does not upload first again.
+      if (resumeFirst) {
+        app.siteFillPending = true;
+        app.siteFillTried = true;
+        await persist();
+      }
+      // The resume alone when the site fills the form from it.
+      for (const kind of resumeFirst ? (["resume"] as const) : (["resume", "cover"] as const)) {
         const artifact =
           job.artifacts.find((a) => a.kind === kind && a.format === "pdf") ||
           job.artifacts.find((a) => a.kind === kind);
@@ -2560,6 +2879,23 @@ async function run(app: Application, operation: number) {
           app.uploadedDocuments = { ...app.uploadedDocuments, [kind]: fingerprint };
           await persist();
           uploaded = true;
+          // Uploaded first: until the slot shows the file and the site's
+          // parse has stopped changing the form (the same values on two
+          // reads a second apart, from the fourth second), or 30 seconds.
+          // The fill that follows then writes the profile's values last.
+          if (resumeFirst) {
+            let previous = "";
+            let steady = 0;
+            for (let waited = 0; waited < 30 && steady < 2; waited++) {
+              await new Promise((resolve) => setTimeout(resolve, 1000));
+              if (!alive(app, operation)) return;
+              const now: Observation | undefined = await frameCall(app, frame.frameId, { type: "INSPECT", documentId: frame.observation.documentId }).catch(() => undefined);
+              const form = now && !now.resumeSlotOpen ? JSON.stringify(now.fields.map((field) => [field.id, field.value])) : "";
+              steady = form && form === previous && waited >= 3 ? steady + 1 : 0;
+              previous = form;
+            }
+            continue;
+          }
           // Until the site has reloaded the form (it loses fields), or for
           // ten seconds when it does not.
           for (let waited = 0; waited < 10; waited++) {
@@ -2581,8 +2917,10 @@ async function run(app: Application, operation: number) {
       }
       if (!alive(app, operation)) return;
       // The form may have been reset by the uploads: fill it again from the
-      // start. The documents are not uploaded twice.
-      if (uploaded) {
+      // start. The documents are not uploaded twice. A resume sent first is
+      // followed by the fill whether or not it went up; that pass reports a
+      // failed upload as any other.
+      if (uploaded || configResumeFirst) {
         // A new generation request follows (its answers are for the form as
         // it now is); the backend hands back this application's finished
         // documents instead of tailoring them again.
@@ -2591,7 +2929,13 @@ async function run(app: Application, operation: number) {
         app.artifacts = [];
         app.narrative = undefined;
         app.generationKey = undefined;
-        touch(app, "queued", "Documents uploaded; the site reloaded the form. Filling it again…");
+        touch(
+          app,
+          "queued",
+          configResumeFirst
+            ? "Resume uploaded first; the site filled the form from it. Filling the form…"
+            : "Documents uploaded; the site reloaded the form. Filling it again…",
+        );
         await persist();
         return;
       }
@@ -2645,6 +2989,35 @@ async function run(app: Application, operation: number) {
         }
         if (!alive(app, operation)) return;
         app.filled += applied.results.filter((result: { ok: boolean }) => result.ok).length;
+        frame.observation = applied.observation;
+      }
+    }
+    // Answers the site emptied after the resume went up: watched until the
+    // form has held still for two reads a second apart (or 15 seconds),
+    // then answered again once. A site that reloaded is handled above.
+    if (filledBeforeResume?.size && !resetAfterUpload && frame.observation.documentId === beforeUploadInspection) {
+      const emptied = (fields: Field[]) => fields.filter((f) => f.kind !== "file" && !f.value && filledBeforeResume!.has(f.id) && !f.protected);
+      let previous = "";
+      let steady = 0;
+      for (let waited = 0; waited < 15 && steady < 2; waited++) {
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+        if (!alive(app, operation)) return;
+        const now: Observation | undefined = await frameCall(app, frame.frameId, { type: "INSPECT", documentId: frame.observation.documentId }).catch(() => undefined);
+        if (!now) break;
+        frame.observation = now;
+        const form = JSON.stringify(now.fields.map((field) => [field.id, field.value]));
+        steady = form === previous && waited >= 3 ? steady + 1 : 0;
+        previous = form;
+      }
+      const lost = emptied(frame.observation.fields);
+      const again = lost.length ? proposals(frame.observation.fields, profile).filter((proposal) => lost.some((field) => field.id === proposal.fieldId)) : [];
+      if (again.length) {
+        const applied = await applyFrame(app, frame, again, operation);
+        if (applied.navigationInterrupted) {
+          await reviewInterruptedWrite(app, applied.observation);
+          return;
+        }
+        if (!alive(app, operation)) return;
         frame.observation = applied.observation;
       }
     }
@@ -2959,8 +3332,13 @@ async function assist(app: Application, tabId: number) {
       if (questions.length) await draftAnswers(app, tabId, questions.map((field) => field.id).slice(0, 250)).catch(() => {});
     }
     finished = idle();
-  } catch {
-    // A suggestion step that cannot run leaves the fill as it finished.
+  } catch (error) {
+    // A suggestion step that cannot run leaves the fill as it finished, and
+    // says why. Workable's Yes/No questions:
+    // the model answered both from the profile, nothing was filled, and
+    // nothing said what stopped it.
+    const note = `AI suggestions were not filled automatically: ${((error as Error)?.message || String(error)).slice(0, 200)} Review them in the panel.`.slice(0, 350);
+    if (!app.missing.includes(note)) app.missing.push(note);
   } finally {
     app.aiPass = { tabId, profileRevision, fieldIds: [...tried], finished };
     assisting.delete(app.id);
@@ -3005,6 +3383,15 @@ async function useApply(app: Application, tabId: number, operation: number): Pro
     }
   }, 2500);
   return result.label;
+}
+// The same page at another address: one origin and path, other parameters.
+function sameFormPage(next: string, previous: string) {
+  try {
+    const [a, b] = [new URL(next), new URL(previous)];
+    return a.origin === b.origin && a.pathname === b.pathname;
+  } catch {
+    return false;
+  }
 }
 // Whether the page a fill would write to is on a draft-only site.
 async function draftOnlyTab(tabId: number | undefined, fallback?: string) {
@@ -3412,14 +3799,22 @@ function scheduleFillCapture(app: Application, delayMs = 4000, tries = 0) {
     void captureFill(app, tabId).catch(() => {}).finally(() => capturesInFlight.delete(tabId));
   }, delayMs));
 }
-async function captureFill(app: Application, tabId: number) {
+async function captureFill(app: Application, tabId: number, trigger: "fill" | "check" = "fill"): Promise<string | undefined> {
   const { tab, frames } = await pageEvidence(tabId);
   if (!frames.some((frame) => frame.observation?.fields.length)) return;
+  // The recording as of now, not as of its last checkpoint: a capture named a
+  // recording that ended before the pause it was taken after, and the cause
+  // could not be read (Salesforce's Workday).
+  const active = recordings.get(tabId);
+  if (active) {
+    const saved = await saveRecording(tabId).catch(() => undefined);
+    if (saved?.saved) app.lastRecordingId = saved.recording.id;
+  }
   const network = await captureHar(tabId);
   const capture = {
     id: crypto.randomUUID(),
     createdAt: Date.now(),
-    trigger: "fill" as const,
+    trigger,
     applicationId: app.id,
     application: {
       title: app.title,
@@ -3443,12 +3838,14 @@ async function captureFill(app: Application, tabId: number) {
     frames,
   };
   await api("/v1/captures", "POST", { ...capture, ...(network ? { har: network.har } : {}) });
+  return capture.id;
 }
 
 async function reportIssue(
   tabId: number,
   category: IssueReport["category"],
   note: string,
+  images: IssueImage[] = [],
 ) {
   const app = applicationForTab(tabId);
   if (app && (app.explicitFill || activeStatuses.includes(app.status)))
@@ -3502,15 +3899,37 @@ async function reportIssue(
   const network = state.settings.networkCapture === "on" ? await captureHar(tabId) : undefined;
   if (network) report.network = networkSummary(network);
   const bundle = { ...report, ...(network ? { har: network.har } : {}),
-    ...(recorded ? { recording: recorded.recording } : {}) };
+    ...(recorded ? { recording: recorded.recording } : {}),
+    ...(usableImages(images).length ? { images: usableImages(images).slice(0, ISSUE_IMAGE_LIMIT.count) } : {}) };
   let saved = true;
   let saveError = "";
   try {
     // The backend publishes the report only after all evidence is on disk.
-    await api("/v1/issues", "POST", bundle);
+    // A backend restarting for a few seconds must not turn a report into a
+    // download that never reaches the fixer: asked again for twelve seconds.
+    for (let attempt = 0; ; attempt++)
+      try {
+        await api("/v1/issues", "POST", bundle);
+        break;
+      } catch (down) {
+        if ((down as Error).message !== BACKEND_DOWN || attempt >= 3) throw down;
+        await new Promise((resolve) => setTimeout(resolve, 4000));
+      }
   } catch (error) {
-    saved = false;
-    saveError = (error as Error).message;
+    // A report is worth more than its screenshots: one refused for an image is
+    // sent again without them.
+    if (/images/.test((error as Error).message) && "images" in bundle) {
+      const { images: _dropped, ...without } = bundle as typeof bundle & { images?: unknown };
+      try {
+        await api("/v1/issues", "POST", without);
+      } catch (again) {
+        saved = false;
+        saveError = (again as Error).message;
+      }
+    } else {
+      saved = false;
+      saveError = (error as Error).message;
+    }
   }
   if (app && saved) {
     app.issueCount++;
@@ -3961,11 +4380,16 @@ async function uiMessage(message: any) {
   if (message.type === "PICK_UP_INBOX") return pickUpInbox().then(() => state);
   if (message.type === "DISMISS_RECURRING_ANSWER") return dismissRecurringAnswer(message.key);
   if (message.type === "SAVE_ANSWERS") return saveAnswers(message.answers);
+  // The side panel's report dialog is open (its beat, every few seconds).
+  if (message.type === "REPORT_OPEN") {
+    reportBeat = message.open ? Date.now() : 0;
+    return true;
+  }
   if (message.type === "STOP_RECORDING") return stopRecording(message.tabId);
   if (message.type === "RECORDING_STATE") return recordingState();
   if (message.type === "TRACK_TAB") return trackTab(message.tabId);
   if (message.type === "REPORT_ISSUE")
-    return reportIssue(message.tabId, message.category, message.note || "");
+    return reportIssue(message.tabId, message.category, message.note || "", Array.isArray(message.images) ? message.images : []);
   if (message.type === "DELETE_ISSUE") {
     if (typeof message.reportId !== "string" || !/^[a-f0-9-]{36}$/.test(message.reportId))
       throw new Error("Invalid issue report ID.");
@@ -4055,26 +4479,7 @@ async function uiMessage(message: any) {
     await resume(app);
     return state;
   }
-  if (message.type === "UNLOCK_APP") {
-    await clearFieldFallback(app);
-    delete locks[app.id];
-    await persist();
-    if (app.tabId) {
-      await Promise.allSettled(
-        (await allFrames(app.tabId)).map((frame) =>
-          chrome.tabs.sendMessage(
-            app.tabId!,
-            { type: "UNLOCK", applicationId: app.id, operation: app.operation },
-            { frameId: frame.frameId },
-          ),
-        ),
-      );
-    }
-    app.missing = app.missing.filter((item) => !/edit lock/.test(item));
-    app.note = "Empty fields are unlocked. Choose Fill this step to fill them.";
-    await persist();
-    return state;
-  }
+  if (message.type === "UNLOCK_APP") return unlockEmpty(app);
   // Start this application over on a fresh copy of its page: every lock and
   // note from earlier attempts is dropped and the tab is reloaded, so the
   // next Fill this step behaves as it would the first time. The tailored
@@ -4209,6 +4614,14 @@ async function uiMessage(message: any) {
 
 chrome.runtime.onMessage.addListener((message, sender, respond) => {
   if (sender.id !== chrome.runtime.id) return;
+  // The page badge's click: the side panel, for the tab it is on.
+  if (sender.tab?.id !== undefined && message.type === "OPEN_PANEL") {
+    chrome.sidePanel.open({ tabId: sender.tab.id }).then(
+      () => respond({ ok: true }),
+      (error: Error) => respond({ ok: false, error: error.message }),
+    );
+    return true;
+  }
   // A full dashboard is an extension page inside a tab; sender.tab is valid
   // there too. Trust the packaged page URL, not the absence of a tab.
   // The dashboard's address carries the page it shows after a "#".
@@ -4313,6 +4726,7 @@ chrome.runtime.onMessage.addListener((message, sender, respond) => {
           choose?: unknown;
           hold?: unknown;
           click?: unknown;
+          insert?: unknown;
           text?: unknown;
           token?: unknown;
         };
@@ -4351,7 +4765,8 @@ chrome.runtime.onMessage.addListener((message, sender, respond) => {
         )
           throw new Error("Field write was cancelled, locked, or superseded.");
         await typeTrusted(sender.tab!.id!, request.text, request.clear, request.enter === true, request.choose === true || (typeof request.choose === "number" ? request.choose : false), request.hold === true,
-          request.click && typeof request.click === "object" ? { x: Number((request.click as { x?: unknown }).x), y: Number((request.click as { y?: unknown }).y) } : undefined);
+          request.click && typeof request.click === "object" ? { x: Number((request.click as { x?: unknown }).x), y: Number((request.click as { y?: unknown }).y) } : undefined,
+          request.insert === true);
         return { ok: true };
       })
       .then(
@@ -4572,6 +4987,14 @@ chrome.tabs.onUpdated.addListener((tabId, change) => {
             if (app.tabId === tabId && app.status === "awaiting-user") void resume(app).catch(() => {});
           }, 1500);
         }
+      } else if (change.url && app.continueAfterSiteFill && sameFormPage(change.url, app.url)) {
+        // The site rebuilt the form from the resume uploaded first and opened
+        // it at another address of the same page (ICE's iCIMS adds
+        // "uploadResume=1"). Paused as a new
+        // page, the rest was never filled; the same request carries on once
+        // it has loaded (below).
+        app.url = canonicalURL(change.url);
+        await persist();
       } else if (change.url && canonicalURL(change.url) !== canonicalURL(app.url)) {
         // A new document invalidates outstanding generation; never reuse its answers.
         app.url = canonicalURL(change.url);

@@ -360,10 +360,11 @@ test("source, referral and pay questions take only the applicant's own answers",
     selectorValues(key, { path: ".//input", value }, who, globals);
   assert.deepEqual(fixed("source", ["Other", "External"]), ["Campus career fair"]);
   assert.deepEqual(fixed("source_description", "Job board"), ["Campus career fair"]);
-  // Without one there is nothing to say, and nobody referred the applicant.
-  assert.deepEqual(fixed("source_description", "Job board", { ...profile, referralSource: [] }), []);
+  // Without one, Application Lane (under a list's Other), and nobody
+  // referred the applicant.
+  assert.deepEqual(fixed("source_description", "Job board", { ...profile, referralSource: [] }), ["Application Lane", "Other", "Other (please specify)"]);
   assert.deepEqual(fixed("referred_by", "Someone"), []);
-  assert.deepEqual(fixed("source", ["Other", "Website"], { ...profile, referralSource: [] }), []);
+  assert.deepEqual(fixed("source", ["Other", "Website"], { ...profile, referralSource: [] }), ["Application Lane", "Other", "Other (please specify)"]);
   const saved = { ...heard, answers: [{ question: "How did you hear about us?", answer: "Online job board" }] };
   assert.deepEqual(fixed("source", ["LinkedIn", "Other"], saved), ["Online job board"]);
   assert.deepEqual(fixed("salary", "100000"), []);
@@ -422,7 +423,7 @@ test("a person saved as a reference is not where the applicant heard of a job", 
     references: [{ name: "Jordan Vale", relationship: "Manager", phone: "", email: "jordan@example.test" }],
   });
   assert.deepEqual(canonicalValues("source", saved), ["Company website"]);
-  assert.deepEqual(canonicalValues("source", { ...saved, referralSource: ["Jordan Vale"] }), []);
+  assert.deepEqual(canonicalValues("source", { ...saved, referralSource: ["Jordan Vale"] }), ["Application Lane", "Other", "Other (please specify)"]);
 });
 
 test("site rules get the middle name, its initial, and a legal name with it", () => {

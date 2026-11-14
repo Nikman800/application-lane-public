@@ -1329,6 +1329,43 @@ footer span:last-child {
 .issue-modal {
   max-width: 540px;
 }
+.issue-images {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 8px 0;
+}
+.issue-images figure {
+  position: relative;
+  margin: 0;
+}
+.issue-images img {
+  width: 96px;
+  height: 64px;
+  object-fit: cover;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 6px);
+}
+.issue-images figure .icon-button {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  padding: 0 6px;
+  background: var(--surface, #fff);
+}
+.issue-images .attach-image {
+  display: inline-flex;
+  align-items: center;
+  height: 64px;
+  padding: 0 12px;
+  cursor: pointer;
+}
+.issue-images .attach-image input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
 .modal h3 {
   margin-top: 20px;
 }
@@ -1424,6 +1461,16 @@ footer span:last-child {
 }
 .app-problems li + li {
   margin-top: 3px;
+}
+.app-problems h4 {
+  margin: 8px 0 2px;
+  font-size: 12px;
+  font-weight: 600;
+  opacity: 0.85;
+}
+.app-problems li .app-note {
+  margin: 1px 0 0;
+  opacity: 0.8;
 }
 .app-notes {
   margin: 4px 0 8px;

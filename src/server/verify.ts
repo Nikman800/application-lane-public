@@ -224,7 +224,10 @@ const standing =
 // What the applicant has said they lack. A line there names a technology to
 // say it is missing ("No Kubernetes"), so it vouches for nothing they claim.
 const gapSection = /^##\s*known gaps\b/iu;
-const firstPerson = /\b(I|I'm|I've|my|me)\b/u;
+// "I" as the applicant ("I built", "I am"), not a level in a job's title
+// ("Engineer I, Software", an employer: the job applied for was
+// taken for a claim about the applicant).
+const firstPerson = /\b(I(?=\s+[a-z])|I'm|I've|I'd|I'll|my|me)\b/u;
 
 // Every figure and every word of standing in a claim, whatever kind of
 // claim it is; and for work done, every name as well.

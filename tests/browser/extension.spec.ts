@@ -22,7 +22,7 @@ import {
   provider,
   type Generate,
 } from "../../src/server/generation";
-import { icimsCandidatePage } from "./icims-fixture";
+import { icimsCandidatePage, icimsProfileAfterUpload } from "./icims-fixture";
 import { realSchools, schoolsWithout } from "../support/schools";
 import { ssrSelectMarkup } from "./ssr-select-fixture";
 import { proposals as knownProposals } from "../../src/shared/matching";
@@ -77,6 +77,7 @@ const avatureOrigin = "https://acme.avature.net";
 const breezyOrigin = "https://acme.breezy.hr";
 const ripplingOrigin = "https://ats.rippling.com";
 const teslaOrigin = "https://www.tesla.com";
+const tiktokOrigin = "https://lifeattiktok.com";
 const smartRecruitersOrigin = "https://jobs.smartrecruiters.com";
 // Pages the fixture server itself serves, for tabs the extension opens: a
 // Playwright route does not reach those.
@@ -212,6 +213,11 @@ test.beforeEach(async () => {
     model: "fixture-model",
     endpoint: "http://127.0.0.1:9999/v1",
   });
+  // The test's own copy of the build, made before its backend: the backend
+  // reports this copy's build, so a rebuild of dist/extension (the
+  // applicant's) or of the test build during the run changes nothing here.
+  const extensionPath = await scratch("lane-extension-");
+  await cp(resolve(process.env.LANE_EXTENSION_DIR || "dist/extension"), extensionPath, { recursive: true });
   const app = await createApp(
     appConfig,
     directory,
@@ -231,6 +237,7 @@ test.beforeEach(async () => {
         req,
       );
     },
+    { extensionDir: extensionPath },
   );
   app.store.data.profile = structuredClone(profile);
   await app.store.save();
@@ -249,8 +256,6 @@ test.beforeEach(async () => {
   origin = `http://127.0.0.1:${(fixture.address() as any).port}`;
   // A disposable installation pre-grants only our intercepted ATS fixture
   // origins, equivalent to accepting the production extension's access prompt.
-  const extensionPath = await scratch("lane-extension-");
-  await cp(resolve(process.env.LANE_EXTENSION_DIR || "dist/extension"), extensionPath, { recursive: true });
   const manifest = JSON.parse(
     await readFile(join(extensionPath, "manifest.json"), "utf8"),
   );
@@ -269,7 +274,7 @@ test.beforeEach(async () => {
       backendOrigin,
     ),
   );
-  manifest.host_permissions.push(...[...atsOrigins, oracleOrigin, workableOrigin, sapsfOrigin, adpOrigin, talNetOrigin, amazonOrigin, paylocityOrigin, jazzOrigin, avatureOrigin, breezyOrigin, ripplingOrigin, teslaOrigin, smartRecruitersOrigin, "https://smartapply.indeed.com", "https://www.linkedin.com"].map((origin) => `${origin}/*`));
+  manifest.host_permissions.push(...[...atsOrigins, oracleOrigin, workableOrigin, sapsfOrigin, adpOrigin, talNetOrigin, amazonOrigin, paylocityOrigin, jazzOrigin, avatureOrigin, breezyOrigin, ripplingOrigin, teslaOrigin, tiktokOrigin, smartRecruitersOrigin, "https://smartapply.indeed.com", "https://www.linkedin.com"].map((origin) => `${origin}/*`));
   await writeFile(
     join(extensionPath, "manifest.json"),
     JSON.stringify(manifest),
@@ -1260,6 +1265,96 @@ test("a captured collapsed Workday experience section adds only profile rows", a
   // change trusted: no pause for an edit nobody made.
   await expect.poll(async () => (await state()).applications[0].status, { timeout: 30_000 }).toMatch(/^(awaiting-user|ready)$/);
   expect((await state()).applications[0].note || "").not.toMatch(/You interacted/);
+});
+
+// Salesforce's Workday: its sections are titled
+// "Work History (Optional)" and "Education (Required)", and their groups are
+// labelled after that ("Work-History-(Optional)-section", "...-1-panel"). The
+// rule knew only "Work-Experience-section" and "Education-section", so the
+// empty Work History section (an Add button, no row) was taken for a row:
+// the first job was "filled" into it with nothing to write, the second found
+// no Add button, and no job was added at all. The second school was never
+// added either.
+test("a captured Workday Work History (Optional) section adds and fills each job", async () => {
+  const workdayOrigin = atsOrigins[0];
+  const work = [
+    { organization: "Acme", title: "Software Engineer Intern", location: "Phoenix, AZ", details: "Built TypeScript services.", startDate: "2025-05", endDate: "2025-08" },
+    { organization: "Contoso", title: "Research Assistant", location: "State College, PA", details: "Ran experiments.", startDate: "2024-01", endDate: "2024-12" },
+  ];
+  const education = [
+    { organization: "Penn State", title: "Master of Science", fieldOfStudy: "Data Science", startDate: "2025-08", endDate: "2027-05", location: "State College, PA", details: "" },
+    { organization: "Contoso University", title: "Bachelor of Science", fieldOfStudy: "Computer Science", startDate: "2021-08", endDate: "2025-05", location: "Phoenix, AZ", details: "" },
+  ];
+  await ui({ type: "API", path: "/v1/profile", method: "PUT", body: { ...profile, work, education } });
+  await context.route(`${workdayOrigin}/**`, (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: `<!doctype html><main><div data-automation-id="applyFlowMyExpPage">
+        <div role="group" aria-labelledby="Work-History-(Optional)-section" id="work">
+          <h4 id="Work-History-(Optional)-section">Work History (Optional)</h4>
+          <div data-automation-id="instructionalText"><p><span>Enter your most recent/relevant work experience.</span></p></div>
+          <div class="add"><div><button data-automation-id="add-button">Add</button></div></div>
+        </div>
+        <div role="group" aria-labelledby="Education-(Required)-section" id="education">
+          <h4 id="Education-(Required)-section">Education (Required)</h4>
+          <div role="group" aria-labelledby="Education-(Required)-1-panel">
+            <div><h5 id="Education-(Required)-1-panel">Education (Required) 1</h5></div>
+            <div data-fkit-id="education-4--null">
+              <div data-automation-id="formField-schoolName" data-fkit-id="education-4--schoolName">
+                <label for="education-4--schoolName"><span>School or University<abbr aria-hidden="true">*</abbr></span></label>
+                <div><input type="text" id="education-4--schoolName" name="schoolName" aria-required="true"></div>
+              </div>
+            </div>
+          </div>
+          <div class="add"><div><button data-automation-id="add-button">Add Another</button></div></div>
+        </div>
+      </div></main><script>
+        let next = 47;
+        const field = (row, name, label, control) =>
+          '<div data-automation-id="formField-' + name + '" data-fkit-id="' + row + '--' + name + '"><label for="' + row + '--' + name + '">' + label + '</label><div>' + control + '</div></div>';
+        const date = (row, name, label) =>
+          '<div data-automation-id="formField-' + name + '" data-fkit-id="' + row + '--' + name + '"><fieldset><legend><label>' + label + '</label></legend><div id="' + row + '--' + name + '" role="group" data-automation-id="dateInputWrapper">' +
+          '<input role="spinbutton" aria-label="Month" id="' + row + '--' + name + '-dateSectionMonth-input" data-automation-id="dateSectionMonth-input">' +
+          '<input role="spinbutton" aria-label="Year" id="' + row + '--' + name + '-dateSectionYear-input" data-automation-id="dateSectionYear-input"></div></fieldset></div>';
+        const add = (section, title, fields) => {
+          const number = section.querySelectorAll(':scope > [role="group"]').length + 1;
+          const row = (section.id === 'work' ? 'workExperience-' : 'education-') + next++;
+          const panel = document.createElement('div');
+          panel.setAttribute('role', 'group');
+          panel.setAttribute('aria-labelledby', title + '-' + number + '-panel');
+          panel.innerHTML = '<div><h5 id="' + title + '-' + number + '-panel">' + title.replaceAll('-', ' ') + ' ' + number + '</h5><button>Delete</button></div><div data-fkit-id="' + row + '--null">' + fields(row) + '</div>';
+          section.insertBefore(panel, section.querySelector('.add'));
+          section.querySelector('[data-automation-id="add-button"]').textContent = 'Add Another';
+        };
+        document.querySelector('#work [data-automation-id="add-button"]').addEventListener('click', () =>
+          add(document.querySelector('#work'), 'Work-History-(Optional)', (row) =>
+            field(row, 'jobTitle', 'Job Title', '<input type="text" id="' + row + '--jobTitle" name="jobTitle">') +
+            field(row, 'companyName', 'Company', '<input type="text" id="' + row + '--companyName" name="companyName">') +
+            field(row, 'location', 'Location', '<input type="text" id="' + row + '--location" name="location">') +
+            field(row, 'currentlyWorkHere', 'I currently work here', '<input type="checkbox" id="' + row + '--currentlyWorkHere" name="currentlyWorkHere">') +
+            date(row, 'startDate', 'From') + date(row, 'endDate', 'To') +
+            field(row, 'roleDescription', 'Role Description', '<textarea id="' + row + '--roleDescription"></textarea>')));
+        document.querySelector('#education [data-automation-id="add-button"]').addEventListener('click', () =>
+          add(document.querySelector('#education'), 'Education-(Required)', (row) =>
+            field(row, 'schoolName', 'School or University', '<input type="text" id="' + row + '--schoolName" name="schoolName">')));
+      </script>`,
+    }),
+  );
+  const page = await context.newPage();
+  await page.goto(`${workdayOrigin}/en-US/acme/job/work-history-optional`);
+  await panel.bringToFront();
+  await background(page);
+  await enqueue([page]);
+  const jobs = page.locator('#work > [role="group"]');
+  await expect(jobs).toHaveCount(2, { timeout: 30_000 });
+  await expect(jobs.nth(0).locator('input[name="jobTitle"]')).toHaveValue("Software Engineer Intern", { timeout: 30_000 });
+  await expect(jobs.nth(0).locator('input[name="companyName"]')).toHaveValue("Acme");
+  await expect(jobs.nth(1).locator('input[name="jobTitle"]')).toHaveValue("Research Assistant", { timeout: 30_000 });
+  await expect(jobs.nth(1).locator('input[name="companyName"]')).toHaveValue("Contoso");
+  const schools = page.locator('#education > [role="group"] input[name="schoolName"]');
+  await expect(schools).toHaveCount(2, { timeout: 30_000 });
+  await expect(schools.nth(0)).toHaveValue("Penn State", { timeout: 30_000 });
+  await expect(schools.nth(1)).toHaveValue("Contoso University", { timeout: 30_000 });
 });
 
 test("the captured Workday Resume/CV input receives the generated resume", async () => {
@@ -2598,6 +2693,119 @@ test("captured Workday terms acknowledgement is explicit and narrowly scoped", a
   expect(await page.evaluate(() => (window as any).submissions)).toBe(0);
 });
 
+// one employer's Workday: with the applicant clicking on the page,
+// real keys were refused, and the fill assigned "11" to the Month instead. The
+// site kept no Month and set its Year to 2011. A date section is never
+// given a value: it is left for a fill that can type.
+test("a Workday date section is left alone, not assigned, while real keys are refused", async () => {
+  const workdayOrigin = atsOrigins[0];
+  await context.route(`${workdayOrigin}/**`, (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: `<!doctype html><main data-automation-id="applicationPage">
+        <div data-automation-id="formField-firstName"><label for="firstName">First Name</label><input id="firstName" name="firstName"></div>
+        <div data-automation-id="formField-lastName"><label for="lastName">Last Name</label><input id="lastName" name="lastName"></div>
+        <div data-automation-id="formField-dateSignedOn" data-fkit-id="selfIdentifiedDisabilityData--dateSignedOn">
+          <fieldset><legend><label><span>Date<abbr aria-hidden="true">*</abbr></span></label></legend>
+            <div id="selfIdentifiedDisabilityData--dateSignedOn" role="group" data-automation-id="dateInputWrapper">
+              <input role="spinbutton" aria-label="Month" aria-valuemax="12" aria-valuemin="1" id="selfIdentifiedDisabilityData--dateSignedOn-dateSectionMonth-input">
+              <input role="spinbutton" aria-label="Day" aria-valuemax="31" aria-valuemin="1" id="selfIdentifiedDisabilityData--dateSignedOn-dateSectionDay-input">
+              <input role="spinbutton" aria-label="Year" aria-valuemax="9999" aria-valuemin="1" id="selfIdentifiedDisabilityData--dateSignedOn-dateSectionYear-input">
+            </div>
+          </fieldset>
+        </div>
+      </main><script>
+        // As on Intel's self-identify page: only real keys commit, a later
+        // section focused while Month is empty hands focus back to Month a
+        // moment later, and two digits move focus on by themselves.
+        const [month, day, year] = document.querySelectorAll('[role="spinbutton"]');
+        for (const section of [month, day, year]) {
+          section.setAttribute('data-committed', '');
+          section.addEventListener('keydown', (event) => {
+            if (!event.isTrusted) return;
+            const committed = section.getAttribute('data-committed');
+            section.setAttribute('data-committed', event.key === 'Backspace' ? committed.slice(0, -1) : committed + event.key);
+          });
+        }
+        for (const later of [day, year])
+          later.addEventListener('focus', () => {
+            if (!month.getAttribute('data-committed')) setTimeout(() => month.focus(), 50);
+          });
+        month.addEventListener('keyup', (e) => { if (e.isTrusted && month.getAttribute('data-committed').length === 2) day.focus(); });
+        day.addEventListener('keyup', (e) => { if (e.isTrusted && day.getAttribute('data-committed').length === 2) year.focus(); });
+      </script>`,
+    }),
+  );
+  const page = await context.newPage();
+  await page.goto(`${workdayOrigin}/en-US/acme/job/attended-disability-date`);
+  await enqueue([page]);
+  // The applicant at work on this page throughout: real keys are refused.
+  await page.bringToFront();
+  const settled = async () => /ready|awaiting-user|paused/.test((await state()).applications[0]?.status || "");
+  for (let i = 0; i < 120 && !(await settled()); i++) {
+    await page.mouse.click(5, 300);
+    await page.waitForTimeout(250);
+  }
+  expect(await settled()).toBe(true);
+  for (const name of ["Month", "Day", "Year"]) {
+    await expect(page.getByRole("spinbutton", { name })).toHaveValue("");
+  }
+});
+
+// one employer's Workday: the fill of a step loaded by the
+// applicant's own Save and Continue began within that click's moment, and
+// the signing date was left empty.
+test("a Workday date is typed once the applicant's last click has passed", async () => {
+  const workdayOrigin = atsOrigins[0];
+  await context.route(`${workdayOrigin}/**`, (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: `<!doctype html><main data-automation-id="applicationPage">
+        <div data-automation-id="formField-firstName"><label for="firstName">First Name</label><input id="firstName" name="firstName"></div>
+        <div data-automation-id="formField-lastName"><label for="lastName">Last Name</label><input id="lastName" name="lastName"></div>
+        <div data-automation-id="formField-dateSignedOn" data-fkit-id="selfIdentifiedDisabilityData--dateSignedOn">
+          <fieldset><legend><label><span>Date<abbr aria-hidden="true">*</abbr></span></label></legend>
+            <div id="selfIdentifiedDisabilityData--dateSignedOn" role="group" data-automation-id="dateInputWrapper">
+              <input role="spinbutton" aria-label="Month" aria-valuemax="12" aria-valuemin="1" id="selfIdentifiedDisabilityData--dateSignedOn-dateSectionMonth-input">
+              <input role="spinbutton" aria-label="Day" aria-valuemax="31" aria-valuemin="1" id="selfIdentifiedDisabilityData--dateSignedOn-dateSectionDay-input">
+              <input role="spinbutton" aria-label="Year" aria-valuemax="9999" aria-valuemin="1" id="selfIdentifiedDisabilityData--dateSignedOn-dateSectionYear-input">
+            </div>
+          </fieldset>
+        </div>
+      </main><script>
+        // As on Intel's self-identify page: only real keys commit, a later
+        // section focused while Month is empty hands focus back to Month a
+        // moment later, and two digits move focus on by themselves.
+        const [month, day, year] = document.querySelectorAll('[role="spinbutton"]');
+        for (const section of [month, day, year]) {
+          section.setAttribute('data-committed', '');
+          section.addEventListener('keydown', (event) => {
+            if (!event.isTrusted) return;
+            const committed = section.getAttribute('data-committed');
+            section.setAttribute('data-committed', event.key === 'Backspace' ? committed.slice(0, -1) : committed + event.key);
+          });
+        }
+        for (const later of [day, year])
+          later.addEventListener('focus', () => {
+            if (!month.getAttribute('data-committed')) setTimeout(() => month.focus(), 50);
+          });
+        month.addEventListener('keyup', (e) => { if (e.isTrusted && month.getAttribute('data-committed').length === 2) day.focus(); });
+        day.addEventListener('keyup', (e) => { if (e.isTrusted && day.getAttribute('data-committed').length === 2) year.focus(); });
+      </script>`,
+    }),
+  );
+  const page = await context.newPage();
+  await page.goto(`${workdayOrigin}/en-US/acme/job/clicked-disability-date`);
+  await enqueue([page]);
+  // One click of the applicant's (Save and Continue) just as the fill
+  // starts: its moment passes, and the date is typed.
+  await page.bringToFront();
+  await page.mouse.click(5, 300);
+  const today = new Date();
+  await expect(page.getByRole("spinbutton", { name: "Month" })).toHaveValue(String(today.getMonth() + 1).padStart(2, "0"), { timeout: 30_000 });
+  await expect(page.getByRole("spinbutton", { name: "Year" })).toHaveValue(String(today.getFullYear()));
+});
+
 test("captured Workday disability date spinbuttons receive today's date", async () => {
   const workdayOrigin = atsOrigins[0];
   await context.route(`${workdayOrigin}/**`, (route) =>
@@ -3290,6 +3498,95 @@ inEitherTab("a Workday Month that hands focus to Year once complete keeps the mo
   expect((await state()).applications[0].status).not.toBe("paused");
   await expect(page.locator("#workExperience-1--startDate-dateSectionMonth-input")).toHaveAttribute("data-committed", "05");
   await expect(page.locator("#workExperience-1--startDate-dateSectionYear-input")).toHaveAttribute("data-committed", "2025");
+});
+
+// The applicant clicked the page, then switched away; seconds later the
+// debugger's first key into a new job's From Month handed the page focus back,
+// their click before leaving counted as recent again, and the fill paused for
+// "a key press on From: Month" with the Year never typed (Salesforce's
+// Workday). Built from that capture's row.
+test("a click before the applicant leaves the page does not make the fill's own Workday date keys theirs", async () => {
+  await ui({ type: "SETTINGS", settings: { concurrency: 4, generationConcurrency: 2, networkCapture: "off" } });
+  const workdayOrigin = atsOrigins[0];
+  await ui({
+    type: "API",
+    path: "/v1/profile",
+    method: "PUT",
+    body: {
+      ...profile,
+      work: [{ organization: "Example Labs", title: "Software Engineer", location: "Tucson, AZ", details: "Built TypeScript services.", startDate: "2025-03", endDate: "" }],
+    },
+  });
+  await context.route(`${workdayOrigin}/**`, (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: `<!doctype html><main data-automation-id="applicationPage">
+        <div id="watched" style="height: 120px">Applicant watching</div>
+        <div data-automation-id="workExperience-16" id="workExperience-16">
+          <div data-automation-id="formField-jobTitle" data-fkit-id="workExperience-16--jobTitle"><label for="workExperience-16--jobTitle"><span>Job Title<abbr aria-hidden="true">*</abbr></span></label><div><input type="text" id="workExperience-16--jobTitle" name="jobTitle" aria-required="true"></div></div>
+          <div data-automation-id="formField-companyName" data-fkit-id="workExperience-16--companyName"><label for="workExperience-16--companyName"><span>Company<abbr aria-hidden="true">*</abbr></span></label><div><input type="text" id="workExperience-16--companyName" name="companyName" aria-required="true"></div></div>
+          <div data-automation-id="formField-startDate" data-fkit-id="workExperience-16--startDate">
+            <fieldset><legend><label id="label41"><span>From<abbr aria-hidden="true">*</abbr></span></label></legend>
+              <div id="workExperience-16--startDate" role="group" data-automation-id="dateInputWrapper">
+                <div id="workExperience-16--startDate-dateSectionMonth" tabindex="0"><div aria-hidden="true" data-automation-id="dateSectionMonth-display">MM</div><input role="spinbutton" aria-label="Month" aria-valuemax="12" aria-valuemin="1" aria-required="true" id="workExperience-16--startDate-dateSectionMonth-input" data-automation-id="dateSectionMonth-input" tabindex="-1"></div>
+                <div>/</div>
+                <div id="workExperience-16--startDate-dateSectionYear" tabindex="-1"><div aria-hidden="true" data-automation-id="dateSectionYear-display">YYYY</div><input role="spinbutton" aria-label="Year" aria-valuemax="9999" aria-valuemin="1" aria-required="true" id="workExperience-16--startDate-dateSectionYear-input" data-automation-id="dateSectionYear-input"></div>
+              </div>
+            </fieldset>
+          </div>
+        </div>
+      </main><script>
+        // A click on the page that moves no focus, as on its empty space.
+        document.getElementById('watched').addEventListener('mousedown', (event) => event.preventDefault());
+        // Only what real keys put into a section is committed, and Month
+        // hands focus to Year once it holds two digits.
+        const month = document.querySelector('[data-automation-id="dateSectionMonth-input"]');
+        const year = document.querySelector('[data-automation-id="dateSectionYear-input"]');
+        month.addEventListener('focus', () => month.setAttribute('data-focused', ''));
+        for (const section of [month, year]) {
+          section.setAttribute('data-committed', '');
+          section.addEventListener('input', event => {
+            section.setAttribute('data-committed', event.isTrusted ? section.value : '');
+            if (event.isTrusted && section === month && month.value.length === 2) year.focus();
+          });
+        }
+      </script>`,
+    }),
+  );
+  const page = await context.newPage();
+  await page.goto(`${workdayOrigin}/en-US/acme/job/left-page-date`);
+  await panel.bringToFront();
+  await background(page);
+  // The tab is behind until the debugger's first key gives it focus.
+  const tabId = await panel.evaluate(async (url) => (await chrome.tabs.query({})).find((t) => t.url === url)!.id!, page.url());
+  await worker.evaluate(
+    async (tabId) =>
+      chrome.scripting.executeScript({
+        target: { tabId, frameIds: [0] },
+        world: "ISOLATED",
+        func: () => {
+          let gained = false;
+          window.Document.prototype.hasFocus = () => gained;
+          window.addEventListener("keydown", (event) => {
+            if (event.isTrusted && (event.target as Element).matches?.('[data-automation-id^="dateSection"]')) gained = true;
+          }, true);
+        },
+      }),
+    tabId,
+  );
+  await enqueue([page]);
+  // The applicant clicks the page and leaves it, again and again, until
+  // just before the fill types the date.
+  const month = page.locator("#workExperience-16--startDate-dateSectionMonth-input");
+  for (let tries = 0; tries < 200 && !(await month.evaluate((input) => input.hasAttribute("data-focused"))); tries++) {
+    await page.click("#watched", { force: true });
+    await page.evaluate(() => window.dispatchEvent(new Event("blur")));
+    await page.waitForTimeout(200);
+  }
+  await expect.poll(async () => (await state()).applications[0]?.status, { timeout: 40_000 }).toMatch(/ready|awaiting-user|paused/);
+  expect((await state()).applications[0].status).not.toBe("paused");
+  await expect(month).toHaveAttribute("data-committed", "03");
+  await expect(page.locator("#workExperience-16--startDate-dateSectionYear-input")).toHaveAttribute("data-committed", "2025");
 });
 
 // A tab in front is typed into like one behind, but never while the applicant
@@ -4405,7 +4702,7 @@ test("a SuccessFactors list's options are read for the AI pass, every page of th
 });
 
 // The applicant answers the same question by hand on application after
-// application ("Military Status", "How did you hear about us?") and would
+// application ("Military Status", "Preferred team"; how one heard of a job is filled from the profile since) and would
 // not add it to the profile themselves. Given the same way on
 // two applications, it is offered to save; saved, it is offered no more.
 test("an answer given by hand on two applications is offered to save", async () => {
@@ -4415,7 +4712,7 @@ test("an answer given by hand on two applications is offered to save", async () 
       contentType: "text/html",
       body: `<!doctype html><title>Engineer</title><main><h1>Engineer</h1><p>Build accessible TypeScript applications.</p><form>
         <label>First name<input name="firstName" required></label>
-        <label>How did you hear about us?<input id="hear" name="hear"></label>
+        <label>Preferred team<input id="hear" name="hear"></label>
         <label>Preferred work shift<input id="shift" name="shift"></label>
         <label>Internship length<select id="months" name="months"><option value="">Select</option><option value="3_to_6_months">3 to 6 months</option><option value="7_months_or_more">7 months or more</option></select></label>
         <fieldset><legend>Office</legend>
@@ -4434,11 +4731,11 @@ test("an answer given by hand on two applications is offered to save", async () 
   await enqueue(pages);
   await expect.poll(async () => (await state()).applications.map((app) => app.status).join(","), { timeout: 40_000 }).toMatch(/^(ready|awaiting-user|paused),(ready|awaiting-user|paused)$/);
   // One application is not yet a habit.
-  await pages[0].fill("#hear", "LinkedIn");
-  await expect.poll(async () => (await state()).applications.some((app) => app.handAnswers?.some((entry) => entry.answer === "LinkedIn")), { timeout: 15_000 }).toBe(true);
+  await pages[0].fill("#hear", "Platform");
+  await expect.poll(async () => (await state()).applications.some((app) => app.handAnswers?.some((entry) => entry.answer === "Platform")), { timeout: 15_000 }).toBe(true);
   expect(await ui({ type: "RECURRING_ANSWERS" })).toEqual([]);
   await pages[0].fill("#shift", "Day");
-  await pages[1].fill("#hear", "LinkedIn");
+  await pages[1].fill("#hear", "Platform");
   await pages[1].fill("#shift", "Day");
   // A list and a radio group are kept by the text picked, not their hidden
   // values ("7_months_or_more", an office's id).
@@ -4451,9 +4748,9 @@ test("an answer given by hand on two applications is offered to save", async () 
     await page.getByLabel("Foster City").check();
   }
   await expect.poll(async () => (await ui({ type: "RECURRING_ANSWERS" })).map((item: { question: string; answer: string }) => `${item.question} = ${item.answer}`).sort(), { timeout: 15_000 }).toEqual([
-    "How did you hear about us? = LinkedIn",
     "Internship length = 7 months or more",
     "Office = Foster City",
+    "Preferred team = Platform",
     "Preferred work shift = Day",
   ]);
   for (const question of ["Internship length", "Office"])
@@ -4462,15 +4759,15 @@ test("an answer given by hand on two applications is offered to save", async () 
   // is saved and the other dismissed.
   await showDashboard("profile");
   const card = panel.getByRole("region", { name: "Answers you keep giving" });
-  await expect(card.getByText("How did you hear about us?")).toBeVisible();
+  await expect(card.getByText("Preferred team")).toBeVisible();
   await expect(card.getByText("On 2 applications").first()).toBeVisible();
   const row = (question: string) => card.locator(".history-row").filter({ hasText: question });
-  await row("How did you hear about us?").getByRole("button", { name: "Save" }).click();
-  await expect(row("How did you hear about us?")).toHaveCount(0);
+  await row("Preferred team").getByRole("button", { name: "Save" }).click();
+  await expect(row("Preferred team")).toHaveCount(0);
   await row("Preferred work shift").getByRole("button", { name: "Dismiss" }).click();
   await expect(card).toHaveCount(0);
   const profileNow = await ui({ type: "API", path: "/v1/profile" });
-  expect(profileNow.answers).toEqual(expect.arrayContaining([{ question: "How did you hear about us?", answer: "LinkedIn" }]));
+  expect(profileNow.answers).toEqual(expect.arrayContaining([{ question: "Preferred team", answer: "Platform" }]));
   expect(profileNow.answers.some((answer: { question: string }) => answer.question === "Preferred work shift")).toBe(false);
   expect(await ui({ type: "RECURRING_ANSWERS" })).toEqual([]);
 });
@@ -4555,6 +4852,10 @@ test("the command line fills a step and switches to its tab over the live line",
     expect(await send("refresh")).toMatchObject({ ok: true, detail: "Its page now runs the current build." });
     expect(await page.evaluate(() => (window as unknown as { before?: boolean }).before)).toBe(true);
     await expect(page.locator('input[name="lastName"]')).toHaveValue("Typed by hand");
+    // Marked submitted from the TUI (its m), as the panel's
+    // Mark submitted.
+    expect(await send("submitted")).toMatchObject({ ok: true, detail: "Marked submitted. Change its stage in the panel to undo." });
+    await expect.poll(async () => (await state()).applications.find((item) => item.id === app.id)?.workflowStage).toBe("submitted");
     // An application that is not there is said so.
     socket.send(JSON.stringify({ type: "command", id: "missing", action: "fill", applicationId: "nope" }));
     await expect.poll(() => messages.find((message) => message.id === "missing")?.error).toMatch(/No such application/);
@@ -6024,6 +6325,52 @@ test("Ashby and Rippling dropdowns are read by their own question, opened the wa
   for (const page of pages) expect(await page.evaluate(() => (window as any).submissions)).toBe(0);
 });
 
+// A step's fill waits for its answers on a poll that read the form again every
+// second or so and set "filling" before it did, "preparing" after: the status
+// alternated for the whole wait while nothing was written (Verdantas).
+test("a fill waiting for its documents stays preparing instead of alternating with filling", async () => {
+  generatorDelay = 4000;
+  const page = await context.newPage();
+  await page.goto(`${origin}/edit-a`);
+  const seen: string[] = [];
+  let sampling = true;
+  const sampler = (async () => {
+    while (sampling) {
+      const status = (await state()).applications[0]?.status;
+      if (status && seen.at(-1) !== status) seen.push(status);
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+  })();
+  await enqueue([page]);
+  await expect.poll(async () => (await state()).applications[0].status, { timeout: 30_000 }).toMatch(/^(awaiting-user|ready)$/);
+  sampling = false;
+  await sampler;
+  expect(seen).toContain("preparing");
+  // Preparing, then the step's own fill once its documents are ready; never
+  // back to filling and preparing again between.
+  expect(seen.join(",")).not.toMatch(/preparing,filling,preparing/);
+});
+
+// A box that kept the focus of an earlier click, with no input of the
+// applicant's since, is not in use: Meta's Current location was refused "The
+// field currently has focus" for a click made minutes before.
+test("a field that only kept an old focus is still filled", async () => {
+  await context.route(`${origin}/stale-focus`, (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: `<!doctype html><title>Software Engineer</title><main><form onsubmit="return false">
+        <label>First name<input name="first_name" id="first"></label>
+        <label>Email<input type="email" name="email"></label>
+      </form></main><script>document.getElementById("first").focus();</script>`,
+    }),
+  );
+  const page = await context.newPage();
+  await page.goto(`${origin}/stale-focus`);
+  await enqueue([page]);
+  await expect(page.locator('[name="first_name"]')).toHaveValue(profile.firstName, { timeout: 30000 });
+  await expect(page.locator('[name="email"]')).toHaveValue(profile.email);
+});
+
 test("trusted edits pause one tab while another finishes; cleared edits survive resume and rerender", async () => {
   generatorDelay = 1600;
   const a = await context.newPage();
@@ -6427,6 +6774,10 @@ test("an Ashby checkbox question keeps its boxes together: each carries the ques
   // The problems are folded until opened.
   await card.getByLabel("Problems to resolve").locator("summary").click();
   await expect(card.getByLabel("Problems to resolve").getByRole("listitem").filter({ hasText: "How did you hear" }).locator(".question-mark")).toHaveText("Required");
+  // Grouped as a question to answer, with why it was left (: the
+  // list gave no reason and mixed questions with notes on the documents).
+  await expect(card.getByLabel("Problems to resolve")).toContainText("Questions to answer before submitting");
+  await expect(card.getByLabel("Problems to resolve").getByRole("listitem").filter({ hasText: "How did you hear" }).locator(".app-note")).not.toBeEmpty();
   await expect(card.locator(".app-notes li").filter({ hasText: "communities do you belong to" }).locator(".question-mark")).toHaveText("Optional");
   const tabId = await panel.evaluate(async (url) => (await chrome.tabs.query({})).find((tab) => tab.url === url)!.id!, page.url());
   const fields = (await ui({ type: "SCAN_TAB", tabId })).observation.fields as { label: string; question?: string }[];
@@ -6491,6 +6842,146 @@ test("Rippling's EEO dropdowns that read Select... are opened and answered", asy
   await expect(page.locator("#field-75")).toHaveText("I am not a protected veteran");
   expect((await state()).applications[0].missing.filter((item) => /Hispanic|Veteran|Gender/.test(item))).toEqual([]);
   expect(await page.evaluate(() => (window as any).submissions)).toBe(0);
+});
+
+// TikTok's careers form: the account's resume
+// from an earlier application stayed in the Resume slot ("Last updated:"), and the Work Authorization and Others questions, UD selects
+// whose search box is read-only and whose options carry no role, were never
+// answered. The slot takes the tailored resume once; the lists are picked.
+test("TikTok's resume slot takes the tailored resume once, and its Work Authorization and Others lists are picked", async () => {
+  test.setTimeout(180000);
+  const section = (title: string, body: string) =>
+    `<div class="applyFormModuleWrapper applyFormModuleWrapper__2JZaE"><div class="applyFormModuleWrapper-left"><div class="applyFormModuleWrapper-title"><p class="applyFormModuleWrapper-text sofiaBold">${title}</p></div></div><div class="applyFormModuleWrapper-right">${body}</div></div>`;
+  const item = (name: string, label: string, control: string) =>
+    `<div id="formily-item-${name}" class="ud-formily-item ud-formily-item-layout-vertical ud-formily-item-size-large ud-formily-item-label-align-left ud-formily-item-control-align-left"><div class="ud-formily-item-label"><div class="ud-formily-item-label-content"><span><label>${label}</label><span class="ud-formily-item-asterisk">*</span></span></div><span class="ud-formily-item-colon"></span></div><div class="ud-formily-item-control"><div class="ud-formily-item-control-content"><div class="ud-formily-item-control-content-component">${control}</div></div></div></div>`;
+  const select = (id: string, options: string[], multiple = false) =>
+    `<div class="ud__select" data-options="${options.join("|")}"${multiple ? ' data-multiple="true"' : ""}><div class="ud__select__selector ud__select__selector-lg${multiple ? " ud__select__selector-multiple" : " ud__select__selector-readOnly"} ud__select__selector-border-normal"><div class="ud__select__selector__content"><span class="ud__select__selector__placeholder">Please select</span>${multiple
+      ? `<div class="ud__overflow ud__select__selector__search"><span class="ud__select__selector__search__input_container"><input id="${id}" tabindex="0" role="combobox" autocomplete="off" type="search" class="ud__select__selector__search__input ud__native-input" value=""></span></div>`
+      : `<div class="ud__select__selector__search"><input id="${id}" tabindex="0" role="combobox" autocomplete="off" type="search" readonly class="ud__select__selector__search__input ud__native-input" value=""></div>`}</div><div class="ud__select__selector__arrow"><span class="universe-icon"></span></div></div></div>`;
+  const sources = ["Campus Event (e.g. Career Fair, Recruitment Talk, etc.)", "School career development office", "Word-of-mouth through friends/campus ambassadors", "Recruitment Website", "Recommendation by company employee", "Social Networking Platforms", "Internet Search", "Others"];
+  await context.route(`${tiktokOrigin}/**`, (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: `<!doctype html><html><head><title>Apply</title></head><body><div class="resumeEditForm saasResumeEditForm"><div class="resumeEditForm-wrapper"><form autocomplete="off">
+        <div class="uploadResume-section createFormSection-require createFormSection createFormSection__2xY1"><div class="createFormSection-left"><div class="createFormSection-title"><p class="createFormSection-text sofiaBold">Resume</p></div><p class="createFormSection-desc"></p></div><div class="createFormSection-right"><div class="createFormSection-formList"><span class="atsx-upload"><div class="atsx-upload atsx-upload-drag" role="button" tabindex="0"><input type="file" style="display:none" accept=".pdf,.doc,.docx"><div class="uploadFile"><div class="uploadFile-preview"><div class="uploadFile-loadedWrapper"><span class="uploadFile-loadedIcon"></span><p class="uploadFile-loadedFilename sofiaBold" title="Contoso_Resume.pdf">Contoso_Resume.pdf</p><div class="uploadFile-loadedUpdate">Last updated: 2025-09-06 23:06</div><div class="uploadFile-loadedOperates"><span class="uploadFile-loadedOperate">Update</span><span class="atsx-divider"></span><span class="uploadFile-loadedOperate" id="delete">Delete</span></div></div></div></div></div></span></div></div></div>
+        ${section("Basic Information", item("name", "Name", '<span class="ud__input-wrapper"><input class="ud__input ud__native-input" name="name" placeholder="Please enter"></span>'))}
+        ${section("Work Authorization", `<p class="ud-formily-item-label-desc">To comply with our legal obligations, we are required to ask each applicant for employment if they are or will be legally authorized to work within the country where the job is located.</p>
+          ${item("work_authorization", "Are you legally authorized to work in the US without restriction?", select("authorized", ["Yes", "No"]))}
+          ${item("visa_sponsorship", "Will you now or in the future require visa sponsorship or a visa transfer?", select("sponsorship", ["Yes", "No"]))}`)}
+        ${section("Others", item("source", "Where did you hear about this opportunity? Choose the option(s) that influenced your decision to apply.", select("source", sources, true)))}
+      </form></div></div>
+      <script>
+        window.uploaded = [];
+        window.deleted = 0;
+        window.picks = [];
+        document.getElementById("delete").addEventListener("click", (event) => { event.stopPropagation(); window.deleted++; });
+        const file = document.querySelector('input[type="file"]');
+        document.querySelector(".atsx-upload-drag").addEventListener("click", (event) => { if (event.target !== file) file.click(); });
+        file.addEventListener("click", (event) => event.stopPropagation());
+        file.addEventListener("change", () => {
+          const name = file.files[0]?.name || "";
+          window.uploaded.push(name);
+          const now = new Date();
+          const two = (n) => String(n).padStart(2, "0");
+          setTimeout(() => {
+            document.querySelector(".uploadFile-loadedFilename").textContent = name;
+            document.querySelector(".uploadFile-loadedUpdate").textContent = "Last updated: " + now.getFullYear() + "-" + two(now.getMonth() + 1) + "-" + two(now.getDate()) + " " + two(now.getHours()) + ":" + two(now.getMinutes());
+          }, 300);
+        });
+        // As the live list closes: it slides out for a moment, still shown
+        // with its items, before it is hidden (TikTok).
+        const close = () => document.querySelectorAll(".ud__select__dropdown:not(.ud__select__dropdown-hidden)").forEach((menu) => {
+          menu.classList.add("ud-slide-up-leave", "ud-slide-up-leave-active");
+          setTimeout(() => { menu.classList.remove("ud-slide-up-leave", "ud-slide-up-leave-active"); menu.classList.add("ud__select__dropdown-hidden"); menu.style.display = "none"; }, 400);
+        });
+        for (const root of document.querySelectorAll(".ud__select")) {
+          const selector = root.querySelector(".ud__select__selector");
+          const input = root.querySelector("input");
+          const multiple = root.dataset.multiple === "true";
+          const chosen = new Set();
+          const draw = () => {
+            selector.classList.toggle("ud__select__selector-not-empty", chosen.size > 0);
+            root.querySelector(".ud__select__selector__placeholder")?.remove();
+            selector.querySelectorAll(".ud__select__selector__selectItem, .ud__select__selector__tag").forEach((node) => node.remove());
+            if (!chosen.size) {
+              const placeholder = document.createElement("span");
+              placeholder.className = "ud__select__selector__placeholder";
+              placeholder.textContent = "Please select";
+              selector.querySelector(".ud__select__selector__content").prepend(placeholder);
+            } else if (multiple) {
+              for (const text of chosen) {
+                const tag = document.createElement("span");
+                tag.className = "ud__select__selector__tag";
+                tag.textContent = text;
+                selector.querySelector(".ud__select__selector__search").prepend(tag);
+              }
+            } else {
+              const shown = document.createElement("span");
+              shown.className = "ud__select__selector__selectItem";
+              shown.textContent = [...chosen][0];
+              selector.querySelector(".ud__select__selector__content").prepend(shown);
+            }
+          };
+          let menu;
+          selector.addEventListener("click", (event) => {
+            if (event.target !== input) input.focus();
+            const open = menu && menu.style.display !== "none" && !menu.classList.contains("ud-slide-up-leave");
+            close();
+            if (open) return;
+            if (!menu) {
+              menu = document.createElement("div");
+              menu.className = "ud__select__dropdown ud-slide-up-appear ud__select__dropdown-placement-bottomLeft";
+              menu.style.position = "absolute";
+              const list = document.createElement("div");
+              list.className = "ud__select__list";
+              const inner = document.createElement("div");
+              inner.className = "ud__select__list__menu";
+              for (const text of root.dataset.options.split("|")) {
+                const option = document.createElement("div");
+                option.className = "ud__select__list__item";
+                option.innerHTML = '<div class="ud__select__list__item__content"></div>';
+                option.firstChild.textContent = text;
+                option.addEventListener("click", () => {
+                  window.picks.push(input.id + ":" + text);
+                  if (multiple) chosen.has(text) ? chosen.delete(text) : chosen.add(text);
+                  else { chosen.clear(); chosen.add(text); close(); }
+                  option.classList.toggle("ud__select__list__item-selected", chosen.has(text));
+                  draw();
+                });
+                inner.append(option);
+              }
+              list.append(inner);
+              menu.append(list);
+              document.body.append(menu);
+            }
+            menu.classList.remove("ud__select__dropdown-hidden", "ud-slide-up-leave", "ud-slide-up-leave-active");
+            menu.style.display = "";
+          });
+        }
+        document.addEventListener("mousedown", (event) => { if (!event.target.closest(".ud__select, .ud__select__dropdown")) close(); });
+      </script></body></html>`,
+    }),
+  );
+  await ui({ type: "API", path: "/v1/profile", method: "PUT", body: { ...profile, workAuthorization: "Yes", sponsorship: "No", referralSource: ["LinkedIn"] } });
+  const page = await context.newPage();
+  await page.goto(`${tiktokOrigin}/resume/7705012688944810245/apply?redirect_path=%2Fresume%2F7705012688944810245%2Fapply`);
+  await panel.bringToFront();
+  await enqueue([page]);
+  await expect.poll(() => page.evaluate(() => (window as any).uploaded), { timeout: 60000 }).toEqual([expect.stringMatching(/resume.*\.pdf$/i)]);
+  await expect(page.locator("#authorized").locator("xpath=ancestor::div[contains(concat(' ',@class,' '),' ud__select__selector ')][1]//span[contains(@class,'selectItem')]")).toHaveText("Yes", { timeout: 60000 });
+  await expect(page.locator("#sponsorship").locator("xpath=ancestor::div[contains(concat(' ',@class,' '),' ud__select__selector ')][1]//span[contains(@class,'selectItem')]")).toHaveText("No", { timeout: 60000 });
+  await expect(page.locator(".ud__select__selector__tag")).toHaveText(["Social Networking Platforms"], { timeout: 60000 });
+  await expect.poll(async () => (await state()).applications.at(-1)?.status, { timeout: 60000 }).toMatch(/^(awaiting-user|ready)$/);
+  await page.waitForTimeout(3000);
+  // Once: the slot now holds today's resume, and the multiple list's choice
+  // was not clicked again (that takes it off).
+  expect(await page.evaluate(() => (window as any).uploaded)).toHaveLength(1);
+  expect(await page.evaluate(() => (window as any).deleted)).toBe(0);
+  expect((await page.evaluate(() => (window as any).picks as string[])).filter((pick) => pick.startsWith("source:"))).toEqual(["source:Social Networking Platforms"]);
+  await expect(page.locator(".ud__select__selector__tag")).toHaveText(["Social Networking Platforms"]);
+  // The list that takes several choices is closed once its choice is made,
+  // not left open over the form.
+  await expect(page.locator(".ud__select__dropdown:not(.ud__select__dropdown-hidden)")).toHaveCount(0);
 });
 
 // Rippling's confirmation: "You have successfully applied to
@@ -7016,6 +7507,51 @@ test("a site's own submitted message, where its form was, marks the application 
   await expect.poll(async () => (await state()).applications[0].workflowStage, { timeout: 20000 }).toBe("submitted");
 });
 
+// TikTok's: submitting leads to /resume/applied,
+// "Thanks for your interest in TikTok. We have received your resume." It was
+// left as an application in progress.
+test("a page saying the resume was received, after the form, marks the application submitted", async () => {
+  await context.route(`${origin}/careers/apply`, (route) =>
+    route.fulfill({ contentType: "text/html; charset=utf-8", body: `<!doctype html><title>Apply</title><form onsubmit="return false"><label>Email<input name="email" type="email"></label><label>Phone<input name="phone"></label><button type="submit">Submit</button></form>` }));
+  await context.route(`${origin}/careers/applied`, (route) =>
+    route.fulfill({ contentType: "text/html; charset=utf-8", body: `<!doctype html><title>Apply</title><main><div><p>Thanks for your interest in Acme.</p><h2>We have received your resume.</h2><a href="/jobs">View more jobs</a> <a href="/history">View application history</a></div></main>` }));
+  const page = await context.newPage();
+  await page.goto(`${origin}/careers/apply`);
+  await panel.bringToFront();
+  await enqueue([page]);
+  await expect.poll(async () => (await state()).applications[0].status, { timeout: 45000 }).toMatch(/^(awaiting-user|ready)$/);
+  expect((await state()).applications[0].workflowStage).not.toBe("submitted");
+  await page.goto(`${origin}/careers/applied`);
+  await expect.poll(async () => (await state()).applications[0].workflowStage, { timeout: 20000 }).toBe("submitted");
+});
+
+// General Dynamics' iCIMS: after submitting, the job page shows
+// its confirmation in message boxes drawn as divs, not headings or
+// paragraphs, beside the posting's own text. (Its markup was not captured;
+// this follows how iCIMS draws its other message boxes.)
+test("a confirmation drawn in a message box div marks the application submitted", async () => {
+  await context.route(`${origin}/div-confirmation`, (route) =>
+    route.fulfill({
+      contentType: "text/html; charset=utf-8",
+      body: `<!doctype html><title>Engineering Intern | Acme</title><h1>Engineering Intern</h1>
+        <div id="apply"><form onsubmit="return false"><label>Email<input name="email" type="email"></label><label>Phone<input name="phone"></label><button type="submit">Submit</button></form></div>
+        <h2 class="iCIMS_InfoMsg iCIMS_InfoField_Job">Basic Qualifications</h2>
+        <div class="iCIMS_InfoMsg iCIMS_InfoMsg_Job"><div class="iCIMS_Expandable_Container"><div class="iCIMS_Expandable_Text">Candidates should demonstrate a thorough understanding of engineering technology.</div></div></div>`,
+    }),
+  );
+  const page = await context.newPage();
+  await page.goto(`${origin}/div-confirmation`);
+  await panel.bringToFront();
+  await enqueue([page]);
+  await expect.poll(async () => (await state()).applications[0].status, { timeout: 45000 }).toMatch(/^(awaiting-user|ready)$/);
+  await page.evaluate(() => {
+    document.getElementById("apply")!.innerHTML =
+      '<div class="iCIMS_Message iCIMS_Message_Success"><span class="iCIMS_Icon" aria-hidden="true"></span>Your application was submitted successfully. Thank you for applying.</div>' +
+      '<div class="iCIMS_Message iCIMS_Message_Info"><span class="iCIMS_Icon" aria-hidden="true"></span>We have received the submission for this opportunity. Thank you.</div>';
+  });
+  await expect.poll(async () => (await state()).applications[0].workflowStage, { timeout: 20000 }).toBe("submitted");
+});
+
 // Found in review: an employer's page around a framed form has
 // no boxes of its own, and its job text may thank applicants. Only a frame
 // the fill wrote to may say the application went in by its words alone.
@@ -7199,6 +7735,33 @@ inEitherTab("react-select dropdowns get real selections, including async lists, 
   expect((await state()).applications[0].missing.join("\n")).toContain(
     'No dropdown option matches "Martian"',
   );
+});
+
+// Riot Games' Greenhouse form: How did you hear
+// was left for its Other being "None of the above / Other", the
+// business-fluent languages multi-select for its wording and its options
+// unread until it opens, and the month asked "If yes" after a No for having
+// no rule; all three were required.
+test("Riot Games' Greenhouse lists take None of the above / Other, the fluent language, and n/a after a No", async () => {
+  const compiled = await build({ entryPoints: ["tests/browser/react-select-fixture.tsx"],
+    bundle: true, write: false, format: "iife", define: { "process.env.NODE_ENV": '"production"' } });
+  await context.route(`${origin}/riot-greenhouse*`, route => route.fulfill({ contentType: "text/html",
+    body: `<html><body><div id="root"></div><script>${compiled.outputFiles[0].text}</script></body></html>` }));
+  const current = await ui({ type: "API", path: "/v1/profile" });
+  await ui({ type: "API", path: "/v1/profile", method: "PUT", body: { ...current, confirmed: true, referralSource: [], languages: ["English: Native", "French: Basic"] } });
+  const page = await context.newPage();
+  await page.goto(`${origin}/riot-greenhouse?riot=1`);
+  await enqueue([page]);
+  await expect.poll(async () => (await state()).applications.find(app => app.url === page.url())?.status,
+    { timeout: 25000 }).toMatch(/awaiting-user|ready/);
+  expect(await page.evaluate(() => (window as any).selected)).toMatchObject({
+    question_1001: "h7",
+    "question_1003[]": ["l2"],
+    question_1006: "t2",
+    question_1007: "m0",
+  });
+  expect(await page.evaluate(() => (window as any).submissions)).toBe(0);
+  await page.close();
 });
 
 test("react-select verifies a canonical country by its unique option ID and refuses colliding or wrong IDs", async () => {
@@ -8589,6 +9152,819 @@ test("Oracle entries already saved to the candidate profile are kept, not added 
   expect(saved.filter((entry) => entry.includes("Sample Corp"))).toHaveLength(1);
 });
 
+// (hdde.fa.us2.oraclecloud.com): only one entry
+// form, work or education, can be open at a time, and the Add buttons of both
+// are gone while one is. The site had opened a work form; Add Education was
+// refused, and nothing was filled.
+test("Oracle's Add buttons are waited for across work and education while one entry form is open", async () => {
+  await ui({
+    type: "API",
+    path: "/v1/profile",
+    method: "PUT",
+    body: {
+      ...profile,
+      education: [{ organization: "Example Polytechnic", title: "Bachelor of Science", fieldOfStudy: "Computer Science", startDate: "2020-09", endDate: "2024-06", location: "", details: "" }],
+      work: [{ organization: "Sample Corp", title: "Software Engineer Intern", location: "Phoenix, AZ", details: "Built APIs.", startDate: "2023-07", endDate: "2023-09" }],
+    },
+  });
+  await context.route(`${oracleOrigin}/**`, (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: `<!doctype html><title>Education and Experience</title><main>
+        <div class="apply-flow-section" data-section-number="2">
+          <div class="apply-flow-block__form-list" role="region" aria-label="Education " id="education"></div>
+          <div class="apply-flow-block__form-list" role="region" aria-label="Experience " id="experience"></div>
+        </div>
+      </main><script>
+        window.saved = [];
+        let active = 'experience';
+        const fields = {
+          education: '<div class="input-row"><label for="major">Major</label><input id="major" name="major"></div><div class="input-row"><label for="school">School</label><input id="school" name="educationalEstablishment"></div>',
+          experience: '<div class="input-row"><label for="employerName">Employer Name</label><input id="employerName" name="employerName" class="input-row__control"></div><div class="input-row"><label for="jobTitle">Job Title</label><input id="jobTitle" name="jobTitle" class="input-row__control"></div>',
+        };
+        // One form at a time: with one open, no section has an Add button.
+        const render = () => {
+          for (const kind of ['education', 'experience']) {
+            const block = document.getElementById(kind);
+            block.innerHTML = '';
+            const word = kind === 'education' ? 'Education' : 'Experience';
+            if (!active) {
+              block.innerHTML = '<div class="profile-add-item"><button type="button" class="button apply-flow-profile-item-tile__new-tile"><span class="button__label">Add ' + word + '</span></button></div>';
+              block.querySelector('button').addEventListener('click', () => { active = kind; render(); });
+            } else if (active === kind) {
+              block.innerHTML = '<div class="profile-item-content">' + fields[kind] + '<div class="app-dialog__footer"><button type="button" class="button app-dialog__footer-button save-btn">Add ' + word + '</button></div></div>';
+              block.querySelector('.save-btn').addEventListener('click', () => {
+                window.saved.push(kind + ': ' + [...block.querySelectorAll('input')].map((input) => input.value).join(' / '));
+                setTimeout(() => { active = null; render(); }, 400);
+              });
+            }
+          }
+        };
+        render();
+      </script>`,
+    }),
+  );
+  const page = await context.newPage();
+  await page.goto(`${oracleOrigin}/hcmUI/CandidateExperience/en/sites/CX_1/job/1/apply/section/2`);
+  await enqueue([page]);
+  await expect.poll(() => page.evaluate(() => (window as any).saved.length), { timeout: 60000 }).toBe(2);
+  const saved: string[] = await page.evaluate(() => (window as any).saved);
+  expect(saved.find((entry) => entry.startsWith("experience"))).toContain("Sample Corp");
+  expect(saved.find((entry) => entry.startsWith("education"))).toContain("Example Polytechnic");
+});
+
+// Oracle's lists as its entry forms draw them: a cx-select box whose list of
+// gridcells opens on a click, or for School is filtered by keys typed.
+const oracleEntryLists = `
+  const months = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+  const years = Array.from({ length: 15 }, (_, i) => String(2027 - i));
+  const lists = document.getElementById('lists');
+  const showList = (input, options) => {
+    lists.innerHTML = '';
+    lists.owner = input;
+    for (const option of options) {
+      const item = document.createElement('div');
+      item.setAttribute('role', 'gridcell');
+      item.className = 'cx-select__list-item';
+      item.textContent = option;
+      item.addEventListener('click', () => { input.value = option; input.dataset.picked = option; lists.innerHTML = ''; });
+      lists.append(item);
+    }
+  };
+  const select = (label, id, name) => '<div class="input-row input-row--has-picker"><label class="input-row__label" for="' + id + '"><span class="input-row__linebreak">' + label + '</span></label>'
+    + '<div class="input-row__control-container reset-z-index"><div class="cx-select-container"><div class="input-field-container"><div class="input-field-container__left">'
+    + '<input autocomplete="none" name="' + name + '" id="' + id + '" type="text" role="combobox" aria-autocomplete="list" aria-haspopup="grid" aria-expanded="false" class="cx-select-input"></div></div></div></div></div>';
+  const date = (label, name, n) => '<div class="datepicker-row quick-apply-flow-datepicker-row input-row input-row--with-placeholder input-row--has-picker" aria-label="' + label + '">'
+    + '<label class="input-row__label" for="' + name + '-' + n + '"><span class="input-row__linebreak">' + label + '</span></label><div class="input-row__control-container"><div class="input-row-composite__inputs">'
+    + ['month', 'year'].map((part) => '<div class="input-row-composite__input datepicker-row__input datepicker-row__input--' + part + '"><div class="cx-select-container"><div class="input-field-container"><div class="input-field-container__left">'
+      + '<span class="input-field__label">' + (part === 'month' ? 'Month' : 'Year') + '</span><input autocomplete="none" name="' + name + '" id="' + part + '-' + name + '-' + n + '" type="text" role="combobox" class="cx-select-input"></div></div></div></div>').join('')
+    + '</div></div></div>';
+  const text = (label, id, name) => '<div class="input-row input-row--text"><label class="input-row__label" for="' + id + '"><span class="input-row__linebreak">' + label + '</span></label>'
+    + '<div class="input-row__control-container"><input class="input-row__control" id="' + id + '" name="' + name + '"></div></div>';
+  const wireLists = (form) => {
+    for (const input of form.querySelectorAll('input[id^="month-"]')) input.addEventListener('click', () => showList(input, months));
+    for (const input of form.querySelectorAll('input[id^="year-"]')) input.addEventListener('click', () => showList(input, years));
+    const school = form.querySelector('input[name^="educationalEstablishment"]');
+    // Its list loads a moment after real keys, only while the box keeps
+    // focus, and closes when the box blurs (Higher's School: the rule's typing blurred it and the list never showed).
+    // Only the last key's load shows a list, and none once an entry is
+    // picked: every key's own timer fired in turn and re-opened the School
+    // list over the date lists (shared here as in Oracle), so a month or year
+    // pick was lost at random.
+    if (school) {
+      let loading;
+      school.addEventListener('input', (event) => {
+        clearTimeout(loading);
+        if (event.isTrusted) loading = setTimeout(() => { if (document.activeElement === school && !school.dataset.picked) showList(school, school.value ? [school.value + (window.schoolSuffix || '')] : []); }, 300);
+      });
+      school.addEventListener('focusout', () => { if (lists.owner === school) lists.innerHTML = ''; });
+    }
+  };
+  // A press on an entry keeps the box focused, as the site's list does.
+  lists.addEventListener('mousedown', (event) => event.preventDefault());
+  const picked = (form, selector) => form.querySelector(selector)?.dataset.picked || '';
+  const entryDates = (form) => [picked(form, 'input[id^="month-startDate"]'), picked(form, 'input[id^="year-startDate"]'), picked(form, 'input[id^="month-endDate"]'), picked(form, 'input[id^="year-endDate"]')].join(' ');
+`;
+
+// (hdde.fa.us2.oraclecloud.com): work and
+// education are one "Work and Education History" timeline. Its Add Experience
+// and Add Education buttons sit in an actions bar the site marks --disabled
+// while either entry form is open, and the form is a
+// standard-apply-flow-timeline-form, not a profile-item-content: no row was
+// ever confirmed, and nothing was filled.
+test("Oracle's work and education timeline adds and saves one entry at a time, with its dates", async () => {
+  await ui({
+    type: "API",
+    path: "/v1/profile",
+    method: "PUT",
+    body: {
+      ...profile,
+      education: [
+        { organization: "Acme University", title: "Master of Science", fieldOfStudy: "Data Science", startDate: "2025-08", endDate: "2027-05", location: "", details: "" },
+        { organization: "Penn State", title: "Bachelor of Science", fieldOfStudy: "Computer Science", startDate: "2020-09", endDate: "2024-06", location: "", details: "" },
+      ],
+      work: [{ organization: "Contoso", title: "Software Engineer Intern", location: "Phoenix, AZ", details: "Built APIs.", startDate: "2023-07", endDate: "2023-09" }],
+    },
+  });
+  await context.route(`${oracleOrigin}/**`, (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: `<!doctype html><title>Experience</title><main>
+        <div class="apply-flow-section" data-section-number="3">
+          <div class="apply-flow-block apply-flow-block--work-and-education-timeline">
+            <div class="apply-flow-block__form-list" role="region" aria-label="Work and Education History ">
+              <div class="timeline-container">
+                <div id="timeline-anchor" class="input-row__control-container work-and-education-timeline__actions-container">
+                  <div class="work-and-education-timeline__actions work-and-education-timeline__actions--pinned">
+                    <button id="timeline-add-experience-button" type="button" class="work-and-education-timeline-add-button timeline-work-add-button apply-flow-profile-item-button apply-flow-profile-item-button--add"><span class="apply-flow-profile-item-button__label">Add Experience</span></button>
+                    <button id="timeline-add-education-button" type="button" class="work-and-education-timeline-add-button timeline-education-add-button apply-flow-profile-item-button apply-flow-profile-item-button--add"><span class="apply-flow-profile-item-button__label">Add Education</span></button>
+                  </div>
+                </div>
+                <div id="items"></div>
+                <div id="slot"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </main><div id="lists"></div><script>
+        ${oracleEntryLists}
+        window.saved = [];
+        window.refused = 0;
+        let n = 200;
+        const actions = document.getElementById('timeline-anchor');
+        const slot = document.getElementById('slot');
+        const forms = {
+          experience: () => text('Employer Name', 'employerName-' + n, 'employerName') + text('Job Title', 'jobTitle-' + n, 'jobTitle') + date('Start Date', 'startDate', n) + date('End Date', 'endDate', n),
+          education: () => select('Degree', 'contentItemId-' + n, 'contentItemId') + select('Major', 'major-' + n, 'major') + select('School', 'educationalEstablishment-' + n, 'educationalEstablishment') + date('Start Date', 'startDate', n) + date('End Date', 'endDate', n),
+        };
+        // One form at a time: while one is open the actions bar is disabled.
+        const open = (kind) => {
+          if (actions.classList.contains('work-and-education-timeline__actions-container--disabled')) { window.refused++; return; }
+          n += 10;
+          actions.classList.add('work-and-education-timeline__actions-container--disabled');
+          const word = kind === 'education' ? 'Education' : 'Experience';
+          slot.innerHTML = '<div class="standard-apply-flow-timeline-form"><div class="timeline-form-content">' + forms[kind]() + '</div>'
+            + '<div class="timeline-form-footer"><div class="app-dialog__buttons-bar font-family-secondary text-color-primary">'
+            + '<button class="button app-dialog__footer-button cancel-btn"><span class="button__label">Cancel</span></button>'
+            + '<button class="button app-dialog__footer-button save-btn" data-qa="addTimelineItemDialogButton"><span class="button__label">Add ' + word + '</span></button></div></div></div>';
+          const form = slot.firstElementChild;
+          wireLists(form);
+          form.querySelector('.save-btn').addEventListener('click', () => {
+            const name = kind === 'education' ? picked(form, 'input[name="educationalEstablishment"]') : form.querySelector('input[name="employerName"]').value;
+            window.saved.push(kind + ': ' + name + ' | ' + entryDates(form));
+            setTimeout(() => {
+              slot.innerHTML = '';
+              document.getElementById('items').insertAdjacentHTML('beforeend', '<div class="timeline-item">' + name + '</div>');
+              actions.classList.remove('work-and-education-timeline__actions-container--disabled');
+            }, 400);
+          });
+        };
+        document.getElementById('timeline-add-experience-button').addEventListener('click', () => open('experience'));
+        document.getElementById('timeline-add-education-button').addEventListener('click', () => open('education'));
+      </script>`,
+    }),
+  );
+  const page = await context.newPage();
+  await page.goto(`${oracleOrigin}/hcmUI/CandidateExperience/en/sites/CX_1/job/1/apply/section/3`);
+  await enqueue([page]);
+  await expect.poll(() => page.evaluate(() => (window as any).saved.length), { timeout: 90000 }).toBe(3);
+  const saved: string[] = await page.evaluate(() => (window as any).saved);
+  expect([...saved].sort()).toEqual([
+    "education: Acme University | August 2025 May 2027",
+    "education: Penn State | September 2020 June 2024",
+    "experience: Contoso | July 2023 September 2023",
+  ]);
+  expect(await page.evaluate(() => (window as any).refused)).toBe(0);
+});
+
+// Entries already saved show as timeline cards ("Creative Associate", the
+// employer, "From March 2026 to No date provided"), not as tiles with an aria-label: a refill must add only the
+// entries no card shows, not the whole history again.
+test("Oracle's timeline cards already showing a job are not added again, only the missing jobs are", async () => {
+  await ui({
+    type: "API",
+    path: "/v1/profile",
+    method: "PUT",
+    body: {
+      ...profile,
+      education: [],
+      work: [
+        { organization: "Contoso", title: "Software Engineer Intern", location: "Phoenix, AZ", details: "Built APIs.", startDate: "2023-07", endDate: "2023-09" },
+        { organization: "Northwind", title: "Creative Associate", location: "Phoenix, AZ", details: "Made demos.", startDate: "2026-03", endDate: "" },
+        { organization: "Adventure Works", title: "Analyst", location: "Tempe, AZ", details: "Ran reports.", startDate: "2021-01", endDate: "2021-12" },
+      ],
+    },
+  });
+  await context.route(`${oracleOrigin}/**`, (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: `<!doctype html><title>Experience</title><main>
+        <div class="apply-flow-section" data-section-number="3">
+          <div class="apply-flow-block apply-flow-block--work-and-education-timeline">
+            <div class="apply-flow-block__form-list" role="region" aria-label="Work and Education History ">
+              <div class="timeline-container">
+                <div id="timeline-anchor" class="input-row__control-container work-and-education-timeline__actions-container">
+                  <div class="work-and-education-timeline__actions work-and-education-timeline__actions--pinned">
+                    <button id="timeline-add-experience-button" type="button" class="work-and-education-timeline-add-button timeline-work-add-button apply-flow-profile-item-button apply-flow-profile-item-button--add"><span class="apply-flow-profile-item-button__label">Add Experience</span></button>
+                    <button id="timeline-add-education-button" type="button" class="work-and-education-timeline-add-button timeline-education-add-button apply-flow-profile-item-button apply-flow-profile-item-button--add"><span class="apply-flow-profile-item-button__label">Add Education</span></button>
+                  </div>
+                </div>
+                <div id="items"><div class="beautiful-timeline"><div class="beautiful-timeline__column beautiful-timeline__column--left"><beautiful-timeline-item><div class="beautiful-timeline-item beautiful-timeline-item--level0 beautiful-timeline-item--experiences__15 beautiful-timeline-item--color-4" tabindex="0" data-profile-item-tile="true" role="group"><div class="beautiful-timeline-item__content"><div class="beautiful-timeline-item__info"><span class="beautiful-timeline-item__title">Creative Associate</span><span class="beautiful-timeline-item__subtitle">Northwind</span><span class="oj-helper-hidden-accessible">From March 2026 to No date provided</span></div></div></div></beautiful-timeline-item></div></div></div>
+                <div id="slot"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </main><div id="lists"></div><script>
+        ${oracleEntryLists}
+        window.saved = [];
+        window.refused = 0;
+        let n = 200;
+        const actions = document.getElementById('timeline-anchor');
+        const slot = document.getElementById('slot');
+        const forms = {
+          experience: () => text('Employer Name', 'employerName-' + n, 'employerName') + text('Job Title', 'jobTitle-' + n, 'jobTitle') + date('Start Date', 'startDate', n) + date('End Date', 'endDate', n),
+          education: () => select('Degree', 'contentItemId-' + n, 'contentItemId') + select('Major', 'major-' + n, 'major') + select('School', 'educationalEstablishment-' + n, 'educationalEstablishment') + date('Start Date', 'startDate', n) + date('End Date', 'endDate', n),
+        };
+        // One form at a time: while one is open the actions bar is disabled.
+        const open = (kind) => {
+          if (actions.classList.contains('work-and-education-timeline__actions-container--disabled')) { window.refused++; return; }
+          n += 10;
+          actions.classList.add('work-and-education-timeline__actions-container--disabled');
+          const word = kind === 'education' ? 'Education' : 'Experience';
+          slot.innerHTML = '<div class="standard-apply-flow-timeline-form"><div class="timeline-form-content">' + forms[kind]() + '</div>'
+            + '<div class="timeline-form-footer"><div class="app-dialog__buttons-bar font-family-secondary text-color-primary">'
+            + '<button class="button app-dialog__footer-button cancel-btn"><span class="button__label">Cancel</span></button>'
+            + '<button class="button app-dialog__footer-button save-btn" data-qa="addTimelineItemDialogButton"><span class="button__label">Add ' + word + '</span></button></div></div></div>';
+          const form = slot.firstElementChild;
+          wireLists(form);
+          form.querySelector('.save-btn').addEventListener('click', () => {
+            const name = kind === 'education' ? picked(form, 'input[name="educationalEstablishment"]') : form.querySelector('input[name="employerName"]').value;
+            window.saved.push(kind + ': ' + name + ' | ' + entryDates(form));
+            setTimeout(() => {
+              slot.innerHTML = '';
+              document.getElementById('items').insertAdjacentHTML('beforeend', '<div class="timeline-item">' + name + '</div>');
+              actions.classList.remove('work-and-education-timeline__actions-container--disabled');
+            }, 400);
+          });
+        };
+        document.getElementById('timeline-add-experience-button').addEventListener('click', () => open('experience'));
+        document.getElementById('timeline-add-education-button').addEventListener('click', () => open('education'));
+      </script>`,
+    }),
+  );
+  const page = await context.newPage();
+  await page.goto(`${oracleOrigin}/hcmUI/CandidateExperience/en/sites/CX_1/job/1/apply/section/3`);
+  await enqueue([page]);
+  await expect.poll(() => page.evaluate(() => (window as any).saved.length), { timeout: 90000 }).toBe(2);
+  const saved: string[] = await page.evaluate(() => (window as any).saved);
+  expect([...saved].sort()).toEqual([
+    "experience: Adventure Works | January 2021 December 2021",
+    "experience: Contoso | July 2023 September 2023",
+  ]);
+  expect(await page.evaluate(() => (window as any).refused)).toBe(0);
+});
+
+test("Oracle's timeline cards already showing a degree are not added again, only the missing degrees are", async () => {
+  await ui({
+    type: "API",
+    path: "/v1/profile",
+    method: "PUT",
+    body: {
+      ...profile,
+      education: [
+        { organization: "Acme University", title: "Master of Science", fieldOfStudy: "Data Science", startDate: "2025-08", endDate: "2027-05", location: "", details: "" },
+        { organization: "Penn State", title: "Bachelor of Science", fieldOfStudy: "Computer Science", startDate: "2020-09", endDate: "2024-06", location: "", details: "" },
+      ],
+      work: [],
+    },
+  });
+  await context.route(`${oracleOrigin}/**`, (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: `<!doctype html><title>Experience</title><main>
+        <div class="apply-flow-section" data-section-number="3">
+          <div class="apply-flow-block apply-flow-block--work-and-education-timeline">
+            <div class="apply-flow-block__form-list" role="region" aria-label="Work and Education History ">
+              <div class="timeline-container">
+                <div id="timeline-anchor" class="input-row__control-container work-and-education-timeline__actions-container">
+                  <div class="work-and-education-timeline__actions work-and-education-timeline__actions--pinned">
+                    <button id="timeline-add-experience-button" type="button" class="work-and-education-timeline-add-button timeline-work-add-button apply-flow-profile-item-button apply-flow-profile-item-button--add"><span class="apply-flow-profile-item-button__label">Add Experience</span></button>
+                    <button id="timeline-add-education-button" type="button" class="work-and-education-timeline-add-button timeline-education-add-button apply-flow-profile-item-button apply-flow-profile-item-button--add"><span class="apply-flow-profile-item-button__label">Add Education</span></button>
+                  </div>
+                </div>
+                <div id="items"><div class="beautiful-timeline"><div class="beautiful-timeline__column beautiful-timeline__column--right"><beautiful-timeline-item><div class="beautiful-timeline-item beautiful-timeline-item--level0 beautiful-timeline-item--education__3 beautiful-timeline-item--color-4" tabindex="0" data-profile-item-tile="true" role="group"><div class="beautiful-timeline-item__content"><div class="beautiful-timeline-item__info"><span class="beautiful-timeline-item__title">Computer Science</span><span class="beautiful-timeline-item__subtitle">Penn State</span><span class="oj-helper-hidden-accessible">From September 2020 to June 2024</span></div></div></div></beautiful-timeline-item></div></div></div>
+                <div id="slot"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </main><div id="lists"></div><script>
+        ${oracleEntryLists}
+        window.saved = [];
+        window.refused = 0;
+        let n = 200;
+        const actions = document.getElementById('timeline-anchor');
+        const slot = document.getElementById('slot');
+        const forms = {
+          experience: () => text('Employer Name', 'employerName-' + n, 'employerName') + text('Job Title', 'jobTitle-' + n, 'jobTitle') + date('Start Date', 'startDate', n) + date('End Date', 'endDate', n),
+          education: () => select('Degree', 'contentItemId-' + n, 'contentItemId') + select('Major', 'major-' + n, 'major') + select('School', 'educationalEstablishment-' + n, 'educationalEstablishment') + date('Start Date', 'startDate', n) + date('End Date', 'endDate', n),
+        };
+        // One form at a time: while one is open the actions bar is disabled.
+        const open = (kind) => {
+          if (actions.classList.contains('work-and-education-timeline__actions-container--disabled')) { window.refused++; return; }
+          n += 10;
+          actions.classList.add('work-and-education-timeline__actions-container--disabled');
+          const word = kind === 'education' ? 'Education' : 'Experience';
+          slot.innerHTML = '<div class="standard-apply-flow-timeline-form"><div class="timeline-form-content">' + forms[kind]() + '</div>'
+            + '<div class="timeline-form-footer"><div class="app-dialog__buttons-bar font-family-secondary text-color-primary">'
+            + '<button class="button app-dialog__footer-button cancel-btn"><span class="button__label">Cancel</span></button>'
+            + '<button class="button app-dialog__footer-button save-btn" data-qa="addTimelineItemDialogButton"><span class="button__label">Add ' + word + '</span></button></div></div></div>';
+          const form = slot.firstElementChild;
+          wireLists(form);
+          form.querySelector('.save-btn').addEventListener('click', () => {
+            const name = kind === 'education' ? picked(form, 'input[name="educationalEstablishment"]') : form.querySelector('input[name="employerName"]').value;
+            window.saved.push(kind + ': ' + name + ' | ' + entryDates(form));
+            setTimeout(() => {
+              slot.innerHTML = '';
+              document.getElementById('items').insertAdjacentHTML('beforeend', '<div class="timeline-item">' + name + '</div>');
+              actions.classList.remove('work-and-education-timeline__actions-container--disabled');
+            }, 400);
+          });
+        };
+        document.getElementById('timeline-add-experience-button').addEventListener('click', () => open('experience'));
+        document.getElementById('timeline-add-education-button').addEventListener('click', () => open('education'));
+      </script>`,
+    }),
+  );
+  const page = await context.newPage();
+  await page.goto(`${oracleOrigin}/hcmUI/CandidateExperience/en/sites/CX_1/job/1/apply/section/3`);
+  await enqueue([page]);
+  await expect.poll(() => page.evaluate(() => (window as any).saved.length), { timeout: 90000 }).toBe(1);
+  const saved: string[] = await page.evaluate(() => (window as any).saved);
+  expect([...saved].sort()).toEqual([
+    "education: Acme University | August 2025 May 2027",
+  ]);
+  expect(await page.evaluate(() => (window as any).refused)).toBe(0);
+});
+
+// (hdde.fa.us2.oraclecloud.com): the timeline's
+// School list names the school with a note after it ("Pennsylvania State
+// University, University Park (Penn State)"). The rule pressed only an
+// entry whose text was the answer exactly, found none, left School empty and
+// never saved the entry, so no work entry was added either.
+test("Oracle's work and education timeline School entry that names the school with a note after it is picked, so the entry is saved and the next entries are added", async () => {
+  await ui({
+    type: "API",
+    path: "/v1/profile",
+    method: "PUT",
+    body: {
+      ...profile,
+      education: [
+        { organization: "Acme University, Riverside", title: "Master of Science", fieldOfStudy: "Data Science", startDate: "2025-08", endDate: "2027-05", location: "", details: "" },
+      ],
+      work: [{ organization: "Contoso", title: "Software Engineer Intern", location: "Phoenix, AZ", details: "Built APIs.", startDate: "2023-07", endDate: "2023-09" }],
+    },
+  });
+  await context.route(`${oracleOrigin}/**`, (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: `<!doctype html><title>Experience</title><main>
+        <div class="apply-flow-section" data-section-number="3">
+          <div class="apply-flow-block apply-flow-block--work-and-education-timeline">
+            <div class="apply-flow-block__form-list" role="region" aria-label="Work and Education History ">
+              <div class="timeline-container">
+                <div id="timeline-anchor" class="input-row__control-container work-and-education-timeline__actions-container">
+                  <div class="work-and-education-timeline__actions work-and-education-timeline__actions--pinned">
+                    <button id="timeline-add-experience-button" type="button" class="work-and-education-timeline-add-button timeline-work-add-button apply-flow-profile-item-button apply-flow-profile-item-button--add"><span class="apply-flow-profile-item-button__label">Add Experience</span></button>
+                    <button id="timeline-add-education-button" type="button" class="work-and-education-timeline-add-button timeline-education-add-button apply-flow-profile-item-button apply-flow-profile-item-button--add"><span class="apply-flow-profile-item-button__label">Add Education</span></button>
+                  </div>
+                </div>
+                <div id="items"></div>
+                <div id="slot"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </main><div id="lists"></div><script>
+        ${oracleEntryLists}
+        window.schoolSuffix = ' (Acme Tech)';
+        window.saved = [];
+        window.refused = 0;
+        let n = 200;
+        const actions = document.getElementById('timeline-anchor');
+        const slot = document.getElementById('slot');
+        const forms = {
+          experience: () => text('Employer Name', 'employerName-' + n, 'employerName') + text('Job Title', 'jobTitle-' + n, 'jobTitle') + date('Start Date', 'startDate', n) + date('End Date', 'endDate', n),
+          education: () => select('Degree', 'contentItemId-' + n, 'contentItemId') + select('Major', 'major-' + n, 'major') + select('School', 'educationalEstablishment-' + n, 'educationalEstablishment') + date('Start Date', 'startDate', n) + date('End Date', 'endDate', n),
+        };
+        // One form at a time: while one is open the actions bar is disabled.
+        const open = (kind) => {
+          if (actions.classList.contains('work-and-education-timeline__actions-container--disabled')) { window.refused++; return; }
+          n += 10;
+          actions.classList.add('work-and-education-timeline__actions-container--disabled');
+          const word = kind === 'education' ? 'Education' : 'Experience';
+          slot.innerHTML = '<div class="standard-apply-flow-timeline-form"><div class="timeline-form-content">' + forms[kind]() + '</div>'
+            + '<div class="timeline-form-footer"><div class="app-dialog__buttons-bar font-family-secondary text-color-primary">'
+            + '<button class="button app-dialog__footer-button cancel-btn"><span class="button__label">Cancel</span></button>'
+            + '<button class="button app-dialog__footer-button save-btn" data-qa="addTimelineItemDialogButton"><span class="button__label">Add ' + word + '</span></button></div></div></div>';
+          const form = slot.firstElementChild;
+          wireLists(form);
+          form.querySelector('.save-btn').addEventListener('click', () => {
+            const name = kind === 'education' ? picked(form, 'input[name="educationalEstablishment"]') : form.querySelector('input[name="employerName"]').value;
+            window.saved.push(kind + ': ' + name + ' | ' + entryDates(form));
+            setTimeout(() => {
+              slot.innerHTML = '';
+              document.getElementById('items').insertAdjacentHTML('beforeend', '<div class="timeline-item">' + name + '</div>');
+              actions.classList.remove('work-and-education-timeline__actions-container--disabled');
+            }, 400);
+          });
+        };
+        document.getElementById('timeline-add-experience-button').addEventListener('click', () => open('experience'));
+        document.getElementById('timeline-add-education-button').addEventListener('click', () => open('education'));
+      </script>`,
+    }),
+  );
+  const page = await context.newPage();
+  await page.goto(`${oracleOrigin}/hcmUI/CandidateExperience/en/sites/CX_1/job/1/apply/section/3`);
+  await enqueue([page]);
+  await expect.poll(() => page.evaluate(() => (window as any).saved.length), { timeout: 90000 }).toBe(2);
+  const saved: string[] = await page.evaluate(() => (window as any).saved);
+  expect([...saved].sort()).toEqual([
+    "education: Acme University, Riverside (Acme Tech) | August 2025 May 2027",
+    "experience: Contoso | July 2023 September 2023",
+  ]);
+  expect(await page.evaluate(() => (window as any).refused)).toBe(0);
+});
+
+// (hdde.fa.us2.oraclecloud.com), second half: the
+// timeline's Degree is a single-select list of pills ("Graduate Master's
+// Degrees (e.g., …)"), not the cx-select box the rule knew. The form was
+// already open from an earlier Add Education; the rule pressed its save at
+// once with Degree empty, Oracle refused it, and the form stayed open with
+// every Add button disabled, so no work entry was ever added.
+test("Oracle's timeline picks a pills Degree before saving, then adds the next entries once the form closes", async () => {
+  await ui({
+    type: "API",
+    path: "/v1/profile",
+    method: "PUT",
+    body: {
+      ...profile,
+      education: [
+        { organization: "Acme University", title: "Master of Science", fieldOfStudy: "Data Science", startDate: "2025-08", endDate: "2027-05", location: "", details: "" },
+        { organization: "Penn State", title: "Bachelor of Science", fieldOfStudy: "Computer Science", startDate: "2020-09", endDate: "2024-06", location: "", details: "" },
+      ],
+      work: [{ organization: "Contoso", title: "Software Engineer Intern", location: "Phoenix, AZ", details: "Built APIs.", startDate: "2023-07", endDate: "2023-09" }],
+    },
+  });
+  await context.route(`${oracleOrigin}/**`, (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: `<!doctype html><title>Experience</title><main>
+        <div class="apply-flow-section" data-section-number="3">
+          <div class="apply-flow-block apply-flow-block--work-and-education-timeline">
+            <div class="apply-flow-block__form-list" role="region" aria-label="Work and Education History ">
+              <div class="timeline-container">
+                <div id="timeline-anchor" class="input-row__control-container work-and-education-timeline__actions-container work-and-education-timeline__actions-container--disabled">
+                  <div class="work-and-education-timeline__actions work-and-education-timeline__actions--pinned">
+                    <button id="timeline-add-experience-button" type="button" class="work-and-education-timeline-add-button timeline-work-add-button apply-flow-profile-item-button apply-flow-profile-item-button--add"><span class="apply-flow-profile-item-button__label">Add Experience</span></button>
+                    <button id="timeline-add-education-button" type="button" class="work-and-education-timeline-add-button timeline-education-add-button apply-flow-profile-item-button apply-flow-profile-item-button--add"><span class="apply-flow-profile-item-button__label">Add Education</span></button>
+                  </div>
+                </div>
+                <div id="items"></div>
+                <div id="slot"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </main><div id="lists"></div><script>
+        ${oracleEntryLists}
+        window.saved = [];
+        window.refusedSaves = 0;
+        window.clickedWhileDisabled = 0;
+        let n = 200;
+        const actions = document.getElementById('timeline-anchor');
+        const slot = document.getElementById('slot');
+        const degrees = ["Graduate Doctoral Degrees (e.g., Doctor of Medicine, Juris Doctor, Doctor of Philosophy)", "Graduate Master's Degrees (e.g., Master of Arts, Master of Engineering, Master of Business Administration, Master of Education)", "Lower Secondary Education (e.g., Middle School Diploma, Junior Secondary Certificate, GCSEs)", "None", "Other", "Undergraduate Associate Degrees (e.g., Associate of Arts, Associate of Science)", "Undergraduate Bachelor's Degrees (e.g., Bachelor of Science, Bachelor of Business Administration, Bachelor of Fine Arts)", "Upper Secondary Education (e.g., High School Diploma, A-Levels, GED, International Baccalaureate)"];
+        const pills = (id) => '<div class="input-row input-row--has-picker"><label class="input-row__label input-row__label--required" for="contentItemId-' + id + '"><span class="input-row__linebreak">Degree</span></label>'
+          + '<div class="input-row__control-container reset-z-index" data-qa="contentItemId"><div><ul role="radiogroup" aria-label="Degree" class="cx-select-pills-container">'
+          + degrees.map((name) => '<li role="presentation"><button type="button" aria-disabled="false" role="radio" aria-checked="false" tabindex="-1" class="cx-select-pill-section"><span class="cx-select-pill-name"> ' + name + '</span></button></li>').join('')
+          + '</ul></div></div></div>';
+        const forms = {
+          experience: () => text('Employer Name', 'employerName-' + n, 'employerName') + text('Job Title', 'jobTitle-' + n, 'jobTitle') + date('Start Date', 'startDate', n) + date('End Date', 'endDate', n),
+          education: () => pills(n) + select('Major', 'major-' + n, 'major') + select('School', 'educationalEstablishment-' + n, 'educationalEstablishment') + date('Start Date', 'startDate', n) + date('End Date', 'endDate', n),
+        };
+        const open = (kind) => {
+          n += 10;
+          actions.classList.add('work-and-education-timeline__actions-container--disabled');
+          const word = kind === 'education' ? 'Education' : 'Experience';
+          slot.innerHTML = '<div class="standard-apply-flow-timeline-form"><div class="timeline-form-content"><form novalidate>' + forms[kind]() + '</form></div>'
+            + '<div class="timeline-form-footer"><div class="app-dialog__buttons-bar font-family-secondary text-color-primary">'
+            + '<button class="button app-dialog__footer-button cancel-btn"><span class="button__label">Cancel</span></button>'
+            + '<button class="button app-dialog__footer-button save-btn" data-qa="addTimelineItemDialogButton"><span class="button__label">Add ' + word + '</span></button></div></div></div>';
+          const form = slot.firstElementChild;
+          wireLists(form);
+          for (const pill of form.querySelectorAll('button[role="radio"]'))
+            pill.addEventListener('click', () => {
+              for (const other of form.querySelectorAll('button[role="radio"]')) other.setAttribute('aria-checked', String(other === pill));
+            });
+          form.querySelector('.save-btn').addEventListener('click', () => {
+            const degree = form.querySelector('button[role="radio"][aria-checked="true"] .cx-select-pill-name');
+            // Oracle refuses to save an education entry with no Degree.
+            if (kind === 'education' && !degree) { window.refusedSaves++; return; }
+            const name = kind === 'education' ? picked(form, 'input[name="educationalEstablishment"]') : form.querySelector('input[name="employerName"]').value;
+            window.saved.push(kind + ': ' + name + ' | ' + (degree ? degree.textContent.trim() + ' | ' : '') + entryDates(form));
+            setTimeout(() => {
+              slot.innerHTML = '';
+              document.getElementById('items').insertAdjacentHTML('beforeend', '<div class="timeline-item">' + name + '</div>');
+              actions.classList.remove('work-and-education-timeline__actions-container--disabled');
+            }, 400);
+          });
+        };
+        const add = (kind) => () => {
+          if (actions.classList.contains('work-and-education-timeline__actions-container--disabled')) { window.clickedWhileDisabled++; return; }
+          open(kind);
+        };
+        document.getElementById('timeline-add-experience-button').addEventListener('click', add('experience'));
+        document.getElementById('timeline-add-education-button').addEventListener('click', add('education'));
+        // An Add Education from an earlier pass left its form open.
+        open('education');
+      </script>`,
+    }),
+  );
+  const page = await context.newPage();
+  await page.goto(`${oracleOrigin}/hcmUI/CandidateExperience/en/sites/CX_1/job/1/apply/section/3`);
+  await enqueue([page]);
+  await expect.poll(() => page.evaluate(() => (window as any).saved.length), { timeout: 90000 }).toBe(3);
+  const saved: string[] = await page.evaluate(() => (window as any).saved);
+  expect([...saved].sort()).toEqual([
+    expect.stringContaining("education: Acme University | Graduate Master's Degrees (e.g., Master of Arts"),
+    expect.stringContaining("education: Penn State | Undergraduate Bachelor's Degrees (e.g., Bachelor of Science"),
+    "experience: Contoso | July 2023 September 2023",
+  ]);
+  expect(saved.find((entry) => entry.startsWith("education: Acme"))).toContain("| August 2025 May 2027");
+  expect(await page.evaluate(() => ({ refusedSaves: (window as any).refusedSaves, clickedWhileDisabled: (window as any).clickedWhileDisabled }))).toEqual({ refusedSaves: 0, clickedWhileDisabled: 0 });
+});
+
+// Higher's Oracle form names its education
+// region "College / University", not "Education": the form Add Education
+// opened was never confirmed as the row, so its dates were never filled, and
+// only the page-wide fill wrote Degree, Major and School.
+test("Oracle's education region named College / University gets its entry's dates from the education rule", async () => {
+  await ui({
+    type: "API",
+    path: "/v1/profile",
+    method: "PUT",
+    body: {
+      ...profile,
+      education: [{ organization: "Acme University", title: "Master of Science", fieldOfStudy: "Data Science", startDate: "2025-08", endDate: "2027-05", location: "", details: "" }],
+      work: [],
+    },
+  });
+  await context.route(`${oracleOrigin}/**`, (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: `<!doctype html><title>Education</title><main>
+        <div class="apply-flow-section" data-section-number="2">
+          <div class="apply-flow-block apply-flow-block--tile-profile-items">
+            <p class="apply-flow-block__instructions">Please provide details about your College / University.</p>
+            <div class="apply-flow-block__form-list" role="region" aria-label="College / University ">
+              <div class="profile-item-container standard-apply-flow-profile-item-106-1">
+                <div class="standard-apply-flow-profile-item">
+                  <div class="profile-add-item"><button type="button" class="button apply-flow-profile-item-tile__new-tile" id="profileItemsAddButton-1" data-qa="add106"><span class="button__label">Add Education</span></button></div>
+                  <div id="slot"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </main><div id="lists"></div><script>
+        ${oracleEntryLists}
+        window.saved = [];
+        const add = document.getElementById('profileItemsAddButton-1');
+        add.addEventListener('click', () => {
+          add.parentElement.classList.add('profile-add-item--disabled');
+          const slot = document.getElementById('slot');
+          slot.innerHTML = '<div class="profile-item-content"><div class="profile-item-content--form">'
+            + select('Degree', 'contentItemId-102', 'contentItemId') + select('Major', 'major-103', 'major') + select('School', 'educationalEstablishmentId-104', 'educationalEstablishmentId')
+            + date('Start Date', 'startDate', 105) + date('End Date', 'endDate', 106)
+            + '</div><div class="app-dialog__footer"><button class="button app-dialog__footer-button save-btn">Add Education</button></div></div>';
+          const form = slot.firstElementChild;
+          wireLists(form);
+          form.querySelector('.save-btn').addEventListener('click', () => {
+            window.saved.push(picked(form, 'input[name="educationalEstablishmentId"]') + ' | ' + entryDates(form));
+            setTimeout(() => { slot.innerHTML = ''; add.parentElement.classList.remove('profile-add-item--disabled'); }, 400);
+          });
+        });
+      </script>`,
+    }),
+  );
+  const page = await context.newPage();
+  await page.goto(`${oracleOrigin}/hcmUI/CandidateExperience/en/sites/CX_1/job/1/apply/section/2`);
+  await enqueue([page]);
+  await expect.poll(() => page.evaluate(() => (window as any).saved), { timeout: 60000 }).toEqual(["Acme University | August 2025 May 2027"]);
+});
+
+// Higher (captured 69f2d6cc): the College / University region
+// holds saved tiles that name the major and the dates, not the school
+// ("Data Science  08/2025 - 05/2027"), and a tile with no major at all
+// ("Unnamed Major"). Matching saved tiles by school never saw them, so every
+// refill added the entries again.
+const oracleCollegeRegion = (tiles: string[], extra = "") => `<!doctype html><title>Education</title><main>
+  <div class="apply-flow-section" data-section-number="2">
+    <div class="apply-flow-block apply-flow-block--tile-profile-items">
+      <p class="apply-flow-block__instructions">Please provide details about your College / University.</p>
+      <div class="apply-flow-block__form-list" role="region" aria-label="College / University ">
+        <div class="profile-item-container standard-apply-flow-profile-item-106-1">
+          <div class="standard-apply-flow-profile-item">
+            <div class="profile-item-list" role="group">${tiles.map((label) => `<article class="apply-flow-profile-item-tile"><div class="apply-flow-profile-item-tile__summary" data-profile-item-tile="true" role="group" tabindex="0" aria-label="${label}">
+              <div class="apply-flow-profile-item-tile__summary-content"><div class="apply-flow-profile-item-tile__summary-title"><span>${label.replace(/\s{2,}.*$/, "")}</span></div>
+              <div class="apply-flow-profile-item-tile__summary-subtitle">${label.match(/\d.*$/)?.[0] || ""}</div></div></div>
+              <div class="apply-flow-profile-item-tile__actions-container"><button class="apply-flow-profile-item-tile__edit-item-icon" title="Edit" aria-label="Edit"></button><button class="apply-flow-profile-item-tile__delete-icon" title="Delete" aria-label="Delete"></button></div></article>`).join("")}</div>
+            <div class="profile-add-item"><button type="button" class="button apply-flow-profile-item-tile__new-tile" id="profileItemsAddButton-1" data-qa="add106"><span class="button__label">Add Education</span></button></div>
+            <div id="slot"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</main><div id="lists"></div><script>
+  ${oracleEntryLists}
+  window.saved = [];
+  window.opened = 0;
+  window.deleted = [];
+  // A delete is confirmed in a dialog (its markup is a guess: not captured).
+  for (const button of document.querySelectorAll('.apply-flow-profile-item-tile__delete-icon'))
+    button.addEventListener('click', () => {
+      const article = button.closest('article');
+      const dialog = document.createElement('div');
+      dialog.className = 'app-dialog__wrapper app-dialog__wrapper--active';
+      dialog.innerHTML = '<div class="app-dialog__footer"><div class="app-dialog__buttons-bar"><button class="button app-dialog__footer-button"><span class="button__label">Cancel</span></button><button class="button app-dialog__footer-button"><span class="button__label">Delete</span></button></div></div>';
+      document.body.append(dialog);
+      dialog.querySelectorAll('button')[0].addEventListener('click', () => dialog.remove());
+      dialog.querySelectorAll('button')[1].addEventListener('click', () => {
+        window.deleted.push(article.querySelector('.apply-flow-profile-item-tile__summary').getAttribute('aria-label'));
+        article.remove();
+        dialog.remove();
+      });
+    });
+  const add = document.getElementById('profileItemsAddButton-1');
+  add.addEventListener('click', () => {
+    window.opened++;
+    add.parentElement.classList.add('profile-add-item--disabled');
+    const slot = document.getElementById('slot');
+    slot.innerHTML = '<div class="profile-item-content"><div class="profile-item-content--form">'
+      + select('Degree', 'contentItemId-102', 'contentItemId') + select('Major', 'major-103', 'major') + select('School', 'educationalEstablishmentId-104', 'educationalEstablishmentId')
+      + date('Start Date', 'startDate', 105) + date('End Date', 'endDate', 106)
+      + '</div><div class="app-dialog__footer"><button class="button app-dialog__footer-button save-btn">Add Education</button></div></div>';
+    const form = slot.firstElementChild;
+    wireLists(form);
+    ${extra}
+    form.querySelector('.save-btn').addEventListener('click', () => {
+      const value = (name) => form.querySelector('input[name="' + name + '"]').value;
+      window.saved.push(picked(form, 'input[name="educationalEstablishmentId"]') + ' | ' + value('major') + ' | ' + entryDates(form));
+      setTimeout(() => { slot.innerHTML = ''; add.parentElement.classList.remove('profile-add-item--disabled'); }, 400);
+    });
+  });
+</script>`;
+
+test("Oracle's College / University tiles that show a profile row's dates are kept, and a tile with no major is no match, and a repeated or empty tile is deleted", async () => {
+  await ui({
+    type: "API",
+    path: "/v1/profile",
+    method: "PUT",
+    body: {
+      ...profile,
+      education: [
+        { organization: "Acme University", title: "Master of Science", fieldOfStudy: "Data Science", startDate: "2025-08", endDate: "2027-05", location: "", details: "" },
+        { organization: "Penn State", title: "Bachelor of Science", fieldOfStudy: "Data Science", startDate: "2020-09", endDate: "2024-06", location: "", details: "" },
+      ],
+      work: [],
+    },
+  });
+  await context.route(`${oracleOrigin}/**`, (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: oracleCollegeRegion(["Data Science  08/2025 - 05/2027", "Data Science  08/2025 - 05/2027", "Data Science  09/2020 - 06/2024", "Unnamed Major  "]),
+    }),
+  );
+  const page = await context.newPage();
+  await page.goto(`${oracleOrigin}/hcmUI/CandidateExperience/en/sites/CX_1/job/1/apply/section/2`);
+  await enqueue([page]);
+  await expect.poll(async () => (await state()).applications[0].status, { timeout: 60000 }).toMatch(/^(awaiting-user|ready)$/);
+  expect(await page.evaluate(() => ({
+    opened: (window as any).opened,
+    saved: (window as any).saved,
+    deleted: (window as any).deleted,
+    left: [...document.querySelectorAll(".apply-flow-profile-item-tile__summary")].map((tile) => tile.getAttribute("aria-label")),
+  }))).toEqual({
+    opened: 0,
+    saved: [],
+    deleted: ["Data Science  08/2025 - 05/2027", "Unnamed Major  "],
+    left: ["Data Science  08/2025 - 05/2027", "Data Science  09/2020 - 06/2024"],
+  });
+});
+
+test("Oracle's College / University entry form opened for the second profile row is filled with that row, not the first", async () => {
+  await ui({
+    type: "API",
+    path: "/v1/profile",
+    method: "PUT",
+    body: {
+      ...profile,
+      education: [
+        { organization: "Acme University", title: "Master of Science", fieldOfStudy: "Data Science", startDate: "2025-08", endDate: "2027-05", location: "", details: "" },
+        { organization: "Penn State", title: "Bachelor of Science", fieldOfStudy: "Computer Science", startDate: "2020-09", endDate: "2024-06", location: "", details: "" },
+      ],
+      work: [],
+    },
+  });
+  await context.route(`${oracleOrigin}/**`, (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: oracleCollegeRegion(["Data Science  08/2025 - 05/2027", "Unnamed Major  "], `
+        form.querySelector('input[name="major"]').addEventListener('click', () => showList(form.querySelector('input[name="major"]'), ['Computer Science', 'Data Science']));`),
+    }),
+  );
+  const page = await context.newPage();
+  await page.goto(`${oracleOrigin}/hcmUI/CandidateExperience/en/sites/CX_1/job/1/apply/section/2`);
+  await enqueue([page]);
+  await expect.poll(() => page.evaluate(() => (window as any).saved.length), { timeout: 60000 }).toBeGreaterThan(0);
+  await expect.poll(async () => (await state()).applications[0].status, { timeout: 60000 }).toMatch(/^(awaiting-user|ready)$/);
+  expect(await page.evaluate(() => ({ opened: (window as any).opened, saved: (window as any).saved, deleted: (window as any).deleted }))).toEqual({
+    opened: 1,
+    saved: ["Penn State | Computer Science | September 2020 June 2024"],
+    deleted: ["Unnamed Major  "],
+  });
+});
+
+//: "Supporting Documents and URLs" held only Link 1 (the
+// website the site read from the resume); its "Add Another Link" button adds
+// a row for each further saved link.
+test("Oracle's Add Another Link gets the profile's other links, and the one on the page is not added again", async () => {
+  await ui({
+    type: "API",
+    path: "/v1/profile",
+    method: "PUT",
+    body: { ...profile, linkedin: "linkedin.com/in/example", github: "github.com/example", website: "https://example.dev" },
+  });
+  await context.route(`${oracleOrigin}/**`, (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: `<!doctype html><title>More About You</title><main>
+        <div class="apply-flow-section" data-section-number="3">
+          <div class="apply-flow-block__form-list" role="region" aria-label="Supporting Documents and URLs " id="links">
+            <div class="candidate-links" id="candidate-links">
+              <div class="candidate-links__link"><div class="input-row input-row--text"><label class="input-row__label" for="siteLink-1-1"><span class="input-row__linebreak">Link 1</span></label>
+                <div class="input-row__control-container"><input class="input-row__control" id="siteLink-1-1" name="siteLink-1" type="url" aria-label="Supporting Documents and URLs Link 1" value="https://example.dev"></div></div></div>
+              <button type="button" class="candidate-links__add-link theme-color-1" id="add-link"><span>Add Another Link</span></button>
+            </div>
+          </div>
+        </div>
+      </main><script>
+        let links = 1;
+        document.getElementById('add-link').addEventListener('click', () => {
+          const next = ++links;
+          // Drawn a moment after the click, as the site's own binding does.
+          setTimeout(() => {
+            const row = document.createElement('div');
+            row.className = 'candidate-links__link';
+            row.innerHTML = '<div class="input-row input-row--text"><label class="input-row__label" for="siteLink-' + next + '-1"><span class="input-row__linebreak">Link ' + next + '</span></label>'
+              + '<div class="input-row__control-container"><input class="input-row__control" id="siteLink-' + next + '-1" name="siteLink-' + next + '" type="url" aria-label="Supporting Documents and URLs Link ' + next + '"></div></div>';
+            document.getElementById('add-link').before(row);
+          }, 150);
+        });
+      </script>`,
+    }),
+  );
+  const page = await context.newPage();
+  await page.goto(`${oracleOrigin}/hcmUI/CandidateExperience/en/sites/CX_1/job/1/apply/section/3`);
+  await enqueue([page]);
+  await expect
+    .poll(() => page.locator('input[type="url"]').evaluateAll((inputs) => inputs.map((input) => (input as HTMLInputElement).value)), { timeout: 60000 })
+    .toEqual(["https://example.dev", "https://linkedin.com/in/example", "https://github.com/example"]);
+});
+
 test("Oracle's race list is answered from the profile, and its City rule never writes there", async () => {
   await ui({ type: "API", path: "/v1/profile", method: "PUT", body: { ...profile, city: "Tucson", ethnicity: "Asian" } });
   await context.route(`${oracleOrigin}/**`, (route) =>
@@ -8638,6 +10014,377 @@ test("Oracle's race list is answered from the profile, and its City rule never w
     .toMatch(/ready|awaiting-user/);
   expect(await page.evaluate(() => (window as any).typed)).not.toContain("Tucson");
   await expect(page.locator("input")).toHaveAttribute("data-picked", "Asian (Not Hispanic or Latino)");
+});
+
+// Oracle's Desired Salary Range (a cx-select of ranges, filtered by typed text,
+// "No results were found." for what is in none of them; recording e2e8676e): the list was left open and the box empty.
+const oracleSelectPage = (ranges: string[]) => `<!doctype html><title>Contact</title><main>
+  <div class="apply-flow-section" data-section-number="1">
+    <div class="input-row input-row--has-picker"><label class="input-row__label input-row__label--required" for="300000351895607-10"><span class="input-row__linebreak">Desired Salary Range</span></label>
+      <div class="input-row__control-container"><div class="cx-select-container"><div class="input-field-container"><div class="input-field-container__left">
+        <input autocomplete="none" name="300000351895607" id="300000351895607-10" type="text" role="combobox" aria-autocomplete="list" aria-haspopup="grid" aria-controls="300000351895607-10-listbox" aria-expanded="false" aria-required="true" class="cx-select-input"></div>
+        <div class="input-field-container__right"><button type="button" id="300000351895607-10-toggle-button" tabindex="-1" aria-label="Open the drop-down list for Desired Salary Range." aria-expanded="false" aria-controls="300000351895607-10-listbox" class="icon-dropdown-arrow"></button></div>
+        <div id="300000351895607-10-cx-select__modal" class="cx-select__options position-top"></div></div></div></div></div>
+  </div></main><script>
+    window.picks = [];
+    const ranges = ${JSON.stringify(ranges)};
+    const salary = document.getElementById('300000351895607-10');
+    const modal = document.getElementById('300000351895607-10-cx-select__modal');
+    const arrow = document.getElementById('300000351895607-10-toggle-button');
+    const close = () => { salary.setAttribute('aria-expanded', 'false'); arrow.setAttribute('aria-expanded', 'false'); modal.innerHTML = ''; };
+    const open = () => {
+      salary.setAttribute('aria-expanded', 'true');
+      arrow.setAttribute('aria-expanded', 'true');
+      const entries = ranges.filter((range) => range.toLowerCase().includes(salary.value.toLowerCase()));
+      const body = entries.length
+        ? entries.map((entry, index) => '<div role="row"><div tabindex="-1" role="gridcell" id="300000351895607-10-listitem-' + index + '" aria-selected="false" class="cx-select__list-item "><div class="cx-select__list-item-container"><span class="cx-select__list-item--content"><span class="highlight"></span><span>' + entry + '</span></span></div></div></div>').join('')
+        : '<div class="cx-select__list-item--no-results">No results were found.</div>';
+      modal.innerHTML = '<div class="cx-select-container cx-select-dropdown--open standard-apply-flow "><div id="300000351895607-10-listbox-container" class="cx-select__listbox standard-apply-flow"><div role="' + (entries.length ? 'grid' : 'status') + '" id="300000351895607-10-listbox" aria-busy="false" tabindex="-1" class="cx-select__list">' + body + '</div></div></div>';
+      for (const cell of modal.querySelectorAll('[role="gridcell"]'))
+        cell.addEventListener('click', () => { salary.value = cell.textContent; window.picks.push(cell.textContent); close(); });
+    };
+    arrow.addEventListener('click', () => { if (salary.getAttribute('aria-expanded') === 'true') close(); else open(); });
+    salary.addEventListener('input', open);
+    salary.addEventListener('mousedown', () => salary.focus());
+    document.body.addEventListener('mousedown', (event) => { if (!event.target.closest('.input-row')) close(); });
+  </script>`;
+
+test("Oracle's salary range list is chosen from by what its ranges cover, and is never left open", async () => {
+  await ui({ type: "API", path: "/v1/profile", method: "PUT", body: { ...profile, salary: { min: 100000, currency: "USD", period: "year" } } });
+  await context.route(`${oracleOrigin}/**`, (route) =>
+    route.fulfill({ contentType: "text/html", body: oracleSelectPage(["Under $80,000", "$80,000 - $99,999", "$100,000 - $119,999", "$120,000+"]) }),
+  );
+  const page = await context.newPage();
+  await page.goto(`${oracleOrigin}/hcmUI/CandidateExperience/en/sites/CX_1/job/1/apply/section/1`);
+  await enqueue([page]);
+  await expect
+    .poll(() => page.evaluate(() => (window as any).picks), { timeout: 60000 })
+    .toEqual(["$100,000 - $119,999"]);
+  await expect(page.locator('[name="300000351895607"]')).toHaveValue("$100,000 - $119,999");
+  await expect(page.locator('[role="combobox"][aria-expanded="true"]')).toHaveCount(0);
+});
+
+test("an Oracle range list that covers the salary in none of its entries is closed, not left open", async () => {
+  await ui({ type: "API", path: "/v1/profile", method: "PUT", body: { ...profile, salary: { min: 100000, currency: "USD", period: "year" } } });
+  await context.route(`${oracleOrigin}/**`, (route) =>
+    route.fulfill({ contentType: "text/html", body: oracleSelectPage(["Under $50,000", "Prefer a conversation"]) }),
+  );
+  const page = await context.newPage();
+  await page.goto(`${oracleOrigin}/hcmUI/CandidateExperience/en/sites/CX_1/job/1/apply/section/1`);
+  await enqueue([page]);
+  await expect
+    .poll(async () => (await state()).applications[0]?.status, { timeout: 60000 })
+    .toMatch(/ready|awaiting-user/);
+  await expect(page.locator('[name="300000351895607"]')).toHaveValue("");
+  await expect(page.locator('[role="combobox"][aria-expanded="true"]')).toHaveCount(0);
+});
+
+// Oracle's Address Line 1 (an auto-suggest cx-select over a geocoder;
+// recording e2e8676e): the typed street lists whole addresses
+// with directions spelled out, drawn long after the typing, and the box keeps
+// only the street of the one taken. The site had pre-filled another street
+// and an "Apt/Flat#".
+const oracleAddressPage = (delayMs: number) => `<!doctype html><title>Contact</title><main>
+  <div class="apply-flow-section" data-section-number="1">
+    <div class="input-row"><label class="input-row__label" for="addressLine1-21"><span class="input-row__linebreak">Address Line 1</span></label>
+      <div class="input-row__control-container"><div class="cx-select-container"><div class="input-field-container"><div class="input-field-container__left">
+        <input autocomplete="none" name="addressLine1" id="addressLine1-21" type="text" role="combobox" aria-autocomplete="list" aria-haspopup="grid" aria-controls="addressLine1-21-listbox" aria-expanded="false" aria-required="true" class="cx-select-input cx-select-input--auto-suggest" value="22 Mustang Dr"></div>
+        <div id="addressLine1-21-cx-select__modal" class="cx-select__options position-top"></div></div></div></div></div>
+    <div class="input-row"><label class="input-row__label" for="addressLine2-22"><span class="input-row__linebreak">Apt/Flat#</span></label>
+      <div class="input-field-container"><input name="addressLine2" id="addressLine2-22" type="text" class="input-row__control" value="Apt 22"></div></div>
+  </div></main><script>
+    window.picks = [];
+    const all = ["100 EAST MAIN STREET, ROANOKE, VIRGINIA", "100 EAST MAIN STREET, BLACKSBURG, VIRGINIA", "100 EAST MAIN STREET, BLACKSBURG, VIRGINIA 24060, UNITED STATES", "100 WEST MAIN STREET, BLACKSBURG, VIRGINIA"];
+    const box = document.getElementById('addressLine1-21');
+    const modal = document.getElementById('addressLine1-21-cx-select__modal');
+    const close = () => { box.setAttribute('aria-expanded', 'false'); modal.innerHTML = ''; };
+    let drawn = 0;
+    const draw = (query) => {
+      const ticket = ++drawn;
+      box.setAttribute('aria-expanded', 'true');
+      modal.innerHTML = '<div class="cx-select-container cx-select-dropdown--open"><div class="cx-select__listbox"><div role="status" id="addressLine1-21-listbox" aria-busy="true" class="cx-select__list"></div></div></div>';
+      setTimeout(() => {
+        if (ticket !== drawn || box.getAttribute('aria-expanded') !== 'true') return;
+        const words = query.toLowerCase().replace(/\./g, '').replace(/\be\b/, 'east').replace(/\bst\b/, 'street');
+        const entries = all.filter((entry) => entry.toLowerCase().startsWith(words.split(' ').slice(0, 3).join(' ')));
+        modal.innerHTML = '<div class="cx-select-container cx-select-dropdown--open"><div class="cx-select__listbox"><div role="grid" id="addressLine1-21-listbox" aria-busy="false" class="cx-select__list">' + entries.map((entry, index) => '<div role="row"><div tabindex="-1" role="gridcell" id="addressLine1-21-listitem-' + index + '" class="cx-select__list-item"><span>' + entry + '</span></div></div>').join('') + '</div></div></div>';
+        for (const cell of modal.querySelectorAll('[role="gridcell"]'))
+          cell.addEventListener('click', () => { window.picks.push(cell.textContent); box.value = cell.textContent.split(',')[0]; close(); });
+      }, ${delayMs});
+    };
+    box.addEventListener('input', () => { if (box.value) draw(box.value); });
+    box.addEventListener('click', () => { if (box.getAttribute('aria-expanded') !== 'true') draw(''); });
+    document.body.addEventListener('mousedown', (event) => { if (!event.target.closest('.input-row')) close(); });
+  </script>`;
+
+test("Oracle's address search lists whole addresses drawn slowly, and the one with the saved city and street is chosen", async () => {
+  await ui({ type: "API", path: "/v1/profile", method: "PUT", body: { ...profile, address: "100 E. Main St", addressLine2: "", city: "Blacksburg", state: "VA", postalCode: "24060" } });
+  await context.route(`${oracleOrigin}/**`, (route) =>
+    route.fulfill({ contentType: "text/html", body: oracleAddressPage(4500) }),
+  );
+  const page = await context.newPage();
+  await page.goto(`${oracleOrigin}/hcmUI/CandidateExperience/en/sites/CX_1/job/1/apply/section/1`);
+  await enqueue([page]);
+  await expect
+    .poll(() => page.evaluate(() => (window as any).picks), { timeout: 45000 })
+    .toEqual(["100 EAST MAIN STREET, BLACKSBURG, VIRGINIA"]);
+  await expect(page.locator('[name="addressLine1"]')).toHaveValue("100 EAST MAIN STREET");
+  await expect(page.locator('[role="combobox"][aria-expanded="true"]')).toHaveCount(0);
+});
+
+// Oracle's yes/no questions are cx-select-pills: buttons of role radio whose
+// option is their own text in a span, in a list labelled by the question, not
+// inputs with labels. Their options read as
+// empty strings and nothing was answered; a consent pill is never ticked.
+const oracleAuthQuestion = "Are you legally authorized to work in the United States? In other words, do you currently hold or can you obtain valid US work authorization (e.g., currently hold H-1B status, or can commence employment based on F-1 Optional Practical Training (OPT))?";
+const oracleConsent = "CONSENT: Through my provision of my self-identification information, I hereby consent that Acme can use and internally disclose my data.";
+const oraclePillsPage = `<!doctype html><title>Application Questions</title><main>
+  <div class="apply-flow-section" data-section-number="2">
+    <div class="input-row input-row--has-picker"><label class="input-row__label" aria-labelledby="labelText-consent instructionsText-consent"><span class="input-row__linebreak" id="labelText-consent">${oracleConsent}</span></label>
+      <div class="input-row__control-container"><div><ul role="radiogroup" aria-label="${oracleConsent}" class="cx-select-pills-container"><li role="presentation"><button type="button" aria-disabled="false" role="radio" aria-checked="false" tabindex="0" class="cx-select-pill-section"><span class="cx-select-pill-name">I consent</span></button></li><li role="presentation"><button type="button" aria-disabled="false" role="radio" aria-checked="false" tabindex="-1" class="cx-select-pill-section"><span class="cx-select-pill-name">I do not consent</span></button></li></ul></div></div></div>
+    <div class="input-row input-row--has-picker"><label class="input-row__label input-row__label--required" aria-labelledby="labelText-auth instructionsText-auth"><span class="input-row__linebreak" id="labelText-auth">${oracleAuthQuestion}</span></label>
+      <div class="input-row__control-container"><div><ul role="radiogroup" aria-label="${oracleAuthQuestion}" class="cx-select-pills-container"><li role="presentation"><button type="button" aria-disabled="false" role="radio" aria-checked="false" tabindex="0" class="cx-select-pill-section"><span class="cx-select-pill-name"> Yes</span></button></li><li role="presentation"><button type="button" aria-disabled="false" role="radio" aria-checked="false" tabindex="-1" class="cx-select-pill-section"><span class="cx-select-pill-name"> No</span></button></li></ul></div></div></div>
+  </div></main><script>
+    window.clicked = [];
+    for (const pill of document.querySelectorAll('.cx-select-pill-section')) pill.addEventListener('click', () => {
+      window.clicked.push(pill.textContent.trim());
+      for (const other of pill.closest('ul').querySelectorAll('button')) other.setAttribute('aria-checked', String(other === pill));
+    });
+  </script>`;
+
+test("Oracle's Yes/No pills are read by their text, so work authorization is answered and a consent is left", async () => {
+  await ui({ type: "API", path: "/v1/profile", method: "PUT", body: { ...profile, workAuthorization: "Yes", sponsorship: "No", citizenships: [] } });
+  await context.route(`${oracleOrigin}/**`, (route) => route.fulfill({ contentType: "text/html", body: oraclePillsPage }));
+  const page = await context.newPage();
+  await page.goto(`${oracleOrigin}/hcmUI/CandidateExperience/en/sites/CX_1/job/1/apply/section/2`);
+  await enqueue([page]);
+  await expect
+    .poll(() => page.evaluate(() => (window as any).clicked), { timeout: 60000 })
+    .toEqual(["Yes"]);
+  await expect(page.locator('ul[aria-label^="Are you legally authorized"] [aria-checked="true"]')).toHaveText("Yes");
+  await expect(page.locator('ul[aria-label^="CONSENT"] [aria-checked="true"]')).toHaveCount(0);
+});
+
+// The visa-type list of the same form: "N/A" stood in its
+// box, typed and never picked, and the site called it invalid. A value that
+// reads as a placeholder is the site's to replace, and the answer, equal to
+// it, was not written again.
+test("an Oracle list holding typed, unpicked text the site calls invalid has its entry picked", async () => {
+  const visa = "If you currently hold or can obtain valid work authorization, please indicate your current visa type or basis for employment authorization in the United States: (e.g., N/A, E-1, E-2, F-1, H-1B, J-1, TN, Other). Please choose N/A if none of these apply to you.";
+  await ui({ type: "API", path: "/v1/profile", method: "PUT", body: { ...profile, answers: [{ question: visa, answer: "N/A" }] } });
+  await context.route(`${oracleOrigin}/**`, (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: `<!doctype html><title>Application Questions</title><main>
+        <div class="apply-flow-section" data-section-number="2">
+          <div class="input-row input-row--has-picker"><label class="input-row__label input-row__label--required" for="300005831674178-40" aria-labelledby="labelText-300005831674178-40"><span class="input-row__linebreak" id="labelText-300005831674178-40">${visa}</span></label>
+            <div class="input-row__control-container"><div class="cx-select-container"><div class="input-field-container"><div class="input-field-container__left">
+              <input autocomplete="none" name="300005831674178" id="300005831674178-40" type="text" role="combobox" aria-autocomplete="list" aria-haspopup="grid" aria-controls="300005831674178-40-listbox" aria-expanded="false" aria-invalid="true" aria-required="true" class="cx-select-input cx-select-input--invalid" value="N/A"></div>
+              <div class="input-field-container__right"><button type="button" id="300005831674178-40-toggle-button" tabindex="-1" aria-label="Open the drop-down list" aria-expanded="false" aria-controls="300005831674178-40-listbox" class="icon-dropdown-arrow"></button></div>
+              <div id="300005831674178-40-cx-select__modal" class="cx-select__options position-top"></div></div></div></div></div>
+        </div></main><script>
+          window.picks = [];
+          const box = document.getElementById('300005831674178-40');
+          const modal = document.getElementById('300005831674178-40-cx-select__modal');
+          const arrow = document.getElementById('300005831674178-40-toggle-button');
+          const entries = ['N/A', 'E-1', 'E-2', 'F-1', 'H-1B', 'J-1', 'TN', 'Other'];
+          const close = () => { box.setAttribute('aria-expanded', 'false'); arrow.setAttribute('aria-expanded', 'false'); modal.innerHTML = ''; };
+          const open = () => {
+            box.setAttribute('aria-expanded', 'true'); arrow.setAttribute('aria-expanded', 'true');
+            const shown = entries.filter((entry) => !box.dataset.typed || entry.toLowerCase().includes(box.value.toLowerCase()));
+            modal.innerHTML = '<div class="cx-select-container cx-select-dropdown--open"><div class="cx-select__listbox"><div role="grid" id="300005831674178-40-listbox" tabindex="-1" class="cx-select__list">'
+              + shown.map((entry, index) => '<div role="row"><div tabindex="-1" role="gridcell" id="300005831674178-40-listitem-' + index + '" aria-selected="false" class="cx-select__list-item"><div class="cx-select__list-item-container"><span class="cx-select__list-item--content"><span>' + entry + '</span></span></div></div></div>').join('')
+              + '</div></div></div>';
+            for (const cell of modal.querySelectorAll('[role="gridcell"]'))
+              cell.addEventListener('click', () => { box.value = cell.textContent; box.setAttribute('aria-invalid', 'false'); box.classList.remove('cx-select-input--invalid'); window.picks.push(cell.textContent); close(); });
+          };
+          arrow.addEventListener('click', () => { if (box.getAttribute('aria-expanded') === 'true') close(); else open(); });
+          box.addEventListener('input', () => { box.dataset.typed = '1'; open(); });
+          box.addEventListener('mousedown', () => box.focus());
+          document.body.addEventListener('mousedown', (event) => { if (!event.target.closest('.input-row')) close(); });
+        </script>`,
+    }),
+  );
+  const page = await context.newPage();
+  await page.goto(`${oracleOrigin}/hcmUI/CandidateExperience/en/sites/CX_1/job/1/apply/section/2`);
+  await enqueue([page]);
+  await expect
+    .poll(() => page.evaluate(() => (window as any).picks), { timeout: 60000 })
+    .toEqual(["N/A"]);
+  await expect(page.locator('[id="300005831674178-40"]')).toHaveAttribute("aria-invalid", "false");
+});
+
+// Higher's Oracle education form (check b2557878, recording 2f814e2e): School is a cx-select whose list is empty until text is
+// typed. An assigned value is read back empty by the page (its input event
+// reports ""), so the fill must type with real keys; the list names a school
+// with its state.
+const oracleEducationInput = (id: string, name: string, label: string) => `<div class="input-row"><label class="input-row__label input-row__label--required" for="${id}"><span class="input-row__linebreak">${label}</span></label>
+  <div class="input-row__control-container"><div class="cx-select-container"><div class="input-field-container"><div class="input-field-container__left">
+    <input autocomplete="none" name="${name}" id="${id}" type="text" role="combobox" aria-autocomplete="list" aria-haspopup="grid" aria-controls="${id}-listbox" aria-expanded="false" aria-required="true" class="cx-select-input"></div>
+    <div class="input-field-container__right"><button type="button" id="${id}-toggle-button" tabindex="-1" aria-label="Open the drop-down list for ${label}." aria-expanded="false" aria-controls="${id}-listbox" class="icon-dropdown-arrow"></button></div>
+    <div id="${id}-cx-select__modal" class="cx-select__options"></div></div></div></div></div>`;
+
+const oracleEducationScript = (id: string, entries: string, emptyUntilTyped = false) => `
+    (() => {
+      const box = document.getElementById('${id}');
+      const modal = document.getElementById('${id}-cx-select__modal');
+      const arrow = document.getElementById('${id}-toggle-button');
+      const close = () => { box.setAttribute('aria-expanded', 'false'); arrow.setAttribute('aria-expanded', 'false'); modal.innerHTML = ''; };
+      const open = () => {
+        box.setAttribute('aria-expanded', 'true'); arrow.setAttribute('aria-expanded', 'true');
+        const all = (${entries})();
+        const shown = ${emptyUntilTyped} && !box.value ? [] : all.filter((entry) => entry.toLowerCase().includes(box.value.toLowerCase()));
+        modal.innerHTML = '<div class="cx-select-container cx-select-dropdown--open"><div class="cx-select__listbox"><div role="grid" id="${id}-listbox" tabindex="-1" class="cx-select__list">'
+          + shown.map((entry, index) => '<div role="row"><div tabindex="-1" role="gridcell" id="${id}-listitem-' + index + '" aria-selected="false" class="cx-select__list-item"><div class="cx-select__list-item-container"><span class="cx-select__list-item--content"><span>' + entry + '</span></span></div></div></div>').join('')
+          + '</div></div></div>';
+        for (const cell of modal.querySelectorAll('[role="gridcell"]'))
+          cell.addEventListener('click', () => { box.value = cell.textContent; (window.picks = window.picks || []).push(cell.textContent); close(); });
+      };
+      arrow.addEventListener('click', () => { if (box.getAttribute('aria-expanded') === 'true') close(); else open(); });
+      box.addEventListener('mousedown', () => box.focus());
+      document.body.addEventListener('mousedown', (event) => { if (!event.target.closest('.input-row')) close(); });
+      window.openList = open;
+      window.closeList = close;
+    })();`;
+
+test("Oracle's School list is typed with real keys, and the entry naming the school's state is chosen", async () => {
+  await ui({ type: "API", path: "/v1/profile", method: "PUT", body: { ...profile,
+    education: [{ organization: "Example State University", title: "Master of Science", fieldOfStudy: "Data Science", startDate: "2025-08", endDate: "2027-12", location: "Tempe, AZ", details: "" }] } });
+  await context.route(`${oracleOrigin}/**`, (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: `<!doctype html><title>Education</title><main><div class="apply-flow-section" data-section-number="2">
+        ${oracleEducationInput("educationalEstablishmentId-119", "educationalEstablishmentId", "School")}
+      </div></main><script>
+        window.picks = [];
+        ${oracleEducationScript("educationalEstablishmentId-119", "() => ['Example State College', 'Example State University - Ohio', 'Example State University - Arizona', 'Sample Polytechnic']", true)}
+        // The site reads an assigned value back empty: only real keys load its list.
+        const school = document.getElementById('educationalEstablishmentId-119');
+        school.addEventListener('input', (event) => {
+          if (!event.isTrusted) { school.value = ''; return; }
+          window.openList();
+        });
+      </script>`,
+    }),
+  );
+  const page = await context.newPage();
+  await page.goto(`${oracleOrigin}/hcmUI/CandidateExperience/en/sites/CX_1/job/1/apply/section/2`);
+  await enqueue([page]);
+  await expect
+    .poll(() => page.evaluate(() => (window as any).picks), { timeout: 60000 })
+    .toEqual(["Example State University - Arizona"]);
+  await expect(page.locator("#educationalEstablishmentId-119")).toHaveValue("Example State University - Arizona");
+  await expect(page.locator('[role="combobox"][aria-expanded="true"]')).toHaveCount(0);
+});
+
+// The same form's grade: "Cumulative GPA (Grade/Mark/GPA)" lists percentage
+// bands ("Below 50") until "Cumulative GPA (Grading System)", pills, is set;
+// 3.84 was put in "Below 50" with the system left empty.
+const oracleGradePage = (systems: string[]) => `<!doctype html><title>Education</title><main><div class="apply-flow-section" data-section-number="2">
+  <div class="input-row input-row--has-picker"><label class="input-row__label"><span class="input-row__linebreak">Cumulative GPA (Grading System)</span></label>
+    <div class="input-row__control-container"><ul role="radiogroup" aria-label="Cumulative GPA (Grading System)" class="cx-select-pills-container">${systems.map((system, index) => `<li role="presentation"><button type="button" aria-disabled="false" role="radio" aria-checked="false" tabindex="${index ? -1 : 0}" class="cx-select-pill-section"><span class="cx-select-pill-name"> ${system}</span></button></li>`).join("")}</ul></div></div>
+  ${oracleEducationInput("highestEduLevel-125", "highestEduLevel", "Cumulative GPA (Grade/Mark/GPA)")}
+</div></main><script>
+  window.picks = [];
+  window.system = '';
+  for (const pill of document.querySelectorAll('.cx-select-pill-section')) pill.addEventListener('click', () => {
+    for (const other of pill.closest('ul').querySelectorAll('button')) other.setAttribute('aria-checked', String(other === pill));
+    window.system = pill.textContent.trim();
+  });
+  ${oracleEducationScript("highestEduLevel-125", "() => window.system === 'GPA/Grade (out of 4)' ? ['Below 3.0', '3.0 - 3.49', '3.5 - 3.99', '4.0'] : ['Below 50', '50 - 59', '60 - 69', '70 - 79', '80 - 89', '90 - 100']")}
+  document.getElementById('highestEduLevel-125').addEventListener('input', () => window.openList());
+</script>`;
+
+test("Oracle's grading system is chosen before the grade, and the grade is picked from that system's bands", async () => {
+  await ui({ type: "API", path: "/v1/profile", method: "PUT", body: { ...profile,
+    education: [{ organization: "Example State University", title: "Master of Science", fieldOfStudy: "Data Science", startDate: "2025-08", endDate: "2027-12", location: "Tempe, AZ", details: "", gpa: "3.84", gpaScale: "4" }] } });
+  await context.route(`${oracleOrigin}/**`, (route) =>
+    route.fulfill({ contentType: "text/html", body: oracleGradePage(["Alphabetical (A+ to P)", "GPA (out of 100)/Percentage", "GPA/Grade (out of 10)", "GPA/Grade (out of 4)", "Other"]) }),
+  );
+  const page = await context.newPage();
+  await page.goto(`${oracleOrigin}/hcmUI/CandidateExperience/en/sites/CX_1/job/1/apply/section/2`);
+  await enqueue([page]);
+  await expect
+    .poll(() => page.evaluate(() => (window as any).picks), { timeout: 60000 })
+    .toEqual(["3.5 - 3.99"]);
+  expect(await page.evaluate(() => (window as any).system)).toBe("GPA/Grade (out of 4)");
+  await expect(page.locator("#highestEduLevel-125")).toHaveValue("3.5 - 3.99");
+});
+
+test("Oracle's grade is left empty, not put in a percentage band, when its grading system cannot be set", async () => {
+  await ui({ type: "API", path: "/v1/profile", method: "PUT", body: { ...profile,
+    education: [{ organization: "Example State University", title: "Master of Science", fieldOfStudy: "Data Science", startDate: "2025-08", endDate: "2027-12", location: "Tempe, AZ", details: "", gpa: "3.84", gpaScale: "4" }] } });
+  await context.route(`${oracleOrigin}/**`, (route) =>
+    route.fulfill({ contentType: "text/html", body: oracleGradePage(["Alphabetical (A+ to P)", "GPA (out of 100)/Percentage", "Other"]) }),
+  );
+  const page = await context.newPage();
+  await page.goto(`${oracleOrigin}/hcmUI/CandidateExperience/en/sites/CX_1/job/1/apply/section/2`);
+  await enqueue([page]);
+  await expect.poll(async () => (await state()).applications[0]?.status, { timeout: 60000 }).toMatch(/^(awaiting-user|ready)$/);
+  expect(await page.evaluate(() => (window as any).picks)).toEqual([]);
+  await expect(page.locator("#highestEduLevel-125")).toHaveValue("");
+  await expect(page.locator('[role="combobox"][aria-expanded="true"]')).toHaveCount(0);
+});
+
+// The same form's Language: the saved tile already names "English (United
+// States)" (a prior fill kept it), so the list no longer offers it and a
+// second row could only tie among the other Englishes.
+test("Oracle's language already saved as a tile is not added again", async () => {
+  await ui({ type: "API", path: "/v1/profile", method: "PUT", body: { ...profile, languages: ["English: Native"], country: "United States" } });
+  await context.route(`${oracleOrigin}/**`, (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: `<!doctype html><title>Education and Experience</title><main>
+        <div class="apply-flow-section" data-section-number="2">
+          <h2 class="apply-flow-block__title"><span>Languages</span></h2>
+          <div class="apply-flow-block__form-list" role="region" aria-label="Languages " id="languages">
+            <div class="profile-item-list" role="group"><article class="apply-flow-profile-item-tile"><div class="apply-flow-profile-item-tile__summary" data-profile-item-tile="true" role="group" tabindex="0" aria-label="English (United States) ">
+              <div class="apply-flow-profile-item-tile__summary-content"><div class="apply-flow-profile-item-tile__summary-title"><span>English (United States)</span></div></div>
+              <div class="apply-flow-profile-item-tile__actions-container"><button class="apply-flow-profile-item-tile__edit-item-icon" aria-label="Edit"></button></div></div></article></div>
+            <div class="profile-add-item"><button type="button" class="button apply-flow-profile-item-tile__new-tile" id="add-language"><span class="button__label">Add Language</span></button></div>
+          </div>
+        </div>
+      </main><script>
+        window.added = 0;
+        document.getElementById('add-language').addEventListener('click', () => { window.added++; });
+      </script>`,
+    }),
+  );
+  const page = await context.newPage();
+  await page.goto(`${oracleOrigin}/hcmUI/CandidateExperience/en/sites/CX_1/job/1/apply/section/2`);
+  await enqueue([page]);
+  await expect.poll(async () => (await state()).applications[0]?.status, { timeout: 60000 }).toMatch(/^(awaiting-user|ready)$/);
+  expect(await page.evaluate(() => (window as any).added)).toBe(0);
+});
+
+// Higher's form names the region "Language Skills": the
+// saved tiles were never read, and a second, empty row was added.
+test("Oracle's language saved as a tile in a region named Language Skills is not added again", async () => {
+  await ui({ type: "API", path: "/v1/profile", method: "PUT", body: { ...profile, languages: ["English: Native"], country: "United States" } });
+  await context.route(`${oracleOrigin}/**`, (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: `<!doctype html><title>Education and Experience</title><main>
+        <div class="apply-flow-section" data-section-number="2">
+          <h2 class="apply-flow-block__title"><span>Language Skills</span></h2>
+          <div class="apply-flow-block__form-list" role="region" aria-label="Language Skills " id="languages">
+            <div class="profile-item-list" role="group"><article class="apply-flow-profile-item-tile"><div class="apply-flow-profile-item-tile__summary" data-profile-item-tile="true" role="group" tabindex="0" aria-label="English (United States) ">
+              <div class="apply-flow-profile-item-tile__summary-content"><div class="apply-flow-profile-item-tile__summary-title"><span>English (United States)</span></div></div>
+              <div class="apply-flow-profile-item-tile__actions-container"><button class="apply-flow-profile-item-tile__edit-item-icon" aria-label="Edit"></button></div></div></article></div>
+            <div class="profile-add-item"><button type="button" class="button apply-flow-profile-item-tile__new-tile" id="add-language"><span class="button__label">Add Language</span></button></div>
+          </div>
+        </div>
+      </main><script>
+        window.added = 0;
+        document.getElementById('add-language').addEventListener('click', () => { window.added++; });
+      </script>`,
+    }),
+  );
+  const page = await context.newPage();
+  await page.goto(`${oracleOrigin}/hcmUI/CandidateExperience/en/sites/CX_1/job/1/apply/section/2`);
+  await enqueue([page]);
+  await expect.poll(async () => (await state()).applications[0]?.status, { timeout: 60000 }).toMatch(/^(awaiting-user|ready)$/);
+  expect(await page.evaluate(() => (window as any).added)).toBe(0);
 });
 
 test("an embedded frame that never finishes loading does not hold up tracking or filling", async () => {
@@ -8690,6 +10437,52 @@ test("a forced resume dialog that fills the application is recognized as replaci
   await enqueue([page]);
   const fields: { kind: string; replacesForm?: boolean }[] = (await content(page, { type: "INSPECT" })).data.fields;
   expect(fields.find((field) => field.kind === "file")?.replacesForm).toBe(true);
+});
+
+test("Paylocity's address line is typed, its matching suggestion picked, and a row with no street left empty", async () => {
+  test.setTimeout(180000);
+  // Paylocity's address: Address Line 1 is a text box suggesting
+  // addresses as typed (a combobox naming its "-autocomplete-list"). Opened
+  // as a list, nothing was typed: the line kept the city a résumé parse left
+  // in it, or stayed empty, and City, County, State and ZIP went unfilled.
+  // "Have you worked with us before?" (react-widgets) draws its list inside
+  // itself, and the opened box read as a changed value and was given up.
+  const compiled = await build({ entryPoints: ["tests/browser/paylocity-address-fixture.tsx"], bundle: true, write: false, format: "iife", define: { "process.env.NODE_ENV": '"production"' } });
+  await context.route(`${paylocityOrigin}/**`, (route) => route.fulfill({ contentType: "text/html", body: `<!doctype html><title>Software Intern</title><div id="root"></div><script>${compiled.outputFiles[0].text}</script>` }));
+  await ui({ type: "API", path: "/v1/profile", method: "PUT", body: {
+    ...profile, address: "100 Main St", city: "Blacksburg", state: "VA", postalCode: "24060", county: "Montgomery",
+    answers: [{ question: "Have you worked with us before?", answer: "No" }],
+    work: [
+      { organization: "Example Labs", title: "Developer", country: "United States", address: "200 Oak Ave", city: "Roanoke", state: "VA", postalCode: "24011", county: "Roanoke", startDate: "2025-03", endDate: "" },
+      { organization: "Sample Systems", title: "Intern", country: "United States", city: "Salem", state: "VA", postalCode: "24153", startDate: "2023-06", endDate: "2023-09" },
+    ],
+  } });
+  const page = await context.newPage();
+  await page.goto(`${paylocityOrigin}/Recruiting/Jobs/Apply/address-fixture`);
+  await panel.bringToFront();
+  await enqueue([page]);
+  const box = (id: string) => page.locator(`[id="${id}"]`);
+  await expect(box("public-site-address-address-1")).toHaveValue("100 Main St", { timeout: 60000 });
+  await expect(box("public-site-address-city")).toHaveValue("Blacksburg", { timeout: 30000 });
+  await expect(box("public-site-address-zip")).toHaveValue("24060");
+  await expect(box("public-site-address-county")).toHaveValue("Montgomery", { timeout: 30000 });
+  await expect(page.locator('[id="public-site-address-us-state-select-wrapper"] .input-select-input-single-value')).toHaveText("VA");
+  await expect(box("public-candidate-work-history-address-0-address-1")).toHaveValue("200 Oak Ave", { timeout: 30000 });
+  await expect(box("public-candidate-work-history-address-0-city")).toHaveValue("Roanoke");
+  await expect(box("public-candidate-work-history-address-0-zip")).toHaveValue("24011");
+  await expect(box("public-candidate-work-history-address-0-county")).toHaveValue("Roanoke", { timeout: 30000 });
+  await expect(box("public-candidate-work-history-address-1-city")).toHaveValue("Salem", { timeout: 30000 });
+  await expect(box("public-candidate-work-history-address-1-zip")).toHaveValue("24153");
+  await expect(page.locator('[id="info.haveYouWorkedWithUsBefore"] .rw-input')).toHaveText("No", { timeout: 30000 });
+  await expect.poll(async () => (await state()).applications[0].status, { timeout: 90000 }).toMatch(/^(ready|awaiting-user)$/);
+  // The street was typed into the line and the site's own suggestion for
+  // this address (not the same street in another town) was picked.
+  expect(await page.evaluate(() => (window as unknown as { lookups: string[] }).lookups)).toContain("100 Main St");
+  await expect(box("public-site-address-address-1")).toHaveValue("100 Main St");
+  await expect(box("public-site-address-city")).toHaveValue("Blacksburg");
+  await expect(box("public-candidate-work-history-address-1-address-1")).toHaveValue("");
+  const fields = (await content(page, { type: "INSPECT" })).data.fields;
+  expect(fields.filter((field: { label: string }) => /Address Line 1|City|County|Zip/.test(field.label)).every((field: { protected: boolean }) => !field.protected)).toBe(true);
 });
 
 test("Paylocity Citrus pickers fill each address and keep education values in their own rows", async () => {
@@ -9045,6 +10838,141 @@ test("a SuccessFactors page fills ordinary names, keeps its signature manual and
   await expect(page.locator('[name="custSign"]')).toHaveValue("Manually signed name");
 });
 
+// PACCAR's SuccessFactors application: its plain "* Country:"
+// list loads 100 options a page and United States is on the third, so only
+// a search finds it; "Please tell us how you heard about this position." was
+// not read as the how-did-you-hear question; and the salary box answered
+// "USD 100,000" with "Invalid number.". As captured, with the lists' pages
+// cut short.
+test("a SuccessFactors Country list is searched, how one heard is answered, and a refused salary is given as a number", async () => {
+  await ui({ type: "API", path: "/v1/profile", method: "PUT", body: { ...profile, country: "United States of America", referralSource: [], salary: { min: 100000, currency: "USD", period: "year" } } });
+  await context.route(`${sapsfOrigin}/**`, (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: `<!doctype html><title>Career Opportunities: Apply for Data Analyst Intern (73956)</title><main>
+        <div class="RCMFormField rcmFormElement "><label id="77:" for="73:_input" class="rcmFormFieldLabel"><span class="requiredField" aria-hidden="true" role="presentation">*</span>&nbsp;Country:</label><div class="fieldComponentInput" id="76:_fieldComponentInput"><span id="72:" class="sfCascadingPicklist"><div id="73:_selectContainer" class="paginatedPicklistContainer fd-input-group fd-input-group--compact fd-input-group--control "><input aria-label="Country:" autocomplete="off" type="text" placeholder="No Selection" title="Country:" aria-owns="74:_listSelect" role="combobox" aria-required="true" id="73:_input" class="rcmpaginatedselectinput rcmpaginatedselectitem rcmpaginatedselect_accessible"></div></span></div></div>
+        <div class="RCMFormField rcmFormElement "><label id="100:" for="98:_txtFld" class="rcmFormFieldLabel">What are your salary expectations?</label><div class="fieldComponentInput" id="99:_fieldComponentInput"><div id="98:" class="sfTextFieldCss fd-form-item fd-form-item--compact fd-form-item--horizontal"><input data-testid="sfTextField" name="Currentsal" id="98:_txtFld" class="fd-input fd-input--compact" type="text" maxlength="1024" aria-required="false" aria-describedby="101:"></div><div tabindex="-1" aria-live="assertive" role="alert" id="101:" class="rcmValidationMsgArea"></div></div></div>
+        <div class="RCMFormField rcmFormElement "><label id="188:" for="184:_input" class="rcmFormFieldLabel"><span class="requiredField" aria-hidden="true" role="presentation">*</span>&nbsp;Please tell us how you heard about this position.</label><div class="fieldComponentInput" id="187:_fieldComponentInput"><span id="183:" class="sfCascadingPicklist"><div id="184:_selectContainer" class="paginatedPicklistContainer fd-input-group fd-input-group--compact fd-input-group--control "><input aria-label="Please tell us how you heard about this position." autocomplete="off" type="text" placeholder="No Selection" title="Please tell us how you heard about this position." aria-owns="185:_listSelect" role="combobox" aria-required="true" id="184:_input" class="rcmpaginatedselectinput rcmpaginatedselectitem rcmpaginatedselect_accessible"></div></span></div></div>
+      </main><script>
+        // A paged list: opened empty, only its first page shows; typing
+        // searches every page, about 0.7s later.
+        let searching;
+        const paged = (input, options, firstPage) => {
+          const show = (names) => {
+            document.querySelector('ul.sf-list-select')?.remove();
+            const list = document.createElement('ul');
+            list.className = 'sf-list-select';
+            list.id = input.getAttribute('aria-owns');
+            list.setAttribute('role', 'listbox');
+            for (const name of names) {
+              const item = document.createElement('li');
+              item.setAttribute('role', 'option');
+              item.innerHTML = '<a role="menuitem" title="' + name + '">' + name + '</a>';
+              item.querySelector('a').addEventListener('click', () => { input.value = name; input.dataset.picked = name; list.remove(); input.setAttribute('aria-expanded', 'false'); });
+              list.append(item);
+            }
+            document.body.append(list);
+            input.setAttribute('aria-expanded', 'true');
+          };
+          input.addEventListener('click', () => show(options.slice(0, firstPage)));
+          input.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape') (clearTimeout(searching), document.querySelector('ul.sf-list-select')?.remove(), input.setAttribute('aria-expanded', 'false'));
+          });
+          ['keyup', 'input'].forEach((type) => input.addEventListener(type, (event) => {
+            if (event.key === 'Escape' || !input.value) return;
+            clearTimeout(searching);
+            searching = setTimeout(() => show(options.filter((n) => n.toLowerCase().includes(input.value.toLowerCase()))), 700);
+          }));
+        };
+        paged(document.getElementById('73:_input'), ['No Selection', 'Aaland Islands', 'Afghanistan', 'Albania', 'United Arab Emirates', 'United Kingdom', 'United States', 'United States Minor Outlying Islands'], 4);
+        paged(document.getElementById('184:_input'), ['No Selection', 'Company Website', 'Indeed', 'LinkedIn', 'Other'], 5);
+        // "Invalid number." for anything but digits, as the site checks on blur.
+        const salary = document.getElementById('98:_txtFld');
+        salary.addEventListener('blur', () => {
+          const bad = salary.value !== '' && !/^\\d+$/.test(salary.value);
+          salary.setAttribute('aria-invalid', String(bad));
+          salary.classList.toggle('invalidInput', bad);
+          document.getElementById('101:').textContent = bad ? 'Invalid number.' : '';
+        });
+      </script>`,
+    }),
+  );
+  const page = await context.newPage();
+  await page.goto(`${sapsfOrigin}/portalcareer?_s.crb=fixture`);
+  await enqueue([page]);
+  await expect(page.locator('[id="73:_input"]')).toHaveAttribute("data-picked", "United States", { timeout: 40000 });
+  await expect(page.locator('[id="184:_input"]')).toHaveAttribute("data-picked", "Other", { timeout: 40000 });
+  await expect(page.locator('[name="Currentsal"]')).toHaveValue("100000", { timeout: 40000 });
+  await expect(page.locator('[name="Currentsal"]')).not.toHaveAttribute("aria-invalid", "true");
+  // A later fill, its documents made (no second pass follows), finding the
+  // figure written again and refused ("$100,000", PACCAR's Candidate Profile): retried at once.
+  await expect.poll(async () => (await state()).applications[0].status, { timeout: 40000 }).toMatch(/ready|awaiting-user/);
+  await page.evaluate(() => {
+    const salary = document.querySelector<HTMLInputElement>('[name="Currentsal"]')!;
+    salary.value = "$100,000";
+    salary.dispatchEvent(new Event("blur"));
+  });
+  await expect(page.locator('[name="Currentsal"]')).toHaveAttribute("aria-invalid", "true");
+  await ui({ type: "FILL_STEP", id: (await state()).applications[0].id });
+  await expect(page.locator('[name="Currentsal"]')).toHaveValue("100000", { timeout: 40000 });
+});
+
+// PACCAR's SuccessFactors: an idle session asks "Your session is
+// about to time out." and, unanswered, signs the applicant in again onto
+// their Candidate Profile. The site's own Continue Working is pressed, never
+// Sign Out, and another dialog is left alone.
+test("a SuccessFactors session about to time out is kept open, and other dialogs are left alone", async () => {
+  await context.route(`${sapsfOrigin}/**`, (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: `<!doctype html><title>Career Opportunities: Apply for Analyst Intern (1201)</title><main>
+        <label for="60:_txtFld">* Legal First Name</label><input data-testid="sfTextField" name="firstName" id="60:_txtFld" type="text" aria-required="true">
+      </main><script>
+        window.pressed = [];
+        // Drawn a moment after it is asked for, as the site's timer does.
+        window.showDialog = (title, message, buttons) => setTimeout(() => {
+          const dialog = document.createElement('div');
+          dialog.className = 'sfDialog';
+          dialog.setAttribute('role', 'dialog');
+          dialog.setAttribute('aria-labelledby', 'dlgTitle');
+          dialog.innerHTML = '<h1 id="dlgTitle">' + title + '</h1><p>' + message + '</p>';
+          for (const name of buttons) {
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.textContent = name;
+            button.addEventListener('click', () => { window.pressed.push(name); dialog.remove(); });
+            dialog.append(button);
+          }
+          document.body.append(dialog);
+        }, 800);
+      </script>`,
+    }),
+  );
+  const page = await context.newPage();
+  await page.goto(`${sapsfOrigin}/portalcareer?_s.crb=fixture`);
+  await enqueue([page]);
+  await expect(page.locator('[name="firstName"]')).toHaveValue(profile.firstName, { timeout: 30000 });
+  await expect.poll(async () => (await state()).applications[0].status, { timeout: 30000 }).toMatch(/ready|awaiting-user/);
+  // Another dialog with an OK: not the session's, so not touched.
+  await page.evaluate(() => (window as any).showDialog("Delete document", "Delete this document?", ["OK", "Cancel"]));
+  await expect(page.locator(".sfDialog")).toHaveCount(1);
+  await page.waitForTimeout(2000);
+  await expect(page.locator(".sfDialog")).toHaveCount(1);
+  expect(await page.evaluate(() => (window as any).pressed)).toEqual([]);
+  await page.evaluate(() => document.querySelector(".sfDialog")!.remove());
+  await page.evaluate(() => (window as any).showDialog(
+    "Session Timeout",
+    "Your session is about to time out. Would you like to continue working?",
+    ["Sign Out", "Continue Working"],
+  ));
+  await expect.poll(() => page.evaluate(() => (window as any).pressed), { timeout: 10000 }).toEqual(["Continue Working"]);
+  await expect(page.locator("application-lane-badge")).toHaveAttribute("title", /Kept the site's session open/);
+  // Once ended, the badge says so.
+  await page.evaluate(() => (document.title = "Your session has expired."));
+  await expect(page.locator("application-lane-badge")).toHaveAttribute("title", /^Session expired · Sign in again/, { timeout: 10000 });
+  expect(await page.evaluate(() => (window as any).pressed)).toEqual(["Continue Working"]);
+});
+
 // one employer's SuccessFactors application: its
 // sections open folded behind their title bars, the form read as one
 // Language field, and nothing was filled.
@@ -9069,6 +10997,18 @@ test("a SuccessFactors application's folded sections are opened and filled", asy
             // The section's fields are drawn a moment after it opens.
             setTimeout(() => { bar.closest(".rcmFormSection").querySelector(".rcmSectionComponent").hidden = open; }, 200);
           });
+        // A section drawn only once the one above it is open, and drawn
+        // folded (PACCAR's Language Skills and Geographic Mobility: left for the applicant to open).
+        document.getElementById("147:topBar").addEventListener("click", () => setTimeout(() => {
+          if (document.getElementById("150:section")) return;
+          document.querySelector("main").insertAdjacentHTML("beforeend", '<div id="150:section" class="rcmFormSection row"><h2 class="sectionTitle rcmFormSectionTitle"><button id="150:topBar" class="topBar rcmFormSectionTopBar" aria-expanded="false"><span>Contact Details</span></button></h2><div class="rcmSectionComponent" hidden><label for="70:_txtFld">* Email</label><input data-testid="sfTextField" name="email" id="70:_txtFld" type="email" aria-required="true"></div></div>');
+          const later = document.getElementById("150:topBar");
+          later.addEventListener("click", () => {
+            const open = later.getAttribute("aria-expanded") === "true";
+            later.setAttribute("aria-expanded", String(!open));
+            setTimeout(() => { later.closest(".rcmFormSection").querySelector(".rcmSectionComponent").hidden = open; }, 200);
+          });
+        }, 400));
       </script>`,
     }),
   );
@@ -9077,6 +11017,310 @@ test("a SuccessFactors application's folded sections are opened and filled", asy
   await enqueue([page]);
   await expect(page.locator('[name="firstName"]')).toHaveValue(profile.firstName, { timeout: 30000 });
   await expect(page.locator('[name="lastName"]')).toHaveValue(profile.lastName);
+  await expect(page.locator('[name="email"]')).toHaveValue(profile.email, { timeout: 30000 });
+});
+
+// A whole SuccessFactors application, built as the real ones are (PACCAR's,
+// one employer's, one employer's and WEC's pages to). Each part of
+// it has had its own bug and its own small test above; this checks one fill
+// gets all of them right together. Its sections open folded, and
+// Job-Specific Information is drawn only once Profile Information opens;
+// Country's first page lacks the profile's country, found only by typing;
+// the salary box answers "Invalid number." for anything but digits; the
+// site's resume parser has filled the job rows with its own guesses
+// ("UNSPECIFIED", other titles, the 1st and 30th for dates, its own summary)
+// and writes them again once the resume is uploaded; schools are graded by a
+// "Result" list; a Language Skills row asks Speak, Read and Write; and My
+// Documents has a Resume / CV slot beside Cover Letter and an Additional
+// Documents slot its instructions say other documents go in. Neutral data
+// throughout.
+test("a whole SuccessFactors application is filled right by one fill", async () => {
+  test.setTimeout(420_000);
+  await ui({
+    type: "API",
+    path: "/v1/profile",
+    method: "PUT",
+    body: {
+      ...profile,
+      country: "United States of America",
+      referralSource: [],
+      salary: { min: 100000, currency: "USD", period: "year" },
+      languages: ["English (Native)"],
+      work: [
+        { organization: "Contoso", title: "Data Analyst", location: "Tucson, AZ", details: "Built dashboards for Contoso's operations team.", startDate: "2026-03-27", endDate: "" },
+        { organization: "Northwind Labs", title: "Software Engineering Intern", location: "Lansing, MI", details: "Built REST APIs for Northwind Labs' billing team.", startDate: "2023-06-12", endDate: "2023-09-08" },
+      ],
+      education: [
+        { organization: "Michigan State University", title: "Master of Science", fieldOfStudy: "Data Science", startDate: "2025-08", endDate: "2099-05", location: "", details: "" },
+        { organization: "Penn State University", title: "Bachelor of Science", fieldOfStudy: "Computer Science", startDate: "2020-09", endDate: "2024-05", location: "", details: "" },
+      ],
+    },
+  });
+  let next = 200;
+  const required = '<span class="requiredField" aria-hidden="true" role="presentation">*</span>&nbsp;';
+  const text = (label: string, name: string, value = "", must = true) => {
+    const id = next++;
+    return `<div class="RCMFormField rcmFormElement "><label id="${id}:" for="${id}:_txtFld" class="rcmFormFieldLabel">${must ? required : ""}${label}</label><div class="fieldComponentInput" id="${id}:_fieldComponentInput"><div id="${id}:_txt" class="sfTextFieldCss fd-form-item fd-form-item--compact fd-form-item--horizontal"><input data-testid="sfTextField" name="${name}" id="${id}:_txtFld" class="fd-input fd-input--compact" type="text" maxlength="1024" value="${value}" aria-required="${must}" aria-describedby="${id}:_msg"></div><div tabindex="-1" aria-live="assertive" role="alert" id="${id}:_msg" class="rcmValidationMsgArea"></div></div></div>`;
+  };
+  const area = (label: string, name: string, value = "") => {
+    const id = next++;
+    return `<div class="RCMFormField rcmFormElement "><label id="${id}:" for="${id}:_txtArea" class="rcmFormFieldLabel">${label}</label><div class="fieldComponentInput"><textarea data-testid="sfTextArea" name="${name}" id="${id}:_txtArea" class="fd-textarea" maxlength="4000">${value}</textarea></div></div>`;
+  };
+  // A paginated list: "No Selection" until picked; opened, its first page
+  // shows; typed into, every page is searched about 0.7s later.
+  const list = (label: string, kind: string, options: string[], firstPage = options.length) => {
+    const id = next++;
+    return `<div class="RCMFormField rcmFormElement "><label id="${id}:" for="${id}:_input" class="rcmFormFieldLabel">${required}${label}</label><div class="fieldComponentInput" id="${id}:_fieldComponentInput"><span id="${id}:" class="sfCascadingPicklist"><div id="${id}:_selectContainer" class="paginatedPicklistContainer fd-input-group fd-input-group--compact fd-input-group--control "><input aria-label="${label}" autocomplete="off" type="text" placeholder="No Selection" title="${label}" aria-owns="${id}:_listSelect" aria-expanded="false" role="combobox" aria-required="true" id="${id}:_input" data-options='${JSON.stringify(["No Selection", ...options])}' data-first="${firstPage + 1}" class="rcmpaginatedselectinput rcmpaginatedselectitem rcmpaginatedselect_accessible ${kind}"></div></span></div></div>`;
+  };
+  const date = (label: string, value: string, must = true) =>
+    `<div class="RCMFormField rcmFormElement"><label class="rcmFormFieldLabel">${must ? required : ""}${label}</label><div class="fieldComponentInput"><div class="datePicker"><ui5-date-picker-xweb-calendar-widget accessible-name="${label}" title="${label}" value="${value}"></ui5-date-picker-xweb-calendar-widget></div></div></div>`;
+  const row = (fields: string) => `<div class="layoutWrapper row rcmSectionComponent rowBreak"><div class="leftColumn col-xs-12"><div class="row">${fields}</div></div></div>`;
+  const section = (id: number, title: string, open: boolean, body: string, instruction = "") =>
+    `<div id="${id}:section" class="rcmFormSection row"><h2 class="sectionTitle rcmFormSectionTitle"><button id="${id}:topBar" class="topBar rcmFormSectionTopBar" aria-expanded="${open}"><span>${title}</span></button></h2>${instruction ? `<div class="sectionInstructionTxt">${instruction}</div>` : ""}<div role="group" class="sectionContent" id="${id}:_content"${open ? "" : " hidden"}>${body}</div></div>`;
+  const slot = (id: number, label: string, prompt: string) =>
+    `<div class="RCMFormField rcmFormElement attachmentField"><label id="${id}:" class="rcmFormFieldLabel">${label}</label><div class="attachmentComponentInput" id="${id}:_fieldComponentInput"><div id="${id}:_attachWrapper" class="attachWrapper"><div class="attachmentBtn"><div class="attachmentLabel attachmentText"><span>${prompt}</span></div><div class="attachActions"><span tabindex="0" role="button" id="${id}:_attachIcon" class="glyphicon glyphicon-plus-sign addAttachments"></span></div></div></div></div></div>`;
+  // What the site's resume parser made of the jobs and schools.
+  const parsedJobs = [
+    { company: "UNSPECIFIED", title: "Lab Assistant", location: "UNSPECIFIED", summary: "Responsible for various duties.", start: "03/01/2026", end: "04/30/2026" },
+    { company: "Northwind", title: "Intern", location: "UNSPECIFIED", summary: "Worked on projects.", start: "06/01/2023", end: "09/30/2023" },
+  ];
+  const levels = ["Basic", "Intermediate", "Advanced", "Native"];
+  // A folded section holds nothing until opened: its body is drawn then.
+  const bodies: Record<number, string> = {
+    140: text("First Name", "firstName") + text("Last Name", "lastName") + text("Email Address", "email")
+      + list("Country:", "sfCountry", ["Aaland Islands", "Afghanistan", "Albania", "Algeria", "United Arab Emirates", "United Kingdom", "United States", "United States Minor Outlying Islands"], 4),
+    150: text("What are your salary expectations?", "Currentsal", "", false)
+      + list("Please tell us how you heard about this position.", "howHeard", ["Company Website", "Indeed", "LinkedIn", "Other"]),
+    160: parsedJobs.map((job) => row(text("Company", "company", job.company) + text("Title", "jobTitle", job.title) + text("Location", "jobLocation", job.location, false)
+      + area("Summary of Work Performed", "summary", job.summary) + date("Start Date", job.start) + date("End Date", job.end, false))).join(""),
+    170: [["MICHIGAN STATE", "UNSPECIFIED"], ["UNSPECIFIED", "Bachelor"]].map(([school, degree]) =>
+      row(text("School Name", "school", school) + text("Degree", "degree", degree) + list("Result", "result", ["Did Not Complete", "Graduated", "In Progress"]))).join(""),
+    180: row(list("Language", "language", ["Chinese", "English", "French", "German", "Spanish"]) + list("Speak", "speak", levels) + list("Read", "read", levels) + list("Write", "write", levels)),
+  };
+  await context.route(`${sapsfOrigin}/**`, (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      // Nothing but folded sections and upload slots: the fill still goes on.
+      body: `<!doctype html><title>Career Opportunities: Apply for Data Analyst Intern at Acme (73950)</title><main id="rmkContent">
+        ${section(130, "My Documents", true, slot(51, "Resume / CV", "Upload a Resume") + slot(53, "Cover Letter", "Attach a Cover Letter") + slot(55, "Additional Documents:", "Attach Additional Documents"),
+          "Please attach your resume. Any other documents, such as transcripts, may be attached under Additional Documents.")}
+        ${section(140, "Profile Information", false, "")}
+        ${section(160, "Previous Employment", false, "")}
+        ${section(170, "Formal Education", false, "")}
+        ${section(180, "Language Skills", false, "")}
+      </main><script>
+        const bodies = ${JSON.stringify(bodies)};
+        const parsedJobs = ${JSON.stringify(parsedJobs)};
+        // A UI5 date picker: the value lives on the component, shown in an
+        // input behind two shadow roots.
+        customElements.define('ui5-datetime-input-xweb-calendar-widget', class extends HTMLElement {
+          constructor() { super(); this.attachShadow({ mode: 'open' }).innerHTML = '<input class="ui5-input-inner" type="text">'; }
+        });
+        customElements.define('ui5-date-picker-xweb-calendar-widget', class extends HTMLElement {
+          constructor() { super(); this.attachShadow({ mode: 'open' }).innerHTML = '<ui5-datetime-input-xweb-calendar-widget></ui5-datetime-input-xweb-calendar-widget>'; this._value = this.getAttribute('value') || ''; }
+          connectedCallback() { this.show(); }
+          show() { this.shadowRoot.querySelector('ui5-datetime-input-xweb-calendar-widget').shadowRoot.querySelector('input').value = this._value; }
+          get value() { return this._value; }
+          set value(v) { this._value = v; this.setAttribute('value', v); }
+        });
+        const paged = (input) => {
+          const options = JSON.parse(input.dataset.options);
+          const first = Number(input.dataset.first);
+          let searching;
+          const close = () => { clearTimeout(searching); document.getElementById(input.getAttribute('aria-owns'))?.remove(); input.setAttribute('aria-expanded', 'false'); };
+          const show = (names) => {
+            document.querySelectorAll('ul.sf-list-select').forEach((open) => open.remove());
+            const list = document.createElement('ul');
+            list.className = 'sf-list-select';
+            list.id = input.getAttribute('aria-owns');
+            list.setAttribute('role', 'listbox');
+            for (const name of names) {
+              const item = document.createElement('li');
+              item.setAttribute('role', 'option');
+              item.innerHTML = '<a role="menuitem" title="' + name + '">' + name + '</a>';
+              item.querySelector('a').addEventListener('click', () => {
+                input.value = name === 'No Selection' ? '' : name;
+                input.title = input.value || input.getAttribute('aria-label');
+                input.dataset.picked = name;
+                close();
+              });
+              list.append(item);
+            }
+            document.body.append(list);
+            input.setAttribute('aria-expanded', 'true');
+          };
+          input.addEventListener('click', () => setTimeout(() => show(options.slice(0, first)), 150));
+          input.addEventListener('keydown', (event) => { if (event.key === 'Escape') close(); });
+          ['keyup', 'input'].forEach((type) => input.addEventListener(type, (event) => {
+            if (event.key === 'Escape' || !input.value) return;
+            clearTimeout(searching);
+            searching = setTimeout(() => show(options.filter((n) => n.toLowerCase().includes(input.value.toLowerCase()))), 700);
+          }));
+        };
+        const wire = (root) => {
+          root.querySelectorAll('.rcmpaginatedselectinput').forEach(paged);
+          // "Invalid number." for anything but digits, as the site checks on blur.
+          root.querySelectorAll('[name="Currentsal"]').forEach((salary) => salary.addEventListener('blur', () => {
+            const bad = salary.value !== '' && !/^\\d+$/.test(salary.value);
+            salary.setAttribute('aria-invalid', String(bad));
+            salary.classList.toggle('invalidInput', bad);
+            document.getElementById(salary.getAttribute('aria-describedby')).textContent = bad ? 'Invalid number.' : '';
+          }));
+        };
+        const fold = (bar) => bar.addEventListener('click', () => {
+          const open = bar.getAttribute('aria-expanded') === 'true';
+          bar.setAttribute('aria-expanded', String(!open));
+          const id = bar.id.split(':')[0];
+          const content = document.getElementById(id + ':_content');
+          // Drawn a moment after the section opens.
+          setTimeout(() => {
+            if (!open && !content.dataset.drawn && bodies[id]) {
+              content.dataset.drawn = 'true';
+              content.innerHTML = bodies[id];
+              wire(content);
+              // Job-Specific Information is drawn, folded, only once Profile
+              // Information has opened.
+              if (id === '140') setTimeout(() => {
+                document.getElementById('140:section').insertAdjacentHTML('afterend', ${JSON.stringify(section(150, "Job-Specific Information", false, ""))});
+                fold(document.getElementById('150:topBar'));
+              }, 400);
+            }
+            content.hidden = open;
+          }, 200);
+        });
+        document.querySelectorAll('.rcmFormSectionTopBar').forEach(fold);
+        // A resume saved, the site parses it and writes its guesses into the
+        // job rows again.
+        const parse = () => {
+          window.parsed = (window.parsed || 0) + 1;
+          document.querySelectorAll('[id="160:_content"] .rcmSectionComponent').forEach((row, i) => {
+            const job = parsedJobs[i];
+            row.querySelector('[name="company"]').value = job.company;
+            row.querySelector('[name="jobTitle"]').value = job.title;
+            row.querySelector('[name="jobLocation"]').value = job.location;
+            row.querySelector('[name="summary"]').value = job.summary;
+            const [start, end] = row.querySelectorAll('ui5-date-picker-xweb-calendar-widget');
+            start.value = job.start; start.show();
+            end.value = job.end; end.show();
+          });
+        };
+        // Each slot's + opens the site's chooser ("Upload from Device" over a
+        // file input named fileData1; choosing a file uploads it). An uploaded
+        // file shows its name, today's date and a trash button, whose "Are you
+        // sure" dialog deletes it.
+        window.uploads = [];
+        window.removed = 0;
+        const now = new Date();
+        const pad = (n) => String(n).padStart(2, '0');
+        const stamp = '(' + pad(now.getMonth() + 1) + '/' + pad(now.getDate()) + '/' + now.getFullYear() + ')';
+        const slots = { 51: 'resume', 53: 'cover', 55: 'additional' };
+        const attach = (id) => {
+          const wrapper = document.getElementById(id + ':_attachWrapper');
+          const empty = wrapper.innerHTML;
+          wrapper.querySelector('.addAttachments').addEventListener('click', () => setTimeout(() => {
+            const dialog = document.createElement('div');
+            dialog.className = 'sfPanelComponent';
+            dialog.setAttribute('role', 'dialog');
+            dialog.setAttribute('aria-label', 'Select a source for your file upload');
+            dialog.innerHTML = '<span class="attachmentLabel"><span>Upload from Device</span><br><input tabindex="0" type="file" class="fileUpload" name="fileData1"></span>';
+            document.body.append(dialog);
+            const input = dialog.querySelector('input');
+            input.addEventListener('change', () => {
+              const name = input.files[0]?.name || '';
+              window.uploads.push({ slot: slots[id], name });
+              if (slots[id] === 'resume') window.rowsAtUpload = [...document.querySelectorAll('[name="company"]')].map((box) => box.value);
+              dialog.remove();
+              setTimeout(() => {
+                wrapper.innerHTML = '<div id="' + id + ':_attach" class="successBtn" style="display:inline-block;"><div role="button" class="attachmentLabel attachmentText"><span>' + name + '</span><span class="attachmentLastModified">' + stamp + '</span></div><div class="attachActions"><span tabindex="0" role="button" class="glyphicon glyphicon-trash removeAttachments"></span></div></div>';
+                wrapper.querySelector('.removeAttachments').addEventListener('click', () => setTimeout(() => {
+                  const confirm = document.createElement('div');
+                  confirm.setAttribute('role', 'dialog');
+                  confirm.className = 'dialogBoxWrapper fd-dialog';
+                  confirm.innerHTML = '<h1>Confirm</h1><p>Are you sure you want to delete this document?</p><button type="button" name="Cancel">Cancel</button><button type="button" name="OK">OK</button>';
+                  document.body.append(confirm);
+                  confirm.querySelector('[name="Cancel"]').addEventListener('click', () => confirm.remove());
+                  confirm.querySelector('[name="OK"]').addEventListener('click', () => {
+                    confirm.remove();
+                    window.removed++;
+                    wrapper.innerHTML = empty;
+                    attach(id);
+                  });
+                }, 300));
+                if (slots[id] === 'resume') setTimeout(parse, 800);
+              }, 400);
+            });
+          }, 300));
+        };
+        Object.keys(slots).forEach(attach);
+      </script>`,
+    }),
+  );
+  const page = await context.newPage();
+  await page.goto(`${sapsfOrigin}/portalcareer?company=acme&career_job_req_id=73950`);
+  await enqueue([page]);
+  const settled = async () => {
+    await page.waitForTimeout(2000);
+    await expect.poll(async () => (await state()).applications[0].status, { timeout: 240_000 }).toMatch(/^(ready|awaiting-user)$/);
+  };
+  type Window = { uploads: { slot: string; name: string }[]; removed: number; rowsAtUpload?: string[] };
+  const each = async (selector: string, values: string[], attribute?: string) => {
+    for (const [i, value] of values.entries()) {
+      const target = page.locator(selector).nth(i);
+      if (attribute) await expect(target, `${selector} ${i}`).toHaveAttribute(attribute, value, { timeout: 1000 });
+      else await expect(target, `${selector} ${i}`).toHaveValue(value, { timeout: 1000 });
+    }
+  };
+  // Everything a correct fill leaves, checked after each fill.
+  const check = async () => {
+    // Each folded section, the one drawn late too, was opened and filled.
+    await each('[name="firstName"]', ["Alex"]);
+    await each('[name="lastName"]', ["Rivera"]);
+    await each('[name="email"]', [profile.email!]);
+    await each(".sfCountry", ["United States"], "data-picked");
+    await each(".howHeard", ["Other"], "data-picked");
+    await each('[name="Currentsal"]', ["100000"]);
+    await expect(page.locator('[name="Currentsal"]'), "salary refused").not.toHaveAttribute("aria-invalid", "true", { timeout: 1000 });
+    // The profile's jobs over the parser's guesses, with its own dates: a
+    // current job's End Date emptied.
+    await each('[name="company"]', ["Contoso", "Northwind Labs"]);
+    await each('[name="jobTitle"]', ["Data Analyst", "Software Engineering Intern"]);
+    await each('[name="jobLocation"]', ["Tucson, AZ", "Lansing, MI"]);
+    await each('[name="summary"]', ["Built dashboards for Contoso's operations team.", "Built REST APIs for Northwind Labs' billing team."]);
+    await each('ui5-date-picker-xweb-calendar-widget[accessible-name="Start Date"]', ["03/27/2026", "06/12/2023"], "value");
+    await each('ui5-date-picker-xweb-calendar-widget[accessible-name="End Date"]', ["", "09/08/2023"], "value");
+    // Schools, each Result by its end date; the language row.
+    await each('[name="school"]', ["Michigan State University", "Penn State University"]);
+    await each('[name="degree"]', ["Master of Science", "Bachelor of Science"]);
+    await each(".result", ["In Progress", "Graduated"], "data-picked");
+    await each(".language", ["English"], "data-picked");
+    for (const skill of [".speak", ".read", ".write"]) await each(skill, ["Native"], "data-picked");
+    // The resume in Resume / CV, once, and never in Additional Documents;
+    // nothing attached removed; no list left open.
+    const { uploads, removed } = await page.evaluate(() => ({ uploads: (window as unknown as Window).uploads, removed: (window as unknown as Window).removed }));
+    expect(uploads.filter((upload) => upload.slot === "resume"), "resume uploads").toEqual([{ slot: "resume", name: expect.stringMatching(/resume.*\.pdf$/i) }]);
+    expect(uploads.filter((upload) => upload.slot === "additional"), "additional uploads").toEqual([]);
+    expect(uploads.filter((upload) => upload.slot === "cover").every((upload) => /cover/i.test(upload.name)), "cover letter slot").toBe(true);
+    expect(removed, "removed").toBe(0);
+    await expect(page.locator("ul.sf-list-select"), "open lists").toHaveCount(0, { timeout: 1000 });
+    // Expected once a value the fill writes again after the site's own
+    // rewrite drops its warning: today each job field the parser wrote over
+    // stays listed as "Site changed an autofilled value … Please verify it",
+    // though the fill has since put the profile's value back.
+    expect.soft((await state()).applications[0].missing.filter((note) => /^Site changed an autofilled value/.test(note)), "stale site-change warnings").toEqual([]);
+  };
+  await settled();
+  await check();
+  // Expected once SuccessFactors uploads the resume first (in flight): its
+  // parse then writes its guesses before any row is typed. Today the rows are
+  // typed, the upload's parse writes over them, and a later pass of the same
+  // fill types them again: the end state above is right, each job field
+  // written twice.
+  expect.soft(await page.evaluate(() => (window as unknown as Window).rowsAtUpload), "job rows typed before the resume upload").not.toContain("Contoso");
+  // A second fill, as the applicant would run one before submitting: it
+  // changes nothing that is right, attaches nothing again and removes nothing.
+  await ui({ type: "FILL_STEP", id: (await state()).applications[0].id });
+  await settled();
+  await check();
 });
 
 test("a race option named by its question, escaped markup and a definition is chosen by its group", async () => {
@@ -9463,6 +11707,35 @@ test("Lever's self-identification date is filled with today's date", async () =>
   await page.close();
 });
 
+// one employer's Lever form: "Which school do you
+// attend?" is a Select2 over a select of 2,966 schools, its visible
+// selection only the placeholder. Read as that placeholder, the school was
+// never matched; past the first 300 options, it must still be found.
+test("Lever's Select2 school picker is read as its question and given the school", async () => {
+  await ui({ type: "API", path: "/v1/profile", method: "PUT", body: { ...profile, education: [{ organization: "Virginia Tech", title: "Master of Science", fieldOfStudy: "Data Science", startDate: "2025-08", endDate: "2027-05", location: "", details: "" }] } });
+  const form = "https://jobs.lever.co/schoolco/85c6aec7-8da2-445d-9c4d-812365dbce97/apply";
+  const schools = [...Array.from({ length: 400 }, (_, i) => `Example University ${i + 1} `), "Virginia Polytechnic Institute and State University ", "Wake Forest University "];
+  await context.route(form, (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: `<!doctype html><title>School Co - Data Science Intern</title><form class="application-form"><ul>
+        <li class="application-question"><label><div class="application-label">Full name<span class="required">✱</span></div><div class="application-field"><input type="text" name="name" required></div></label></li>
+        <li class="application-question custom-question"><div><div class="application-label full-width university"><div class="text">Which school do you attend?<span class="required">✱</span></div></div><div class="application-field full-width required-field"><div class="application-university"><select data-qa="university-dropdown" name="cards[a2372ae3-9a0f-4019-9829-c498361f9ca1][field1]" id="university-picker-a2372ae3-9a0f-4019-9829-c498361f9ca1-1" style="width: 100%" data-allow-clear="false" data-placeholder="Select a university or college" required="" tabindex="-1" class="select2-hidden-accessible" aria-hidden="true"><option></option>${schools.map((school) => `<option value="${school}">${school}</option>`).join("")}</select><span class="select2 select2-container select2-container--default select2-container--below" dir="ltr" style="width: 100%;"><span class="selection"><span class="select2-selection select2-selection--single" role="combobox" aria-autocomplete="list" aria-haspopup="true" aria-expanded="false" tabindex="0" aria-labelledby="select2-university-picker-a2372ae3-9a0f-4019-9829-c498361f9ca1-1-container"><span class="select2-selection__rendered" id="select2-university-picker-a2372ae3-9a0f-4019-9829-c498361f9ca1-1-container"><span class="select2-selection__placeholder">Select a university or college</span></span><span class="select2-selection__arrow" role="presentation"><b role="presentation"></b></span></span></span><span class="dropdown-wrapper" aria-hidden="true"></span></span></div></div></div></li>
+      </ul></form>`,
+    }),
+  );
+  const page = await context.newPage();
+  await page.goto(form);
+  const tabId = await panel.evaluate(
+    async (url) => (await chrome.tabs.query({})).find((tab) => tab.url === url)!.id!,
+    page.url(),
+  );
+  await ui({ type: "TRACK_TAB", tabId });
+  await ui({ type: "FILL_STEP", id: (await state()).applications[0].id, tabId });
+  await expect(page.locator("#university-picker-a2372ae3-9a0f-4019-9829-c498361f9ca1-1")).toHaveValue("Virginia Polytechnic Institute and State University ", { timeout: 25000 });
+  await page.close();
+});
+
 test("an Apply with LinkedIn widget does not stop the fill of the form around it", async () => {
   // As one employer's Lever form (issue report): the widget is a
   // linkedin.com frame the extension can read. It is never a fill target,
@@ -9540,7 +11813,7 @@ test("a modal apply box is the whole form, and LinkedIn's radio questions are re
 });
 
 test("a cookie notice that calls itself a modal dialog does not hide the form behind it", async () => {
-  // As Pinpoint's application page (nightly eval): a notice in
+  // As Pinpoint's application page (eval): a notice in
   // the corner and its preferences box, kept in the page invisible, both
   // role=dialog aria-modal=true. Nothing behind them was read.
   await context.route(`${origin}/cookie-modal`, (route) =>
@@ -10107,6 +12380,32 @@ test("Ashby single-control question titles identify remote fields without crossi
   expect(await page.evaluate(() => (window as any).submissions)).toBe(0);
 });
 
+test("answers a resume upload empties are answered again once the site settles", async () => {
+  // Microsoft's careers form: its resume_upload returns and the page blanks
+  // the typed Address and Postal Code/Zip.
+  await ui({ type: "API", path: "/v1/profile", method: "PUT", body: { ...profile, state: "Arizona", address: "100 Test Way", postalCode: "85001" } });
+  await context.route(`${origin}/parsed-upload`, (route) => route.fulfill({ contentType: "text/html", body: `<!doctype html><form>
+    <label for="Contact_Information_q_address">Address</label><input id="Contact_Information_q_address" autocomplete="one-time-code" aria-required="true">
+    <label for="Contact_Information_q_zip">Postal Code/Zip</label><input id="Contact_Information_q_zip" autocomplete="one-time-code" aria-required="true">
+    <label>Upload your resume<input type="file" accept=".pdf,.doc,.docx,.txt,.rtf"></label>
+    <button type="submit">Submit</button></form><script>
+      window.cleared=0;
+      document.querySelector('input[type=file]').addEventListener('change', () => setTimeout(() => {
+        for (const id of ['Contact_Information_q_address','Contact_Information_q_zip']) {
+          const input = document.getElementById(id); input.value = ''; input.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+        window.cleared++;
+      }, 1500));
+    </script>` }));
+  const page = await context.newPage();
+  await page.goto(`${origin}/parsed-upload`);
+  await enqueue([page]);
+  await expect.poll(async () => (await state()).applications[0]?.status, { timeout: 60000 }).toMatch(/^(ready|awaiting-user)$/);
+  expect(await page.evaluate(() => (window as any).cleared)).toBe(1);
+  await expect(page.locator("#Contact_Information_q_address")).toHaveValue("100 Test Way");
+  await expect(page.locator("#Contact_Information_q_zip")).toHaveValue("85001");
+});
+
 test("an explicit location-address helper fills confirmed location without replacing a real applicant edit", async () => {
   await ui({ type: "API", path: "/v1/profile", method: "PUT", body: { ...profile, state: "Arizona", address: "100 Test Way" } });
   await context.route(`${origin}/location-address`, (route) => route.fulfill({ contentType: "text/html", body: `<!doctype html><form>
@@ -10236,7 +12535,7 @@ test("ADP keeps selected dropdown answers when their filter boxes are empty", as
 });
 
 test("a location search that finds nothing is closed, so the rest of the form stays visible", async () => {
-  // As Talos's Ashby form in the nightly replay: the search
+  // As Talos's Ashby form in an eval replay: the search
   // answers "No results", and while its list is open the site hides every
   // other field from assistive technology (aria-hidden), so the next look
   // at the form found two fields and attached nothing.
@@ -10450,6 +12749,76 @@ test("SuccessFactors uploads the resume through its dialog and fills rows it add
   // Each row's start date, set on the UI5 component.
   await expect(page.locator("ui5-date-picker-xweb-calendar-widget").nth(0)).toHaveAttribute("value", "03/01/2026");
   await expect(page.locator("ui5-date-picker-xweb-calendar-widget").nth(1)).toHaveAttribute("value", "06/01/2023");
+});
+
+// PACCAR's SuccessFactors: the site parses an uploaded resume
+// and writes what it read over the form ("UNSPECIFIED" as a company). The
+// resume goes up first and alone, and the profile's values are written once
+// the parse has settled, in the one requested fill.
+test("SuccessFactors gets the resume first and the profile's values after its parse", async () => {
+  test.setTimeout(120000);
+  await ui({ type: "API", path: "/v1/profile", method: "PUT", body: { ...profile, currentCompany: "Contoso", city: "Phoenix" } });
+  await context.route(`${sapsfOrigin}/**`, (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: `<!doctype html><title>Career Opportunities: Apply for Data Analyst (4242)</title><main>
+        <div class="RCMFormField rcmFormElement attachmentField"><label class="rcmFormFieldLabel">Resume</label>
+          <div class="attachmentComponentInput attachWrapper"><div class="attachmentLabel attachmentText"><span>Upload a Resume</span></div>
+            <div class="attachActions"><span role="button" id="51:_attachIcon" class="glyphicon glyphicon-plus-sign addAttachments"></span></div></div></div>
+        <div class="RCMFormField"><label class="rcmFormFieldLabel" for="company">Current Company</label>
+          <div class="fieldComponentInput"><input type="text" id="company" name="company"></div></div>
+        <div class="RCMFormField"><label class="rcmFormFieldLabel" for="city">City</label>
+          <div class="fieldComponentInput"><input type="text" id="city" name="city"></div></div>
+      </main><script>
+        window.uploaded = [];
+        const company = document.getElementById('company');
+        // The first time the profile's value is in the box.
+        ['input', 'change', 'blur'].forEach((type) => company.addEventListener(type, () => {
+          if (company.value === 'Contoso' && !window.writtenAt) window.writtenAt = Date.now();
+        }));
+        document.getElementById('51:_attachIcon').addEventListener('click', () => setTimeout(() => {
+          const panel = document.createElement('div');
+          panel.className = 'sfPanelComponent';
+          panel.innerHTML = '<span class="panelHeaderTitle" title="Upload Resume">Upload Resume</span><input type="file" name="fileData"><button type="button" title="Upload">Upload</button>';
+          document.body.append(panel);
+          panel.querySelector('button').addEventListener('click', () => {
+            window.uploaded.push(panel.querySelector('input').files[0]?.name || '');
+            window.uploadedAt = Date.now();
+            panel.remove();
+            const now = new Date();
+            const day = '(' + String(now.getMonth() + 1).padStart(2, '0') + '/' + String(now.getDate()).padStart(2, '0') + '/' + now.getFullYear() + ')';
+            document.querySelector('.attachmentText span').textContent = 'Acme_Resume.pdf';
+            document.querySelector('.attachActions').innerHTML = '<span class="attachmentLastModified">' + day + '</span><span role="button" class="removeAttachments"></span>';
+            // The site's parser writes what it read, a moment later.
+            setTimeout(() => {
+              company.value = 'UNSPECIFIED';
+              company.dispatchEvent(new Event('change', { bubbles: true }));
+              window.parsedAt = Date.now();
+            }, 1500);
+          });
+        }, 300));
+      </script>`,
+    }),
+  );
+  const page = await context.newPage();
+  await page.goto(`${sapsfOrigin}/portalcareer?company=fixture`);
+  await enqueue([page]);
+  await expect.poll(() => page.evaluate(() => (window as any).uploaded), { timeout: 60000 }).toEqual([
+    expect.stringMatching(/resume.*\.pdf$/i),
+  ]);
+  await expect(page.locator("#company")).toHaveValue("Contoso", { timeout: 60000 });
+  await expect
+    .poll(async () => (await state()).applications[0].status, { timeout: 60000 })
+    .toMatch(/^(ready|awaiting-user)$/);
+  await page.waitForTimeout(2000);
+  await expect(page.locator("#company")).toHaveValue("Contoso");
+  await expect(page.locator("#city")).toHaveValue("Phoenix");
+  const times = await page.evaluate(() => ({ uploadedAt: (window as any).uploadedAt, parsedAt: (window as any).parsedAt, writtenAt: (window as any).writtenAt }));
+  // Nothing of the profile's was written before the resume went up and was
+  // read; the resume went up once.
+  expect(times.writtenAt).toBeGreaterThan(times.uploadedAt);
+  expect(times.writtenAt).toBeGreaterThan(times.parsedAt);
+  expect(await page.evaluate(() => (window as any).uploaded)).toHaveLength(1);
 });
 
 // one employer's SuccessFactors form titles
@@ -11217,6 +13586,31 @@ test("a Workday questionnaire date's parts carry their question", async () => {
   expect(labels).toEqual(["What is your first available start date?: Month", "What is your first available start date?: Day", "What is your first available start date?: Year"]);
 });
 
+// International's iCIMS form: a date's Month,
+// Day and Year and the salary's Amount sit under one line of text in their
+// table cell and were read only as their parts.
+test("an iCIMS date's and salary's boxes carry the text above them", async () => {
+  const months = ["Jan", "Feb", "Mar"].map((month) => `<option>${month}</option>`).join("");
+  await context.route(`${atsOrigins[0]}/**`, (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: `<!doctype html><title>Application</title><main><table><tr><td colspan="9"><span>Date Available to Start<br><span><div class="iCIMS_Forms_DateOnlyField iCIMS_Table"><div class="iCIMS_TableRow">
+        <div><label for="a_Month">Month</label><select id="a_Month" name="a_Month">${months}</select></div>
+        <div><label for="a_Date">Day</label><select id="a_Date" name="a_Date"><option>1</option><option>2</option></select></div>
+        <div><label for="a_Year">Year</label><input type="text" id="a_Year" name="a_Year"></div></div></div></span></span></td></tr>
+        <tr><td colspan="9"><span>Desired Salary<br><span><div class="iCIMS_Forms_SalaryField iCIMS_Table"><div class="iCIMS_TableRow">
+        <div><label for="s_Currency">Currency</label><select id="s_Currency" name="s_Currency"><option>USD $</option></select></div>
+        <div><label for="s_Amount">Amount (Numbers only)</label><input type="text" id="s_Amount" name="s_Amount"></div></div></div></span></span></td></tr></table></main>`,
+    }),
+  );
+  const page = await context.newPage();
+  await page.goto(`${atsOrigins[0]}/jobs/1/engineer/form`);
+  await panel.bringToFront();
+  const tabId = await panel.evaluate(async (url) => (await chrome.tabs.query({})).find((tab) => tab.url === url)!.id!, page.url());
+  const labels = ((await ui({ type: "SCAN_TAB", tabId })).observation.fields as { label: string }[]).map((field) => field.label);
+  expect(labels).toEqual(["Date Available to Start: Month", "Date Available to Start: Day", "Date Available to Start: Year", "Currency", "Desired Salary: Amount (Numbers only)"]);
+});
+
 // one employer's Workday: Phone Device Type had no
 // exact option for "Mobile", and the list opened for it stayed over the form.
 test("a Workday list opened for an answer it does not hold is closed again", async () => {
@@ -11378,10 +13772,19 @@ test("Tesla's start date is picked from its calendar as today", async () => {
           const button = document.createElement("button");
           button.type = "button";
           button.innerHTML = "<span>" + day + "</span>";
-          button.addEventListener("click", () => { document.getElementById("start").value = now.toLocaleString("en-US", { month: "long" }) + " " + day + ", " + now.getFullYear(); });
+          // Tesla's calendar: the selected day clicked again clears the date.
+          button.addEventListener("click", () => {
+            const input = document.getElementById("start");
+            const wasSelected = button.classList.contains("tds-day--selected");
+            grid.querySelectorAll("button").forEach((other) => other.classList.remove("tds-day--selected"));
+            if (wasSelected) { input.value = ""; return; }
+            button.classList.add("tds-day--selected");
+            input.value = now.toLocaleString("en-US", { month: "long" }) + " " + day + ", " + now.getFullYear();
+          });
           grid.append(button);
         }
         document.getElementById("open").addEventListener("click", () => { document.getElementById("calendar").hidden = false; });
+        if (location.search.includes("kept")) grid.querySelectorAll("button")[now.getDate() - 1].click();
       </script>`,
     }),
   );
@@ -11395,6 +13798,64 @@ test("Tesla's start date is picked from its calendar as today", async () => {
   const tabId = await panel.evaluate(async (url) => (await chrome.tabs.query({})).find((tab) => tab.url === url)!.id!, page.url());
   const fields = (await ui({ type: "SCAN_TAB", tabId })).observation.fields as { label: string; kind: string }[];
   expect(fields.find((field) => field.label === "When are you available to start an internship?")?.kind).toBe("datepicker");
+  // A page that already holds the date (kept between steps) keeps it: the
+  // calendar is not opened again, where clicking the chosen day cleared it.
+  const kept = await context.newPage();
+  await kept.goto(`${teslaOrigin}/careers/search/job/apply/287983?kept=1`);
+  await enqueue([kept]);
+  await expect.poll(async () => (await state()).applications.find((app: { url: string }) => app.url.includes("287983"))?.status, { timeout: 45000 }).toMatch(/ready|awaiting-user/);
+  await expect(kept.locator("#start")).toHaveValue(`${today.toLocaleString("en-US", { month: "long" })} ${today.getDate()}, ${today.getFullYear()}`);
+});
+
+// Tesla's "If you are a current university student, please provide your
+// anticipated graduation date?": a read-only box
+// set only from its calendar, left with only its placeholder, today's date.
+// As captured: the month between buttons named for the months around it.
+test("Tesla's graduation date is picked from its calendar, month by month", async () => {
+  const graduating = new Date().getFullYear() + 1;
+  await ui({ type: "API", path: "/v1/profile", method: "PUT", body: { ...profile, education: [{ organization: "Virginia Tech", title: "Master of Science", fieldOfStudy: "Data Science", startDate: "2025-08", endDate: `${graduating}-05-10`, location: "", details: "" }],
+    // Graduating a term later for internships: this is one.
+    roleOverrides: [{ name: "Internships & co-ops", titleWords: ["intern", "internship", "co-op"], education: [{ index: 0, endDate: `${graduating}-12-13` }] }] } });
+  await context.route(`${teslaOrigin}/careers/**`, (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: `<!doctype html><title>Internship Application</title><form class="job-application-form" onsubmit="return false"><label>Email<input name="personal.email" type="email"></label>
+        <div class="tds-form-item" variant="date"><label class="tds-form-label" for="grad">If you are a current university student, please provide your anticipated graduation date?</label><div class="tds-form-input tds-form-input--default"><input class="tds-form-input-text tds-form-input-date" id="grad" name="legal.legalUniversityAnticipatedGraduationDate" readonly="" placeholder="November 9, 2026"><div class="tds-form-input-trailing"><button class="tds-icon-btn" type="button">Calendar</button></div><div class="tds-tooltip tds-tooltip--closed tds-date-picker-tooltip" role="tooltip"><div class="tds-date-picker tds-density--dense"><div aria-label="Use left or right arrow keys to increment the month" class="tds-date-picker-month" tabindex="0"><button tabindex="-1" type="button">‹</button><label aria-live="polite"></label><button tabindex="-1" type="button">›</button></div><div aria-label="Use arrow keys to increment the date" class="tds-date-picker-days-grid"></div></div></div></div></div>
+      </form><script>
+        const names = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+        const input = document.getElementById("grad");
+        const tooltip = document.querySelector(".tds-tooltip");
+        let shown = new Date(); shown.setDate(1);
+        const draw = () => {
+          const [before, label, after] = document.querySelector(".tds-date-picker-month").children;
+          const prev = new Date(shown.getFullYear(), shown.getMonth() - 1, 1), next = new Date(shown.getFullYear(), shown.getMonth() + 1, 1);
+          label.textContent = names[shown.getMonth()] + " " + shown.getFullYear();
+          before.setAttribute("aria-label", names[prev.getMonth()] + " " + prev.getFullYear());
+          after.setAttribute("aria-label", names[next.getMonth()] + " " + next.getFullYear());
+          const grid = document.querySelector(".tds-date-picker-days-grid");
+          grid.innerHTML = "";
+          // The last days of the month before, as the calendar shows them.
+          for (const day of [30, 31]) grid.insertAdjacentHTML("beforeend", '<button class="tds-day tds-day--not-this-month" type="button"><span>' + day + '</span></button>');
+          const days = new Date(shown.getFullYear(), shown.getMonth() + 1, 0).getDate();
+          for (let day = 1; day <= days; day++) {
+            const button = document.createElement("button");
+            button.className = "tds-day"; button.type = "button"; button.innerHTML = "<span>" + day + "</span>";
+            button.addEventListener("click", () => { input.value = names[shown.getMonth()] + " " + day + ", " + shown.getFullYear(); tooltip.classList.add("tds-tooltip--closed"); });
+            grid.append(button);
+          }
+        };
+        document.querySelector(".tds-form-input-trailing button").addEventListener("click", () => { tooltip.classList.remove("tds-tooltip--closed"); draw(); });
+        const [before, , after] = document.querySelector(".tds-date-picker-month").children;
+        before.addEventListener("click", () => { shown = new Date(shown.getFullYear(), shown.getMonth() - 1, 1); draw(); });
+        after.addEventListener("click", () => { shown = new Date(shown.getFullYear(), shown.getMonth() + 1, 1); draw(); });
+        draw();
+      </script>`,
+    }),
+  );
+  const page = await context.newPage();
+  await page.goto(`${teslaOrigin}/careers/search/job/apply/287990`);
+  await enqueue([page]);
+  await expect(page.locator("#grad")).toHaveValue(`December 13, ${graduating}`, { timeout: 60000 });
 });
 
 // Reports from one employer's, one employer's and one employer's forms: an
@@ -11682,6 +14143,87 @@ test("a SuccessFactors questions page picks from lists no rule knows, and keeps 
   await expect(page.locator("#salary")).toHaveValue("");
 });
 
+// PACCAR's SuccessFactors: "Are you authorized to work in the
+// country where position is based?" is answered only from its options, and
+// a SuccessFactors list has none until it is opened, which a fill does not
+// do. Its options are asked of the list's own model, as the page asks for
+// them: a DWR call naming the picklist, read from the page's answer.
+test("a SuccessFactors list's options are read from its own model before the fill answers it", async () => {
+  await ui({ type: "API", path: "/v1/profile", method: "PUT", body: { ...profile, workAuthorization: "US Citizen" } });
+  const asked: string[] = [];
+  await context.route(`${sapsfOrigin}/**`, (route) => {
+    const request = route.request();
+    if (request.url().includes("picklistControllerProxy.getPicklistByPageWithExcludeOption.dwr")) {
+      const picklist = /c0-param1=string:(\S+)/.exec(request.postData() || "")?.[1] || "";
+      asked.push(picklist);
+      const labels = picklist === "RCM_YesNo" ? ["No Selection", "No", "Yes"] : [];
+      const values = labels.map((label, index) => `s${index + 1}.disabled=false;s${index + 1}.label="${label}";s${index + 1}.parentOptionId=-1;s${index + 1}.value=${index ? 4800 + index : '""'};`);
+      return route.fulfill({
+        contentType: "text/javascript",
+        body: `throw 'allowScriptTagRemoting is false.';\n//#DWR-INSERT\n//#DWR-REPLY\nvar s0=[];${labels.map((_, index) => `var s${index + 1}={};s0[${index}]=s${index + 1};`).join("")}\n${values.join("\n")}\ndwr.engine._remoteHandleCallback('1','0',{picklistOptions:s0,totalCount:${labels.length}});\n`,
+      });
+    }
+    return route.fulfill({
+      contentType: "text/html",
+      body: `<!doctype html><title>Career Opportunities: Apply for Analyst</title><main>
+        <div class="rcmFormSection row"><h2 class="sectionTitle"><button class="topBar rcmFormSectionTopBar"><span>Job-Specific Information</span></button></h2>
+          <div class="sectionContent">
+            <div class="RCMFormField rcmFormElement"><label id="88:" for="84:_input" class="rcmFormFieldLabel"><span class="requiredField">*</span>&nbsp;Are you authorized to work in the country where position is based?</label><div class="fieldComponentInput"><span id="83:" class="sfCascadingPicklist"><div id="84:_selectContainer" class="paginatedPicklistContainer"><input aria-label="Are you authorized to work in the country where position is based?" autocomplete="off" type="text" placeholder="No Selection" title="Are you authorized to work in the country where position is based?" aria-owns="85:_listSelect" role="combobox" aria-expanded="false" aria-required="true" id="84:_input" class="rcmpaginatedselectinput rcmpaginatedselectitem"></div></span></div></div>
+          </div>
+        </div>
+      </main><script>
+        // As SuccessFactors' juic components hold it: the list "84:" keeps a
+        // model naming its picklist, whose controller asks the server for a
+        // page of options (DWR) only when asked; the page asks once the list
+        // is opened.
+        const ask = (picklistId, pagination) => fetch('/xi/ajax/remoting/call/plaincall/picklistControllerProxy.getPicklistByPageWithExcludeOption.dwr', {
+          method: 'POST',
+          body: ['callCount=1', 'c0-scriptName=picklistControllerProxy', 'c0-methodName=getPicklistByPageWithExcludeOption', 'c0-param0=null:null', 'c0-param1=string:' + picklistId, 'c0-e1=number:' + pagination.pageNumber].join('\\n'),
+        }).then((response) => response.text()).then((text) => {
+          const options = [];
+          text.replace(/s\\d+\\.disabled=(\\w+);s\\d+\\.label="([^"]*)";s\\d+\\.parentOptionId=-?\\d+;s\\d+\\.value=([^;]*);/g, (_, disabled, label, value) => options.push({ disabled: disabled === 'true', label, value: value.replace(/"/g, '') }));
+          return { picklistOptions: options, totalCount: options.length };
+        });
+        const controller = {
+          getPicklistByPageWithExcludeOption(parentOptionId, picklistId, pagination, a, b, c, d, call) {
+            ask(picklistId, pagination).then((result) => (typeof call === 'function' ? call : call.callback)(result), () => call && call.errorHandler && call.errorHandler('failed'));
+          },
+        };
+        const model = { _picklistId: 'RCM_YesNo', _parentOptionId: null, _parentPicklistId: undefined, _controller: controller };
+        window.juic = { Component: { _registry: { '83:': { _picklistId: 'RCM_YesNo' }, '84:': { id: '84:', _model: model } } } };
+        const input = document.getElementById('84:_input');
+        const close = () => { document.getElementById('85:_listSelect')?.remove(); input.setAttribute('aria-expanded', 'false'); };
+        input.addEventListener('click', () => {
+          if (document.getElementById('85:_listSelect')) return;
+          input.setAttribute('aria-expanded', 'true');
+          window.opened = (window.opened || 0) + 1;
+          model._controller.getPicklistByPageWithExcludeOption(null, model._picklistId, { pageNumber: 1 }, null, false, null, true, (result) => {
+            const list = document.createElement('ul');
+            list.id = '85:_listSelect';
+            list.className = 'sf-list-select';
+            list.setAttribute('role', 'listbox');
+            for (const option of result.picklistOptions) {
+              const item = document.createElement('li');
+              item.setAttribute('role', 'option');
+              item.innerHTML = '<a role="menuitem" title="' + option.label + '">' + option.label + '</a>';
+              item.querySelector('a').addEventListener('click', () => { input.value = option.value ? option.label : ''; close(); });
+              list.append(item);
+            }
+            document.body.append(list);
+          });
+        });
+        input.addEventListener('keydown', (event) => { if (event.key === 'Escape') close(); });
+      </script>`,
+    });
+  });
+  const page = await context.newPage();
+  await page.goto(`${sapsfOrigin}/portalcareer?company=fixture&career_ns=job_application`);
+  await enqueue([page]);
+  await expect(page.locator('[id="84:_input"]')).toHaveValue("Yes", { timeout: 60000 });
+  expect(asked).toContain("RCM_YesNo");
+  await expect(page.locator('[id="85:_listSelect"]')).toHaveCount(0, { timeout: 10000 });
+});
+
 test("a profile exported from the profile page can be imported again, with its settings", async () => {
   await ui({ type: "SETTINGS", settings: { concurrency: 4, generationConcurrency: 2, modelFill: "review", legalQuestions: "model" } });
   await showDashboard("profile");
@@ -11909,6 +14451,39 @@ test("an issue report keeps what web components hold in their shadow roots", asy
   const html = exported.frames[0].html as string;
   expect(html).toMatch(/<date-widget><template shadowrootmode="open"><input class="inner-date"/);
   expect(exported.application).toHaveProperty("configNotes");
+});
+
+test("an issue report of a page whose styles fill the markup limit still holds the form", async () => {
+  // As Microsoft's careers form: megabytes of
+  // inline styles in <head> used the whole limit, and the saved markup ended
+  // before the "Job specific questions" it was filed about.
+  const rules = ".rule-0{color:red}\n".repeat(130_000);
+  await context.route(`${origin}/heavy-head-report`, (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: `<!doctype html><html><head><title>Application</title><style>${rules}</style><style>${rules}</style></head><body><form>
+        <fieldset><legend>Job specific questions</legend>
+          <p>Do you hold an active clearance?</p>
+          <label><input type="radio" name="clearance" value="Yes">Yes</label>
+          <label><input type="radio" name="clearance" value="No">No</label>
+        </fieldset>
+      </form></body></html>`,
+    }),
+  );
+  const page = await context.newPage();
+  await page.goto(`${origin}/heavy-head-report`);
+  const tabId = await panel.evaluate(
+    async (url) => (await chrome.tabs.query({})).find((tab) => tab.url === url)!.id!,
+    page.url(),
+  );
+  await ui({ type: "TRACK_TAB", tabId });
+  const captured = await ui({ type: "REPORT_ISSUE", tabId, category: "other", note: "Questions." });
+  const exported = await ui({ type: "API", path: `/v1/issues/${captured.report.id}` });
+  const html = exported.frames[0].html as string;
+  expect(html.length).toBeLessThanOrEqual(2_000_000);
+  expect(html).toContain("Job specific questions");
+  expect(html).toMatch(/<input type="radio" name="clearance" data-lane-value="No"/);
+  await page.close();
 });
 
 test("a form's transcript field gets the applicant's transcript, and the resume field the resume", async () => {
@@ -12419,6 +14994,52 @@ test("a Workday form adds a row for each language and each link it does not ask 
   await expect(page.locator("#li")).toHaveValue(/linkedin\.com\/in\/example$/);
 });
 
+// A Workday tenant titles its Websites section "an employer" ("Add any relevant
+// websites."): nothing was added, and an employer was left out. The section is for that link alone: the
+// other links were given there too, beside a row the site had filled from
+// the resume.
+test("a Workday Websites section titled LinkedIn gets the LinkedIn link alone", async () => {
+  await ui({ type: "API", path: "/v1/profile", method: "PUT", body: { ...profile, linkedin: "linkedin.com/in/example", github: "github.com/example", website: "https://example.dev" } });
+  await context.route(`${atsOrigins[0]}/**`, (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: `<!doctype html><title>My Experience</title><main>
+        <div role="group" aria-labelledby="LinkedIn-section"><h4 id="LinkedIn-section">LinkedIn</h4><div>Add any relevant websites.</div><div><button data-automation-id="add-button" type="button" id="addLink">Add</button></div></div>
+      </main><script>
+        let rows = 0;
+        const section = document.querySelector('[aria-labelledby="LinkedIn-section"]');
+        // As Workday draws them: the rows are renumbered when one is deleted.
+        const renumber = () => [...section.querySelectorAll('[role="group"]')].forEach((row, at) => {
+          row.setAttribute('aria-labelledby', 'LinkedIn-' + (at + 1) + '-panel');
+          const title = row.querySelector('h5');
+          title.id = 'LinkedIn-' + (at + 1) + '-panel';
+          title.textContent = 'LinkedIn ' + (at + 1);
+        });
+        const add = (value) => {
+          const n = ++rows;
+          const row = document.createElement('div');
+          row.setAttribute('role', 'group');
+          row.innerHTML = '<div><h5></h5><button type="button" class="delete"><span></span>Delete</button></div><div data-automation-id="formField-url"><label for="webAddress-' + n + '--url">URL<abbr>*</abbr></label><input type="text" id="webAddress-' + n + '--url" name="url"></div>';
+          row.querySelector('input').value = value || '';
+          row.querySelector('.delete').addEventListener('click', () => { row.remove(); renumber(); });
+          section.append(row);
+          renumber();
+        };
+        add('https://example.itch.io/');
+        document.getElementById('addLink').addEventListener('click', () => add());
+      </script>`,
+    }),
+  );
+  const page = await context.newPage();
+  await page.goto(`${atsOrigins[0]}/en-US/acme/job/Remote/Engineer_JR1/apply/applyManually`);
+  await enqueue([page]);
+  await expect(page.locator('input[name="url"]').first()).toHaveValue(/linkedin\.com\/in\/example$/, { timeout: 60000 });
+  await page.waitForTimeout(3000);
+  expect(await page.locator('input[name="url"]').evaluateAll((inputs) => inputs.map((input) => (input as HTMLInputElement).value))).toEqual([
+    expect.stringMatching(/linkedin\.com\/in\/example$/),
+  ]);
+});
+
 // one employer's Workday: the site read GitHub from
 // the resume into a Websites row, and the fill added GitHub again.
 test("a Workday Websites row the site already filled keeps its link, and that link is not added again", async () => {
@@ -12712,6 +15333,86 @@ test("lone Yes boxes take their group's question and are each answered", async (
   for (const id of ["ack_qualifications", "ack_privacy", "ack_conduct"]) await expect(page.locator(`#${id}-0`)).toBeChecked({ timeout: 45_000 });
 });
 
+// Meta's careers form: the whole page sits in a
+// full-width scroll container marked aria-hidden="true" while it is drawn and
+// in use, so every field read as hidden and Fill found none.
+test("a form inside a full-width aria-hidden page container is still read and filled", async () => {
+  await ui({ type: "API", path: "/v1/profile", method: "PUT", body: { ...profile, acknowledgeTerms: true } });
+  const page = await context.newPage();
+  await page.goto(`${origin}/aria-hidden-shell`);
+  await page.evaluate(() => {
+    const field = (id: string, label: string) => `<div><label><div>${label}</div><div><input id="${id}" type="text" autocomplete="on"></div></label></div>`;
+    document.body.innerHTML = `<div id="mount"><div id="scrollview" aria-hidden="true" style="left:0px"><div><div>
+      <h2>Contact</h2>${field("meta-first", "First name")}${field("meta-last", "Last name")}${field("meta-email", "Email")}
+    </div></div></div></div>`;
+  });
+  await panel.bringToFront();
+  await enqueue([page]);
+  await expect(page.locator("#meta-first")).toHaveValue("Alex", { timeout: 45_000 });
+  await expect(page.locator("#meta-last")).toHaveValue("Rivera");
+});
+
+// Meta's careers form: Current location is a
+// list button that opens a popover, moves focus into the popover's Search
+// box, and lists its offices; any other city is listed only once searched.
+// Closing hands focus back to the button. Opened and read, the offices held
+// no answer and the location was left empty.
+test("Meta's Current location is searched in its popover and the city is chosen with its state code", async () => {
+  await ui({ type: "API", path: "/v1/profile", method: "PUT", body: { ...profile, city: "Blacksburg", state: "Virginia", country: "United States" } });
+  const page = await context.newPage();
+  await page.goto(`${origin}/meta-location`);
+  await page.evaluate(() => {
+    document.body.innerHTML = `<div id="mount"><form onsubmit="return false">
+      <label><div>Email</div><div><input id="meta-email" type="text" autocomplete="on"></div></label>
+      <div class="x78zum5"><div id="JobApplicationForm_locationCity"></div><div><label for="_r_9__button">Current location</label>
+        <div><button aria-controls="_r_9__popover" aria-expanded="false" aria-invalid="false" aria-label="Current location" id="_r_9__button" role="combobox" type="button" tabindex="0"><div class="shown"></div><svg viewBox="0 0 24 24" width="1em" height="1em"></svg></button></div></div></div>
+    </form></div>`;
+    const button = document.getElementById("_r_9__button") as HTMLButtonElement;
+    const offices = ["Menlo Park, CA", "New York, NY", "Seattle, WA", "Sunnyvale, CA", "Aiken, SC", "Atlanta, GA"];
+    const cities = ["Blacksburg, VA", "Blacksburg, SC", "Blacksburg Heights, VA", "Black Mountain, NC"];
+    const close = () => {
+      document.getElementById("_r_9__popover")?.remove();
+      button.setAttribute("aria-expanded", "false");
+      // As the site's: focus goes back to the button.
+      button.focus();
+    };
+    const fill = (list: HTMLElement, names: string[]) => {
+      list.replaceChildren(...names.map((name) => {
+        const option = document.createElement("li");
+        option.setAttribute("role", "option");
+        option.setAttribute("aria-selected", "false");
+        option.innerHTML = `<div><span>${name}</span></div>`;
+        option.addEventListener("click", () => { button.querySelector(".shown")!.textContent = name; close(); });
+        return option;
+      }));
+    };
+    button.addEventListener("click", () => {
+      if (button.getAttribute("aria-expanded") === "true") return close();
+      const popover = document.createElement("div");
+      popover.id = "_r_9__popover";
+      popover.innerHTML = '<div><input type="text" aria-label="Search" placeholder="Search" class="xe73qa2"></div><ul id="_r_9__list" role="listbox"></ul>';
+      document.body.append(popover);
+      const search = popover.querySelector("input")!;
+      const list = popover.querySelector("ul")!;
+      fill(list, offices);
+      button.setAttribute("aria-expanded", "true");
+      search.focus();
+      // Its typeahead answers a moment after the text, replacing the list.
+      search.addEventListener("input", () => {
+        list.replaceChildren();
+        const text = search.value.toLowerCase();
+        setTimeout(() => { if (search.value.toLowerCase() === text) fill(list, text ? cities.filter((name) => name.toLowerCase().startsWith(text)) : offices); }, 300);
+      });
+    });
+    // The site left focus on the button from an earlier opening.
+    button.focus();
+  });
+  await panel.bringToFront();
+  await enqueue([page]);
+  await expect(page.locator("#_r_9__button .shown")).toHaveText("Blacksburg, VA", { timeout: 45_000 });
+  await expect(page.locator("#meta-email")).toHaveValue(profile.email);
+});
+
 // SmartRecruiters: a typed box's menu lists "Fill manually"
 // first and the site's own entries after it, and Down and Enter took the
 // manual one even when the site listed the city.
@@ -12784,6 +15485,209 @@ test(`a SmartRecruiters box picks the site's own entry over its fill-manually on
   await expect.poll(() => page.evaluate(() => document.querySelector("spl-autocomplete")!.getAttribute("value")), { timeout: 45_000 }).toBe(`${profile.city}, AZ, United States`);
 });
 
+// SmartRecruiters' one-click form as drawn on one employer's: each
+// autocomplete is an spl-autocomplete whose box sits in an spl-input's
+// shadow root and whose menu (div[slot=menu][role=listbox]) sits in its own;
+// each entry is an spl-select-option drawing an spl-dropdown-item that draws
+// the role="option". Down from the box focuses and lights the first entry,
+// Enter there takes it, a real click on it takes it, and the box drops what
+// was typed but not taken when Escape is pressed in it or focus leaves it.
+// menuAbove: the menu opens above the box (the site's "top-start") at a
+// fixed place, under the page's sticky job header until the box is scrolled
+// down, and Down does nothing in it.
+const smartRecruitersWidgets = `
+  customElements.define("spl-dropdown-item", class extends HTMLElement { constructor() { super(); this.attachShadow({ mode: "open" }).innerHTML = '<div class="c-spl-dropdown-item" role="option" tabindex="-1" aria-disabled="false"><slot></slot></div>'; } });
+  customElements.define("spl-select-option", class extends HTMLElement { constructor() { super(); this.attachShadow({ mode: "open" }).innerHTML = "<spl-dropdown-item><slot></slot></spl-dropdown-item>"; } });
+  window.splAutocomplete = (parent, { label, test, suggest, custom = false, menuAbove = false, downless = false, busy = 0, staged = null }) => {
+    const box = document.createElement("spl-autocomplete");
+    box.setAttribute("label", label);
+    box.setAttribute("data-test", test);
+    if (custom) box.setAttribute("allowcustomvalues", "");
+    const id = "menu-" + test;
+    box.attachShadow({ mode: "open" }).innerHTML = '<div><div slot="trigger"><spl-input></spl-input></div><div slot="menu" role="listbox" id="' + id + '"></div></div>';
+    const field = box.shadowRoot.querySelector("spl-input");
+    field.setAttribute("label", label);
+    field.attachShadow({ mode: "open", delegatesFocus: true }).innerHTML = '<label>' + label + '</label><input type="text" autocomplete="off" role="combobox" aria-haspopup="listbox" aria-expanded="false" aria-autocomplete="list" aria-controls="' + id + '">';
+    parent.append(box);
+    const input = field.shadowRoot.querySelector("input");
+    const menu = box.shadowRoot.querySelector('[role="listbox"]');
+    if (menuAbove) menu.style.cssText = "position:fixed;left:20px;width:300px;background:#fff;z-index:1";
+    let chosen = "";
+    const entries = () => [...menu.querySelectorAll("spl-select-option")];
+    const place = () => { if (menuAbove) menu.style.top = Math.max(4, input.getBoundingClientRect().top - 4 - menu.offsetHeight) + "px"; };
+    const close = () => { menu.replaceChildren(); input.setAttribute("aria-expanded", "false"); };
+    const take = (name) => { chosen = name; input.value = name; box.setAttribute("value", name); close(); };
+    window.addEventListener("scroll", place, true);
+    input.addEventListener("input", () => {
+      clearTimeout(input.offer);
+      // busy: held disabled while its search runs, then let go.
+      if (busy && input.value.length >= 3) { input.setAttribute("aria-disabled", "true"); clearTimeout(input.held); input.held = setTimeout(() => input.removeAttribute("aria-disabled"), busy); }
+      // staged: the site answers an early search a moment after the keys,
+      // and the whole text's later still, as Wise's did; each answer
+      // replaces the list.
+      if (staged && input.value.length >= 3) {
+        const text = input.value;
+        clearTimeout(input.first); input.first = setTimeout(() => { if (input.answered) return; close(); for (const name of staged.early) { const option = document.createElement("spl-select-option"); option.textContent = name; option.addEventListener("click", (event) => { if (event.isTrusted) take(name); }); menu.append(option); } input.setAttribute("aria-expanded", "true"); }, staged.earlyAfter);
+        input.offer = setTimeout(() => setTimeout(() => {
+          if (input.value !== text) return;
+          input.answered = true;
+          close();
+          for (const name of suggest(text)) { const option = document.createElement("spl-select-option"); option.textContent = name; option.addEventListener("click", (event) => { if (event.isTrusted) take(name); }); menu.append(option); }
+          input.setAttribute("aria-expanded", String(entries().length > 0));
+        }, staged.lateAfter), 300);
+        return;
+      }
+      input.offer = setTimeout(() => {
+        close();
+        if (input.value.length < 3) return;
+        for (const name of suggest(input.value)) {
+          const option = document.createElement("spl-select-option");
+          option.textContent = name;
+          option.addEventListener("click", (event) => { if (event.isTrusted) take(name); });
+          menu.append(option);
+        }
+        input.setAttribute("aria-expanded", String(entries().length > 0));
+        place();
+      }, 300);
+    });
+    const lit = () => entries().findIndex((entry) => entry.shadowRoot.querySelector("spl-dropdown-item").shadowRoot.querySelector('[role="option"]').classList.contains("active"));
+    const light = (index) => entries().forEach((entry, at) => {
+      const option = entry.shadowRoot.querySelector("spl-dropdown-item").shadowRoot.querySelector('[role="option"]');
+      option.classList.toggle("active", at === index);
+      if (at === index) option.focus();
+    });
+    input.addEventListener("keydown", (event) => {
+      if (event.key === "Escape" && !custom) { input.value = chosen; close(); }
+      if (event.key === "ArrowDown" && entries().length && !menuAbove && !downless) { event.preventDefault(); light(0); }
+    });
+    menu.addEventListener("keydown", (event) => {
+      if (event.key === "ArrowDown" || event.key === "ArrowUp") { event.preventDefault(); light(Math.max(0, Math.min(entries().length - 1, lit() + (event.key === "ArrowDown" ? 1 : -1)))); }
+      if (event.key === "Enter" && lit() >= 0) take(entries()[lit()].textContent);
+    });
+    // Focus leaving the component drops a typed value nothing was taken for.
+    box.addEventListener("focusout", (event) => {
+      setTimeout(() => { if (!box.shadowRoot.activeElement && !field.shadowRoot.activeElement && !custom && input.value !== chosen) { input.value = ""; close(); } }, 0);
+    });
+    return box;
+  };`;
+
+// SmartRecruiters' City: the city alone ("Blacksburg")
+// lists several places, and the box drops what was typed but not chosen.
+// It is searched with its state, as the entries' Office location is.
+inEitherTab("a SmartRecruiters City is chosen from the site's suggestions", async (tab) => {
+  await ui({ type: "API", path: "/v1/profile", method: "PUT", body: { ...profile, city: "Blacksburg", state: "VA" } });
+  await context.route(`${smartRecruitersOrigin}/**`, (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: `<!doctype html><main><oc-personal-information><label for="email">Email</label><input id="email" type="email"><oc-location-autocomplete></oc-location-autocomplete></oc-personal-information></main><script>${smartRecruitersWidgets}
+        splAutocomplete(document.querySelector("oc-location-autocomplete"), { label: "City", test: "location-autocomplete", suggest: (text) => {
+          window.searched = text;
+          return ["Blacksburg, VA, US", "Blacksburg, SC, US", "Blacksburg Heights, VA, US"].filter((name) => name.toLowerCase().startsWith(text.toLowerCase()));
+        } });
+      </script>`,
+    }),
+  );
+  const page = await context.newPage();
+  await page.goto(`${smartRecruitersOrigin}/oneclick-ui/company/Acme/publication/2`);
+  await panel.bringToFront();
+  await place(page, tab);
+  await enqueue([page]);
+  await expect.poll(() => page.evaluate(() => document.querySelector("spl-autocomplete")!.getAttribute("value")), { timeout: 45_000 }).toBe("Blacksburg, VA, US");
+  // Searched with its state, so the place is the one listed for it.
+  expect(await page.evaluate(() => (window as unknown as { searched: string }).searched)).toBe("Blacksburg, VA");
+});
+
+// SmartRecruiters' education entry: the Institution
+// menu opened above its box, under the sticky job header, and Down lit
+// nothing in it, so the real click on its entry went to the header and the
+// school was never chosen. "I currently attend" was in no step of the rule.
+test("a SmartRecruiters education entry chooses its Institution from under the header and ticks I currently attend", async () => {
+  await ui({ type: "API", path: "/v1/profile", method: "PUT", body: { ...profile, education: [{ organization: "Penn State", title: "Bachelor of Science", fieldOfStudy: "Data Science", startDate: "2024-08", endDate: "2099-05", location: "", details: "" }] } });
+  await context.route(`${smartRecruitersOrigin}/**`, (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: `<!doctype html><style>body{margin:0}header{position:fixed;top:0;left:0;right:0;height:150px;background:#eee;z-index:5}main{padding-top:160px;height:3000px}</style>
+        <header><div class="flex flex-row flex-jc-space-between">Engineer, Acme</div></header>
+        <main><label for="email">Email</label><input id="email" type="email"><oc-education><button type="button" data-test="add-education">Add</button><div id="entries"></div></oc-education></main><script>${smartRecruitersWidgets}
+        customElements.define("spl-checkbox", class extends HTMLElement { constructor() { super(); this.attachShadow({ mode: "open" }).innerHTML = '<label id="current-label">I currently attend</label><input type="checkbox" aria-labelledby="current-label">'; } });
+        window.saved = 0;
+        document.querySelector('[data-test="add-education"]').addEventListener("click", () => {
+          const entry = document.createElement("oc-education-entry");
+          entry.innerHTML = '<div data-test="education-edit-form"><oc-institution-autocomplete></oc-institution-autocomplete><oc-checkbox data-test="education-current"><spl-checkbox></spl-checkbox></oc-checkbox><button type="button" data-test="education-save">Save</button></div>';
+          document.getElementById("entries").append(entry);
+          splAutocomplete(entry.querySelector("oc-institution-autocomplete"), { label: "Institution", test: "institution-autocomplete", menuAbove: true, suggest: (text) => ["Penn State", "Penn State Behrend"].filter((name) => name.toLowerCase().startsWith(text.toLowerCase())) });
+          entry.querySelector('[data-test="education-save"]').addEventListener("click", () => { window.saved++; });
+        });
+        // The applicant's view: the form scrolled so the new entry's box
+        // sits just below the header.
+        document.querySelector('[data-test="add-education"]').addEventListener("click", () => setTimeout(() => scrollTo(0, 40)), { once: true });
+      </script>`,
+    }),
+  );
+  const page = await context.newPage();
+  await page.goto(`${smartRecruitersOrigin}/oneclick-ui/company/Acme/publication/3`);
+  await panel.bringToFront();
+  await background(page);
+  await enqueue([page]);
+  await expect.poll(() => page.evaluate(() => document.querySelector('[data-test="institution-autocomplete"]')?.getAttribute("value") ?? ""), { timeout: 60_000 }).toBe("Penn State");
+  await expect.poll(() => page.evaluate(() => (document.querySelector("spl-checkbox")!.shadowRoot!.querySelector("input") as HTMLInputElement).checked), { timeout: 30_000 }).toBe(true);
+});
+
+// SmartRecruiters' phone Country code: a <button
+// role="combobox"> of no type, in its spl-select's shadow root where no
+// form reaches, opening the list it names; refused as able to submit.
+test("a SmartRecruiters phone Country code list button is chosen from, not refused", async () => {
+  await ui({ type: "API", path: "/v1/profile", method: "PUT", body: { ...profile, country: "Canada" } });
+  await context.route(`${smartRecruitersOrigin}/**`, (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: `<!doctype html><main><label for="email">Email</label><input id="email" type="email"><oc-phone-number></oc-phone-number></main><script>${smartRecruitersWidgets}
+        const select = document.createElement("spl-select");
+        select.setAttribute("splarialabel", "Country code");
+        select.attachShadow({ mode: "open", delegatesFocus: true }).innerHTML = '<button class="c-spl-select-field" role="combobox" aria-haspopup="listbox" aria-autocomplete="none" aria-label="Country code" aria-expanded="false" aria-controls="phone-menu"><slot name="triggerPrefix"></slot></button><div id="phone-menu" role="listbox" hidden><slot></slot></div>';
+        for (const [code, name, dial] of [["CA", "Canada", "1"], ["US", "United States", "1"], ["GB", "United Kingdom", "44"]]) {
+          const option = document.createElement("spl-select-option");
+          option.setAttribute("value", code);
+          option.setAttribute("label", name);
+          option.innerHTML = '<div class="c-spl-phone-field-select-option-container"><span>' + name + '</span> <span>+' + dial + '</span></div>';
+          option.addEventListener("click", () => {
+            window.picks = (window.picks || 0) + 1;
+            select.setAttribute("value", code);
+            select.querySelector('[slot="triggerPrefix"]')?.remove();
+            const shown = document.createElement("div");
+            shown.slot = "triggerPrefix";
+            shown.textContent = name + " +" + dial;
+            select.append(shown);
+            menu.hidden = true;
+            button.setAttribute("aria-expanded", "false");
+          });
+          select.append(option);
+        }
+        document.querySelector("oc-phone-number").append(select);
+        const button = select.shadowRoot.querySelector("button");
+        const menu = select.shadowRoot.getElementById("phone-menu");
+        button.addEventListener("click", () => { menu.hidden = !menu.hidden; button.setAttribute("aria-expanded", String(!menu.hidden)); });
+      </script>`,
+    }),
+  );
+  const page = await context.newPage();
+  await page.goto(`${smartRecruitersOrigin}/oneclick-ui/company/Acme/publication/4`);
+  await panel.bringToFront();
+  await background(page);
+  await enqueue([page]);
+  await expect.poll(async () => {
+    const app = (await state()).applications.find((candidate) => candidate.url === page.url());
+    if (app?.missing.some((line) => /could navigate or submit/.test(line))) return "refused";
+    return page.evaluate(() => document.querySelector("spl-select")!.getAttribute("value") ?? "");
+  }, { timeout: 45_000 }).toBe("CA");
+  // Once chosen it reads as answered and is left alone: read as empty, one employer's
+  // was chosen fifteen times over in one fill.
+  await expect.poll(async () => (await state()).applications.find((candidate) => candidate.url === page.url())?.status, { timeout: 45_000 }).toMatch(/^(ready|awaiting-user)$/);
+  expect(await page.evaluate(() => (window as any).picks)).toBe(1);
+  const fields = (await content(page, { type: "INSPECT" })).data.fields;
+  expect(fields.find((field: { label: string }) => field.label === "Country code")?.value).toBe("Canada +1");
+});
+
 // Microsoft's careers form: a list draws its options only once
 // opened, from its arrow, and its sponsorship question, read with none, went
 // unanswered; a multiselect shows its picks as pills beside a read-only box,
@@ -12853,6 +15757,86 @@ test("Microsoft's lists are read before answering, and a multiselect's pills are
   await expect(page.locator("#sponsor input")).toHaveValue("No", { timeout: 45_000 });
   // Kept, and its list closed.
   await expect(page.locator("#list-44")).toHaveCount(0);
+});
+
+// Microsoft's careers form: a typed combobox whose list is drawn
+// inside its own wrapper and drawn again as it opens. A Down moves focus onto
+// the option a moment later, so the Enter that takes it lands on the option,
+// not the box; that Enter was stopped as a stray key, and work authorization
+// stayed empty.
+test("a combobox whose Down focuses the option takes it with Enter there", async () => {
+  await ui({
+    type: "API",
+    path: "/v1/profile",
+    method: "PUT",
+    body: { ...profile, workAuthorization: [{ country: "US", status: "citizen", needsSponsorship: false }], citizenships: ["US"] },
+  });
+  await context.route(`${origin}/acme-typed-list`, (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: `<!doctype html><title>Acme application</title><main><h1>Acme</h1><form onsubmit="return false">
+        <div class="field"><label id="auth_label" for="auth"><span>Are you legally authorized to work in the country/region you are applying for?</span></label>
+          <div class="select-module_select-wrapper__x" id="auth" aria-owns="list-41">
+            <div aria-atomic="true" aria-live="polite" class="select-module_select-live-region__x" role="status"></div>
+            <div class="select-module_select-dropdown-main-wrapper__x"><div class="select-module_select-input-group__x">
+              <input aria-controls="list-41" aria-expanded="false" aria-labelledby="auth_label" aria-required="true" role="combobox" class="select-module_select-input__bO0s9" id="input-43" placeholder="Select" type="text">
+              <div class="input-module_action-wrapper__x"><button aria-hidden="true" tabindex="-1" type="button" class="arrow"></button></div>
+            </div></div>
+          </div></div>
+        <label for="email">Email</label><input id="email" name="email" type="email">
+      </form></main><script>
+        const wrapper = document.getElementById('auth');
+        const input = document.getElementById('input-43');
+        const live = wrapper.querySelector('[role="status"]');
+        const buttons = () => [...document.querySelectorAll('#list-41 button[role="option"]')];
+        const menu = () => '<div class="menu-module_menu-container__x"><ul id="list-41" role="listbox">' +
+          ['Yes', 'No'].map((name, i) => '<li role="presentation"><button type="button" tabindex="0" role="option" aria-selected="false" id="list-41-option-' + i + '" title="' + name + '">' + name + '</button></li>').join('') + '</ul></div>';
+        const light = (button) => { input.setAttribute('aria-activedescendant', button.id); button.focus(); };
+        const close = () => { document.getElementById('dropdown-42')?.remove(); input.setAttribute('aria-expanded', 'false'); input.removeAttribute('aria-activedescendant'); };
+        const choose = (button) => { input.value = button.title; close(); input.focus(); };
+        const wire = () => buttons().forEach((button, i) => {
+          // A script's click does nothing; a real click, or the click an
+          // Enter on the focused option makes, keeps it.
+          button.addEventListener('click', (event) => { if (event.isTrusted) choose(button); });
+          button.addEventListener('keydown', (event) => {
+            if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+              event.preventDefault();
+              const next = buttons()[Math.max(0, Math.min(buttons().length - 1, i + (event.key === 'ArrowDown' ? 1 : -1)))];
+              light(next);
+            }
+          });
+        });
+        const open = () => {
+          if (input.getAttribute('aria-expanded') === 'true') return;
+          const overlay = document.createElement('div');
+          overlay.id = 'dropdown-42';
+          overlay.className = 'select-module_select-dropdown-overlay__x';
+          overlay.innerHTML = menu();
+          wrapper.querySelector('.select-module_select-dropdown-main-wrapper__x').append(overlay);
+          input.setAttribute('aria-expanded', 'true');
+          live.textContent = '2 matches found.';
+          // Its menu is drawn again right after opening, as the site's is.
+          setTimeout(() => { if (document.getElementById('dropdown-42')) { overlay.innerHTML = menu(); wire(); } }, 1);
+          wire();
+        };
+        input.addEventListener('mousedown', open);
+        input.addEventListener('click', open);
+        wrapper.querySelector('.arrow').addEventListener('click', open);
+        // Down in the box focuses the first option some 300 ms later; the box
+        // itself takes no Enter.
+        input.addEventListener('keydown', (event) => {
+          if (event.key === 'ArrowDown') { event.preventDefault(); open(); setTimeout(() => buttons()[0] && light(buttons()[0]), 300); }
+        });
+        document.addEventListener('mousedown', (event) => { if (!wrapper.contains(event.target)) close(); });
+      </script>`,
+    }),
+  );
+  const page = await context.newPage();
+  await page.goto(`${origin}/acme-typed-list`);
+  await panel.bringToFront();
+  await enqueue([page]);
+  await expect(page.locator("#input-43")).toHaveValue("Yes", { timeout: 45_000 });
+  await expect(page.locator("#dropdown-42")).toHaveCount(0);
 });
 
 // SmartRecruiters' screening questions: each list
@@ -12995,6 +15979,71 @@ test("SmartRecruiters' screening lists and slotted Yes/No choices are answered",
 // one employer's Workday form: a language row asks
 // for an overall level named "All" beside Reading; Reading was filled and All
 // was left.
+// SmartRecruiters' screening step: each Yes/No
+// question is an spl-radio-group whose required mark and aria-required
+// fieldset are drawn in its shadow root, the choices slotted into it; the
+// markup below is the site's, its declarative shadow roots as captured. Four
+// starred questions read as "Optional unanswered", and none was answered.
+test("SmartRecruiters' starred Yes/No groups read as required, and a fixed start date and the advertised salary band are answered Yes", async () => {
+  await ui({
+    type: "API",
+    path: "/v1/profile",
+    method: "PUT",
+    body: { ...profile, answers: [{ question: "When can you start?", answer: "Immediately" }] },
+  });
+  const choice = (id: number, label: string, value: string, place: string) =>
+    `<spl-radio label="${label}" tabindex="${place === "first" ? 0 : -1}" inlinelabelcontent="" id="spl-form-element_${id}" variant="default" value="${value}" role="radio" aria-checked="false" aria-disabled="false"><template shadowrootmode="open"><spl-internal-form-field preventerrormsgrender="" class="c-spl-radio-wrapper c-spl-radio-wrapper--${place}" variant="horizontal"><template shadowrootmode="open"><div class=" c-spl-form-field c-spl-form-field--horizontal "><slot class="c-spl-form-field-slot"></slot><div class="c-spl-form-field-content"><slot name="label"></slot> <div class="c-spl-form-field-error-sr-only"><slot name="error-msg"></slot></div></div></div></template><label slot="label" class=" c-spl-form-field-label " for="spl-form-element_${id}" id="spl-form-element_${id}-label"><spl-typography-label variant="md"><template shadowrootmode="open"><span class=" c-spl-typography-label c-spl-typography-label--md "><slot></slot></span></template><span class="c-spl-form-field-label-wrapper"><span><span class="c-spl-form-field-label-required-group">${label}</span></span><span class="c-spl-form-field-label-suffix"><slot name="label-suffix"></slot></span></span></spl-typography-label></label><div class=" c-spl-radio "><div class="c-spl-radio__ring"></div></div></spl-internal-form-field></template></spl-radio>`;
+  const question = (id: number, text: string) =>
+    `<div class="spl-mt-2" data-test="question-container"><sr-question-field-radio name=""> <spl-radio-group variant="vertical" required="" inlinelabelcontent="" id="spl-form-element_${id}" value=""><template shadowrootmode="open" shadowrootdelegatesfocus=""><spl-internal-form-field variant="vertical"><template shadowrootmode="open"><div class=" c-spl-form-field c-spl-form-field--vertical "><slot name="label"></slot><slot name="description"></slot><slot class="c-spl-form-field-slot"></slot><spl-typography-body variant="sm" class="  "><template shadowrootmode="open"><p class=" c-spl-typography-body c-spl-typography-body--sm "><slot></slot></p></template><slot name="error-msg"></slot></spl-typography-body></div></template><label slot="label" class=" c-spl-form-field-label c-spl-form-field-label--group " for="spl-form-element_${id}" id="spl-form-element_${id}-label"><spl-typography-label variant="md"><template shadowrootmode="open"><span class=" c-spl-typography-label c-spl-typography-label--md "><slot></slot></span></template><span class="c-spl-form-field-label-wrapper"><span><span class="c-spl-form-field-label-required-group"><slot name="label-content"></slot><span class="c-spl-form-field-required-mark" aria-hidden="true">*</span></span></span><span class="c-spl-form-field-label-suffix"><slot name="label-suffix"></slot></span></span></spl-typography-label></label><fieldset role="radiogroup" class=" c-spl-radio-group c-spl-radio-group--vertical " aria-labelledby="spl-form-element_${id}-label" aria-required="true"><slot></slot></fieldset></spl-internal-form-field></template>
+        <span slot="label-content">
+            ${text}
+        </span>
+        ${choice(id + 1, "Yes", "1", "first")}${choice(id + 2, "No", "0", "last")}</spl-radio-group></sr-question-field-radio></div>`;
+  await context.route(`${smartRecruitersOrigin}/**`, (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: `<!doctype html><title>Preliminary questions - Graduate Data Scientist - Acme</title><main><form onsubmit="return false">
+        ${question(146, "This program has a fixed start date mentioned in the job advert. Are you available to join on that date?")}
+        ${question(160, "Are you currently a Acme customer?")}
+        ${question(170, "Does the advertised salary band meet your expectations?")}
+        ${question(180, "Were you involved, in any capacity, in the audit of Acme’s financial statements, including those who provided concurring or second partner reviews, or consulted on technical or industry specific issues, in the last 12 months?")}
+      </form></main><script>
+        // A choice clicked is the group's one checked choice, as the site's is.
+        document.addEventListener("click", (event) => {
+          const radio = event.composedPath().find((node) => node.localName === "spl-radio");
+          if (!radio) return;
+          for (const other of radio.parentElement.querySelectorAll("spl-radio")) other.setAttribute("aria-checked", String(other === radio));
+        }, true);
+      </script>`,
+    }),
+  );
+  const page = await context.newPage();
+  await page.goto(`${smartRecruitersOrigin}/oneclick-ui/company/Acme/publication/1/screening`);
+  await panel.bringToFront();
+  const tabId = await panel.evaluate(async (url) => (await chrome.tabs.query({})).find((tab) => tab.url === url)!.id!, page.url());
+  const fields = (await ui({ type: "SCAN_TAB", tabId })).observation.fields as { label: string; required: boolean }[];
+  expect(fields.filter((field) => field.required).map((field) => field.label.slice(0, 40))).toEqual([
+    "This program has a fixed start date ment",
+    "Are you currently a Acme customer?",
+    "Does the advertised salary band meet you",
+    "Were you involved, in any capacity, in t",
+  ]);
+  await background(page);
+  await enqueue([page]);
+  await expect(page.locator("#spl-form-element_147")).toHaveAttribute("aria-checked", "true", { timeout: 45_000 });
+  await expect(page.locator("#spl-form-element_171")).toHaveAttribute("aria-checked", "true", { timeout: 45_000 });
+  const app = (await state()).applications.find((candidate: { url: string }) => candidate.url === page.url())!;
+  const current = async () => (await state()).applications.find((candidate: { id: string }) => candidate.id === app.id)! as unknown as { status: string; missing: string[] };
+  await expect.poll(async () => (await current()).status, { timeout: 45_000 }).toMatch(/^(awaiting-user|ready)$/);
+  // Whether one is a customer, or audited the company, is the applicant's
+  // to say: left, and named as required.
+  expect(await page.locator("#spl-form-element_161, #spl-form-element_162, #spl-form-element_181, #spl-form-element_182").evaluateAll((radios) => radios.map((radio) => radio.getAttribute("aria-checked")))).toEqual(["false", "false", "false", "false"]);
+  const missing = (await current()).missing;
+  expect(missing.some((item) => /^Required: Are you currently a Acme customer\?/.test(item))).toBe(true);
+  expect(missing.some((item) => /^Required: Were you involved, in any capacity, in the audit/.test(item))).toBe(true);
+  expect(missing.filter((item) => /^Optional unanswered/.test(item))).toEqual([]);
+});
+
 test("a Workday language row's All gets that language's level", async () => {
   await ui({
     type: "API",
@@ -13033,6 +16082,100 @@ test("a Workday language row's All gets that language's level", async () => {
   await enqueue([page]);
   await expect(page.locator('[data-automation-id="formField-language"] button')).toHaveText(["English"], { timeout: 60000 });
   await expect(page.locator(".skill")).toHaveText(["Expert", "Expert"], { timeout: 30000 });
+});
+
+// A language row with five levels, the fifth "5 - Overall": only four were
+// filled.
+test("a Workday language row's fifth level, Overall, is filled", async () => {
+  await ui({
+    type: "API",
+    path: "/v1/profile",
+    method: "PUT",
+    body: { ...profile, languages: ["English: Native"] },
+  });
+  const levels = ["1 - Listening", "2 - Speaking", "3 - Reading", "4 - Writing", "5 - Overall"];
+  await context.route(`${atsOrigins[0]}/**`, (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: `<!doctype html><title>My Experience</title><main>
+        <div role="group" aria-labelledby="Languages-section"><h4 id="Languages-section">Languages</h4><button data-automation-id="add-button" type="button" id="addLanguage">Add</button></div>
+      </main><script>
+        const levels = ${JSON.stringify(levels)};
+        const pick = (button, label, names) => button.addEventListener('click', () => {
+          button.setAttribute('aria-expanded', 'true');
+          const popup = document.createElement('div');
+          popup.setAttribute('data-automation-activepopup', 'true');
+          popup.innerHTML = '<ul role="listbox">' + names.map((name) => '<li role="option">' + name + '</li>').join('') + '</ul>';
+          popup.querySelectorAll('li').forEach((option) => option.addEventListener('click', () => { button.textContent = option.textContent; if (label) button.setAttribute('aria-label', label + ' ' + option.textContent + ' Required'); button.setAttribute('aria-expanded', 'false'); popup.remove(); }));
+          document.body.append(popup);
+        });
+        document.getElementById('addLanguage').addEventListener('click', () => {
+          const row = document.createElement('div');
+          row.setAttribute('data-automation-id', 'language-1');
+          row.innerHTML = '<div data-automation-id="formField-language"><label>Language</label><button type="button" name="language" aria-haspopup="listbox" aria-expanded="false">Select One</button></div>'
+            + '<div data-automation-id="formField-native"><input type="checkbox" name="native" id="native"><label for="native">I am fluent in this language.</label></div>'
+            + levels.map((label, index) => '<div data-automation-id="formField-' + index + '"><label for="level-' + index + '"><span>' + label + '<abbr aria-hidden="true">*</abbr></span></label><button type="button" class="skill" id="level-' + index + '" aria-haspopup="listbox" aria-expanded="false" aria-label="' + label + ' Select One Required">Select One</button></div>').join('');
+          pick(row.querySelector('button'), '', ['English', 'French']);
+          row.querySelectorAll('.skill').forEach((skill, index) => pick(skill, levels[index], ['Select One', '1 - Beginner', '2 - Classroom Study', '3 - Intermediate', '4 - Advanced', '5 - Fluent']));
+          document.querySelector('[aria-labelledby="Languages-section"]').append(row);
+        });
+      </script>`,
+    }),
+  );
+  const page = await context.newPage();
+  await page.goto(`${atsOrigins[0]}/en-US/acme/job/Remote/Engineer_JR1/apply/applyManually`);
+  await enqueue([page]);
+  await expect(page.locator('[data-automation-id="formField-language"] button')).toHaveText(["English"], { timeout: 60000 });
+  await expect(page.locator(".skill")).toHaveText(Array(5).fill("5 - Fluent"), { timeout: 30000 });
+});
+
+// A three-step scale ("1 - Beginner" to "3 - Advanced") with Reading,
+// Speaking and Writing: no "5 - Fluent", and each level reopened Reading's
+// empty list.
+test("a Workday language level on a numbered three-step scale takes its top step", async () => {
+  await ui({
+    type: "API",
+    path: "/v1/profile",
+    method: "PUT",
+    body: { ...profile, languages: ["English: Native"] },
+  });
+  const levels = ["Reading", "Speaking", "Writing"];
+  await context.route(`${atsOrigins[0]}/**`, (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: `<!doctype html><title>My Experience</title><main>
+        <div role="group" aria-labelledby="Languages-section"><h4 id="Languages-section">Languages</h4><button data-automation-id="add-button" type="button" id="addLanguage">Add</button></div>
+      </main><script>
+        const levels = ${JSON.stringify(levels)};
+        let lists = 0;
+        // As Workday draws it: a popup wrapper in the page's body holding the
+        // list, which carries an id of its own that no button names.
+        const pick = (button, label, names) => button.addEventListener('click', () => {
+          button.setAttribute('aria-expanded', 'true');
+          const popup = document.createElement('div');
+          popup.setAttribute('data-automation-activepopup', 'true');
+          popup.innerHTML = '<div data-automation-id="activeListContainer"><ul role="listbox" id="list-' + (++lists) + '">' + names.map((name) => '<li role="option">' + name + '</li>').join('') + '</ul></div>';
+          popup.querySelectorAll('li').forEach((option) => option.addEventListener('click', () => { button.textContent = option.textContent; if (label) button.setAttribute('aria-label', label + ' ' + option.textContent + ' Required'); button.setAttribute('aria-expanded', 'false'); popup.remove(); }));
+          document.body.append(popup);
+        });
+        document.getElementById('addLanguage').addEventListener('click', () => {
+          const row = document.createElement('div');
+          row.setAttribute('data-automation-id', 'language-1');
+          row.innerHTML = '<div data-automation-id="formField-language"><label>Language</label><button type="button" name="language" aria-haspopup="listbox" aria-expanded="false">Select One</button></div>'
+            + '<div data-automation-id="formField-native"><input type="checkbox" name="native" id="native"><label for="native">I am fluent in this language.</label></div>'
+            + levels.map((label, index) => '<div data-automation-id="formField-' + index + '"><label for="level-' + index + '"><span>' + label + '<abbr aria-hidden="true">*</abbr></span></label><button type="button" class="skill" id="level-' + index + '" aria-haspopup="listbox" aria-expanded="false" aria-label="' + label + ' Select One Required">Select One</button></div>').join('');
+          pick(row.querySelector('button'), '', ['English', 'French']);
+          row.querySelectorAll('.skill').forEach((skill, index) => pick(skill, levels[index], ['Select One', '1 - Beginner', '2 - Intermediate', '3 - Advanced']));
+          document.querySelector('[aria-labelledby="Languages-section"]').append(row);
+        });
+      </script>`,
+    }),
+  );
+  const page = await context.newPage();
+  await page.goto(`${atsOrigins[0]}/en-US/acme/job/Remote/Engineer_JR1/apply/applyManually`);
+  await enqueue([page]);
+  await expect(page.locator('[data-automation-id="formField-language"] button')).toHaveText(["English"], { timeout: 60000 });
+  await expect(page.locator(".skill")).toHaveText(Array(3).fill("3 - Advanced"), { timeout: 30000 });
 });
 
 // one employer's SuccessFactors profile:
@@ -13150,6 +16293,87 @@ test("a SuccessFactors end date the site filled under a current job is emptied",
   await expect(ends.nth(0)).toHaveAttribute("value", "");
   await expect(ends.nth(1)).toHaveAttribute("value", "");
   await expect(ends.nth(2)).toHaveAttribute("value", "09/08/2023");
+});
+
+// PACCAR's SuccessFactors: the site's resume parser rewrote a
+// Previous Employment row after the page was read, its Start and End Date
+// (UI5 pickers, behind shadow roots) with the 1st and the 30th. The fill put
+// the profile's company and title back, but kept the parser's dates as if
+// the applicant had typed them.
+test("a SuccessFactors row's dates the site's parser rewrote are replaced with the profile's", async () => {
+  test.setTimeout(150000);
+  await ui({
+    type: "API",
+    path: "/v1/profile",
+    method: "PUT",
+    body: {
+      ...profile,
+      work: [
+        { organization: "Acme Robotics", title: "Intern", location: "", details: "", startDate: "2023-07-03", endDate: "2023-09-08" },
+      ],
+    },
+  });
+  const picker = (name: string) =>
+    `<div class="RCMFormField rcmFormElement"><label class="rcmFormFieldLabel">${name}</label><div class="fieldComponentInput"><div class="datePicker"><ui5-date-picker-xweb-calendar-widget accessible-name="${name}" title="${name}"></ui5-date-picker-xweb-calendar-widget></div></div></div>`;
+  await context.route(`${sapsfOrigin}/**`, (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: `<!doctype html><title>Candidate Profile</title><main>
+        <div class="rcmFormSection row"><h2 class="sectionTitle"><button class="topBar rcmFormSectionTopBar"><span>Previous Employment</span></button></h2>
+          <div role="group" class="sectionContent">
+            <div class="layoutWrapper row rcmSectionComponent rowBreak"><div class="leftColumn col-xs-12"><div class="row">
+              <div class="RCMFormField rcmFormElement"><label class="rcmFormFieldLabel"><span class="requiredField">*</span>&nbsp;Company Name</label><div class="fieldComponentInput"><input type="text" name="VFLD1"></div></div>
+              <div class="RCMFormField rcmFormElement"><label class="rcmFormFieldLabel"><span class="requiredField">*</span>&nbsp;Title</label><div class="fieldComponentInput"><input type="text" name="VFLD3"></div></div>
+              ${picker("Start Date")}${picker("End Date")}
+            </div></div></div>
+          </div></div>
+      </main><script>
+        customElements.define('ui5-datetime-input-xweb-calendar-widget', class extends HTMLElement {
+          constructor() { super(); this.attachShadow({ mode: 'open' }).innerHTML = '<input class="ui5-input-inner" type="text">'; }
+        });
+        // The component shows its value in its inner input, as UI5 does.
+        customElements.define('ui5-date-picker-xweb-calendar-widget', class extends HTMLElement {
+          constructor() { super(); this.attachShadow({ mode: 'open' }).innerHTML = '<ui5-datetime-input-xweb-calendar-widget></ui5-datetime-input-xweb-calendar-widget>'; this._value = ''; }
+          get inner() { return this.shadowRoot.querySelector('ui5-datetime-input-xweb-calendar-widget').shadowRoot.querySelector('input'); }
+          get value() { return this._value; }
+          // Given the value it already holds, it draws nothing again.
+          set value(v) { if (v === this._value) return; this._value = v; this.setAttribute('value', v); this.inner.value = v; }
+        });
+        // The site's parser: values set in place, without anyone's keys.
+        window.parse = () => {
+          document.querySelector('[name="VFLD1"]').value = 'Contoso';
+          document.querySelector('[name="VFLD3"]').value = 'Analyst';
+          document.querySelector('[accessible-name="Start Date"]').value = '07/01/2023';
+          document.querySelector('[accessible-name="End Date"]').value = '09/30/2023';
+        };
+      </script>`,
+    }),
+  );
+  const page = await context.newPage();
+  await page.goto(`${sapsfOrigin}/portalcareer?company=fixture&navBarLevel=MY_PROFILE`);
+  await enqueue([page]);
+  const id = (await state()).applications[0].id;
+  await expect.poll(async () => (await state()).applications[0].status, { timeout: 60000 }).toMatch(/^(awaiting-user|ready)$/);
+  const start = page.locator('ui5-date-picker-xweb-calendar-widget[accessible-name="Start Date"]');
+  const end = page.locator('ui5-date-picker-xweb-calendar-widget[accessible-name="End Date"]');
+  await expect(start).toHaveAttribute("value", "07/03/2023");
+  await page.evaluate(() => (window as any).parse());
+  await expect(end).toHaveAttribute("value", "09/30/2023");
+  await page.waitForTimeout(2500);
+  await ui({ type: "FILL_STEP", id });
+  await expect.poll(async () => (await state()).applications[0].status, { timeout: 60000 }).toMatch(/^(awaiting-user|ready)$/);
+  await expect(page.locator('[name="VFLD1"]')).toHaveValue("Acme Robotics", { timeout: 30000 });
+  await expect(page.locator('[name="VFLD3"]')).toHaveValue("Intern");
+  await expect(start).toHaveAttribute("value", "07/03/2023");
+  await expect(end).toHaveAttribute("value", "09/08/2023");
+  // Another date written straight into the box it shows, the component's
+  // own value unchanged (PACCAR: today's date stayed shown over
+  // the start dates): the next fill shows the component's value again.
+  await page.evaluate(() => { (document.querySelector('[accessible-name="Start Date"]') as any).inner.value = "11/10/2026"; });
+  await page.waitForTimeout(2500);
+  await ui({ type: "FILL_STEP", id });
+  await expect.poll(async () => (await state()).applications[0].status, { timeout: 60000 }).toMatch(/^(awaiting-user|ready)$/);
+  await expect.poll(() => page.evaluate(() => (document.querySelector('[accessible-name="Start Date"]') as any).inner.value), { timeout: 30000 }).toBe("07/03/2023");
 });
 
 // one employer's SuccessFactors: the resume left
@@ -13735,6 +16959,60 @@ test("an iCIMS school missing from the list gets the list's Not Found entry and 
   );
 });
 
+// ICE's iCIMS form: after the resume went
+// first, the parser opened the profile at another address
+// (…&uploadResume=1). Taken for a different page, the fill was paused and
+// the rest of the form (address, education, the second job's employer,
+// languages, How did you hear) was never filled.
+test("an iCIMS profile the resume parser opens at another address is filled in the same request", async () => {
+  test.setTimeout(180000);
+  const current = await ui({ type: "API", path: "/v1/profile" });
+  await ui({
+    type: "API", path: "/v1/profile", method: "PUT",
+    body: {
+      ...current, confirmed: true, country: "United States of America", state: "Virginia", city: "Blacksburg",
+      address: "100 Main Street", postalCode: "24060", languages: ["English: Native"], referralSource: [],
+      education: [
+        { organization: "Virginia Tech", title: "Master of Science", fieldOfStudy: "Computer Science", startDate: "2025-08-21", endDate: "2099-05", current: true, location: "", details: "" },
+        { organization: "Penn State", title: "Bachelor of Science", fieldOfStudy: "Computer Science", startDate: "2020-09", endDate: "2024-06", location: "", details: "" },
+      ],
+      work: [
+        { organization: "Northwind Labs", title: "Associate", startDate: "2026-03", endDate: "", location: "", details: "" },
+        { organization: "Contoso", title: "Founder", startDate: "2025-03", endDate: "", location: "", details: "" },
+        { organization: "Acme", title: "Software Engineer Intern", startDate: "2023-07", endDate: "2023-09", location: "", details: "" },
+      ],
+    },
+  });
+  const site = "https://careers-acme.icims.com";
+  await context.route(`${site}/jobs/3/developer/candidate**`, (route) =>
+    route.fulfill({ contentType: "text/html", body: icimsProfileAfterUpload() }),
+  );
+  const page = await context.newPage();
+  await page.goto(`${site}/jobs/3/developer/candidate?from=login`);
+  await enqueue([page]);
+  const list = (id: string) => page.locator(`[id="${id}_icimsDropdown"] .dropdown-text`);
+  await expect(page.locator('[id="-1_PersonProfileFields.AddressZip"]')).toHaveValue("24060", { timeout: 120000 });
+  await expect.poll(async () => (await state()).applications[0].status, { timeout: 120000 }).toMatch(/^(awaiting-user|ready)$/);
+  expect(page.url()).toContain("uploadResume=1");
+  await expect(page.locator('[id="-1_PersonProfileFields.AddressStreet1"]')).toHaveValue("100 Main Street");
+  // The parsed school's row gets its degree, and its major for the parser's city.
+  // (The second school's own row, added with Add More (Education), is not
+  // asserted here: after the parse it was not added in this fixture.)
+  await expect(list("-1_CandProfileFields.School")).toHaveText("Virginia Tech");
+  await expect(list("-1_CandProfileFields.Degree")).toHaveText("Master's Degree");
+  await expect(page.locator('[id="-1_CandProfileFields.EducationCity"]')).toHaveValue("Computer Science");
+  // The latest degree is still in progress.
+  await expect(list("rcf2216")).toHaveText("No");
+  await expect(page.locator('[id="-2_PersonProfileFields.rcf3212"]')).toHaveValue("Contoso");
+  // English on a later page of its list; a native speaker's level is the
+  // list's Proficient, all three on its first page.
+  await expect(list("-1_PersonProfileFields.rcf2027")).toHaveText("English");
+  for (const skill of ["rcf2028", "rcf2029", "rcf2030"])
+    await expect(list(`-1_PersonProfileFields.${skill}`)).toHaveText("Proficient");
+  await expect(page.locator("#rcf3048")).toHaveValue("Other (Please Specify)");
+  expect(await page.evaluate(() => (window as any).uploads)).toBe(1);
+});
+
 test("parsed education rows are corrected in profile order, and what cannot be corrected is flagged", async () => {
   test.setTimeout(90000);
   const current = await ui({ type: "API", path: "/v1/profile" });
@@ -14284,6 +17562,129 @@ test("filling from a related tab makes it the current fill target", async () => 
   await expect(form.locator('[name="firstName"]')).toHaveValue("");
 });
 
+// The badge on an application's page: how the fill is going
+// without the side panel open, in the page's top frame only, and hidden by
+// its × until the page loads again.
+test("an application page shows a badge with its fill's progress", async () => {
+  await context.route(`${origin}/badge-page`, (route) =>
+    route.fulfill({ contentType: "text/html", body: `<!doctype html><title>Engineer</title><main><h1>Engineer</h1><form><label>First name<input name="firstName" required></label><label>Badge number<input name="badge" required></label></form></main>` }),
+  );
+  const page = await context.newPage();
+  await page.goto(`${origin}/badge-page`);
+  await panel.bringToFront();
+  await enqueue([page]);
+  await expect(page.locator('[name="firstName"]')).toHaveValue(profile.firstName, { timeout: 40000 });
+  const badge = page.locator("application-lane-badge");
+  await expect(badge).toHaveAttribute("data-tone", "attention", { timeout: 20000 });
+  await expect(badge).toHaveAttribute("title", /^1 filled · 1 needs you/);
+  // Not in the form's own field list.
+  const fields = await page.evaluate(() => document.querySelectorAll("input, button").length);
+  expect(fields).toBe(2);
+  // The × hides it.
+  await page.mouse.click(page.viewportSize()!.width - 38, page.viewportSize()!.height - 42);
+  await expect(badge).toHaveCount(0);
+});
+
+// one employer's Workday: the documents were asked for
+// only once the step's own fields, its skills among them, were typed, and the
+// fill then waited for their tailoring. On an application's first step they
+// are asked for before the fill types anything.
+test("an application's documents are asked for before its first step is typed", async () => {
+  await context.route(`${origin}/parallel-docs`, (route) =>
+    route.fulfill({ contentType: "text/html", body: `<!doctype html><title>Engineer</title><main><h1>Engineer</h1><form>
+      <label>First name<input name="firstName" required></label><label>Last name<input name="lastName" required></label>
+      <label>Resume<input type="file" name="resume"></label></form></main><script>
+        window.firstWrite = 0;
+        document.addEventListener("input", () => { if (!window.firstWrite) window.firstWrite = Date.now(); }, true);
+      </script>` }),
+  );
+  const page = await context.newPage();
+  await page.goto(`${origin}/parallel-docs`);
+  await panel.bringToFront();
+  await enqueue([page]);
+  await expect(page.locator('[name="firstName"]')).toHaveValue(profile.firstName, { timeout: 40000 });
+  const firstWrite = await page.evaluate(() => (window as unknown as { firstWrite: number }).firstWrite);
+  const app = (await state()).applications[0];
+  const job = await ui({ type: "API", path: `/v1/jobs/${app.jobId || app.documentJobId}` });
+  expect(job.createdAt).toBeLessThan(firstWrite);
+});
+
+// A screenshot pasted into the report's note (Ctrl+V) is saved with it
+// (: the applicant had a screenshot to show and no way to add it).
+test("a screenshot pasted into an issue report is saved beside it", async () => {
+  await context.route(`${origin}/pasted-shot`, (route) =>
+    route.fulfill({ contentType: "text/html", body: `<!doctype html><title>Engineer</title><main><h1>Engineer</h1><form><label>First name<input name="firstName" required></label></form></main>` }),
+  );
+  const page = await context.newPage();
+  await page.goto(`${origin}/pasted-shot`);
+  await panel.bringToFront();
+  await enqueue([page]);
+  await expect.poll(async () => (await state()).applications[0]?.status, { timeout: 40_000 }).toMatch(/ready|awaiting-user|paused/);
+  await panel.getByRole("button", { name: "Report issue" }).first().click();
+  const dialog = panel.getByRole("dialog", { name: "Report an extension issue" });
+  const note = dialog.getByLabel("What were you doing?");
+  await note.fill("The dropdown needed a click.");
+  // A 1x1 PNG on the clipboard, pasted as a browser pastes a screenshot,
+  // with the dialog itself in focus rather than the note (:
+  // pasting did nothing).
+  await dialog.getByRole("heading", { name: "Report an issue" }).evaluate((element) => {
+    const bytes = Uint8Array.from(atob("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="), (c) => c.charCodeAt(0));
+    const data = new DataTransfer();
+    data.items.add(new File([bytes], "image.png", { type: "image/png" }));
+    element.dispatchEvent(new ClipboardEvent("paste", { clipboardData: data, bubbles: true, cancelable: true }));
+  });
+  await expect(dialog.getByRole("img", { name: "Screenshot 1" })).toBeVisible();
+  // The note keeps its text: the image is not pasted into it.
+  await expect(note).toHaveValue("The dropdown needed a click.");
+  // The Paste image button reads a copied screenshot from the clipboard.
+  await panel.evaluate(async () => {
+    const bytes = Uint8Array.from(atob("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="), (c) => c.charCodeAt(0));
+    await navigator.clipboard.write([new ClipboardItem({ "image/png": new Blob([bytes], { type: "image/png" }) })]);
+  });
+  await dialog.getByRole("button", { name: "Paste image" }).click();
+  await expect(dialog.getByRole("img", { name: "Screenshot 2" })).toBeVisible();
+  await dialog.getByRole("checkbox", { name: /Include this page/ }).check();
+  await dialog.getByRole("button", { name: "Capture report" }).click();
+  // The form closes at once and the report is saved behind it.
+  await expect(dialog).toHaveCount(0);
+  await expect.poll(async () => (await ui({ type: "API", path: "/v1/issues" }))[0]?.images?.length, { timeout: 15_000 }).toBe(2);
+  const reports = await ui({ type: "API", path: "/v1/issues" });
+  expect(reports[0].images).toEqual([`${reports[0].id}.image-1.png`, `${reports[0].id}.image-2.png`]);
+});
+
+// A screenshot that arrives through a paste as an empty file (the clipboard
+// renders some tools' images only when asked) was carried as an empty image,
+// and the backend refused the whole report: two reports were downloaded as
+// files and never reached the fixer.
+test("an empty pasted screenshot is read from the clipboard instead, and the report is saved", async () => {
+  await context.route(`${origin}/empty-shot`, (route) =>
+    route.fulfill({ contentType: "text/html", body: `<!doctype html><title>Engineer</title><main><h1>Engineer</h1><form><label>First name<input name="firstName" required></label></form></main>` }),
+  );
+  const page = await context.newPage();
+  await page.goto(`${origin}/empty-shot`);
+  await panel.bringToFront();
+  await enqueue([page]);
+  await expect.poll(async () => (await state()).applications[0]?.status, { timeout: 40_000 }).toMatch(/ready|awaiting-user|paused/);
+  await panel.getByRole("button", { name: "Report issue" }).first().click();
+  const dialog = panel.getByRole("dialog", { name: "Report an extension issue" });
+  await dialog.getByLabel("What were you doing?").fill("The mcq questions were not detected.");
+  // The real image on the clipboard; the paste event carries an empty file.
+  await panel.evaluate(async () => {
+    const bytes = Uint8Array.from(atob("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="), (c) => c.charCodeAt(0));
+    await navigator.clipboard.write([new ClipboardItem({ "image/png": new Blob([bytes], { type: "image/png" }) })]);
+  });
+  await dialog.getByRole("heading", { name: "Report an issue" }).evaluate((element) => {
+    const data = new DataTransfer();
+    data.items.add(new File([], "image.png", { type: "image/png" }));
+    element.dispatchEvent(new ClipboardEvent("paste", { clipboardData: data, bubbles: true, cancelable: true }));
+  });
+  await expect(dialog.getByRole("img", { name: "Screenshot 1" })).toBeVisible({ timeout: 15_000 });
+  await dialog.getByRole("checkbox", { name: /Include this page/ }).check();
+  await dialog.getByRole("button", { name: "Capture report" }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect.poll(async () => (await ui({ type: "API", path: "/v1/issues" }))[0]?.images?.length, { timeout: 15_000 }).toBe(1);
+});
+
 test("GPA, internships, pronouns and orientation are saved in the profile and fill portal wording", async () => {
   // A GPA belongs to a school, on that school's scale.
   await ui({ type: "API", path: "/v1/profile", method: "PUT", body: { ...profile, education: [{ organization: "Example University", title: "Bachelor of Science", startDate: "2022-08", endDate: "2026-05", location: "", details: "" }] } });
@@ -14313,6 +17714,7 @@ test("GPA, internships, pronouns and orientation are saved in the profile and fi
     const extra = document.createElement("div");
     extra.innerHTML = `
       <label>Pronoun<select name="pronoun"><option value="">Select…</option><option>He/Him/His</option><option>She/Her/Hers</option></select></label>
+      <ul><li class="application-question"><div class="application-label multiple-select">Pronouns</div><div class="application-field"><ul data-qa="candidatePronounsCheckboxes" id="candidatePronounsCheckboxes"><div class="column-wrapper"><div class="table-row"><li class="column"><label><input type="checkbox" name="pronouns" class="standardPronounsOption" value="He/him"><span class="application-answer-alternative">He/him</span></label></li><li class="column"><label><input type="checkbox" name="pronouns" class="standardPronounsOption" value="She/her"><span class="application-answer-alternative">She/her</span></label></li><li class="column"><label><input type="checkbox" name="pronouns" class="standardPronounsOption" value="They/them"><span class="application-answer-alternative">They/them</span></label></li></div></div><hr><li><label><input type="checkbox" name="pronouns" id="useNameOnlyPronounsOption" value="Use name only"><span class="application-answer-alternative">Use name only</span></label></li><hr><li><label><input type="checkbox" id="customPronounsOption"><span class="application-answer-alternative">Custom</span></label><input class="card-field-input" style="display:none;" id="customPronounsTextField" type="text" maxlength="40" placeholder="Write here..." name="pronouns"></li><p class="description">Let the employer know what pronouns you use so that they can address you correctly.</p></ul></div></li></ul>
       <label>Sexual Orientation<select name="orientation"><option value="">Select…</option><option>Straight</option><option>I don't wish to answer</option></select></label>
       <label>How many prior internship(s) have you completed?<select name="internships"><option value="">Select…</option><option>None</option><option>3</option><option>3+</option></select></label>
       <div class="select__container"><label id="gpa-label">What is your GPA?</label><input role="combobox" aria-labelledby="gpa-label" aria-expanded="false"></div>`;
@@ -14343,6 +17745,12 @@ test("GPA, internships, pronouns and orientation are saved in the profile and fi
   });
   await enqueue([page]);
   await expect(page.locator('[name="pronoun"]')).toHaveValue("He/Him/His");
+  // Lever's Pronouns boxes: the question
+  // is a label beside the field that holds the list, with a Custom box and
+  // its text field among them.
+  await expect(page.locator('input[value="He/him"]')).toBeChecked();
+  for (const other of ["She/her", "They/them", "Use name only"]) await expect(page.locator(`input[value="${other}"]`)).not.toBeChecked();
+  await expect(page.locator("#customPronounsOption")).not.toBeChecked();
   await expect(page.locator('[name="orientation"]')).toHaveValue(
     "I don't wish to answer",
   );
@@ -14927,7 +18335,10 @@ test("an Amazon Select2 question is one field, named by its selection, and fille
   await expect.poll(async () => (await state()).applications[0].status, { timeout: 10000 }).toBe("paused");
   const open = await ui({ type: "UNRESOLVED_FIELDS", id: (await state()).applications[0].id, tabId });
   expect(open.available).toBe(true);
-  expect(open.problems.map((problem: { label: string }) => problem.label)).toContain("Are you 18 years of age or older?");
+  // An age question the profile cannot answer is not offered for AI
+  // suggestions (profile-facts.ts): the model is never asked to guess it.
+  expect(open.problems.map((problem: { label: string }) => problem.label)).not.toContain("Are you 18 years of age or older?");
+  await expect(page.locator("select").first()).toHaveValue("");
 });
 
 // Amazon (account.amazon.jobs): a text question
@@ -15565,6 +18976,92 @@ test("with AI filling automatically, trying it again is offered only when someth
   }
 });
 
+// Workable's Yes/No questions: two required
+// questions about the applicant's coding experience, each a radiogroup of
+// "YES" and "NO" options wrapping hidden radios, were left unanswered. With
+// AI filling automatically, the model answers them from the saved profile.
+test("Workable's required Yes/No experience questions are answered by AI from the profile", async () => {
+  const asked: string[] = [];
+  const providerServer = createServer(async (req, res) => {
+    const chunks: Buffer[] = [];
+    for await (const chunk of req) chunks.push(chunk);
+    const input = JSON.parse(JSON.parse(Buffer.concat(chunks).toString()).messages[1].content);
+    const skills = (input.sources || []).find((source: { id: string }) => source.id === "profile.skills");
+    const work = (input.sources || []).find((source: { id: string }) => source.id === "work.1");
+    const suggestions = (input.fields || []).map((candidate: { id: string; label: string }) => {
+      asked.push(candidate.label);
+      return /programming language/i.test(candidate.label) && skills
+        ? { fieldId: candidate.id, value: "YES", sourceIds: ["profile.skills"] }
+        : /written code/i.test(candidate.label) && work
+          ? { fieldId: candidate.id, value: "YES", sourceIds: ["work.1"] }
+          : { fieldId: candidate.id, skip: "Not in the saved details." };
+    });
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ suggestions }) } }] }));
+  });
+  providerServer.listen(0, "127.0.0.1");
+  await once(providerServer, "listening");
+  try {
+    appConfig.endpoint = `http://127.0.0.1:${(providerServer.address() as { port: number }).port}/v1`;
+    await ui({
+      type: "API", path: "/v1/profile", method: "PUT",
+      body: {
+        ...profile,
+        skills: ["TypeScript", "Python"],
+        education: [{ organization: "Virginia Tech", title: "Bachelor of Science", fieldOfStudy: "Computer Science", startDate: "2022-08", endDate: "2026-05", location: "Blacksburg, Virginia" }],
+        work: [{ organization: "Contoso", title: "Software Engineer Intern", startDate: "2025-06", endDate: "2025-08", location: "Remote", details: "Built REST APIs in TypeScript." }],
+      },
+    });
+    await ui({ type: "SETTINGS", settings: { concurrency: 4, generationConcurrency: 2, modelFill: "auto", legalQuestions: "manual" } });
+    await panel.reload();
+    // As captured: the question is the group's label, each option a
+    // div[role=radio] that the site checks on a click.
+    const group = (name: string, label: string, question: string) =>
+      `<span id="${label}_label"><strong>${question}</strong></span>
+      <fieldset role="radiogroup" data-ui="${name}" aria-labelledby="${label}_label">
+        ${[["yes", "true", "YES"], ["no", "false", "NO"]].map(([id, value, text]) =>
+          `<div data-ui="option" aria-labelledby="${label}_label radio_label_${name}_${id}" id="wrapper_${name}_${id}" role="radio" aria-checked="false" aria-required="true" tabindex="0"><label><input aria-required="true" required id="${name}_${id}" tabindex="-1" aria-hidden="true" type="radio" name="${name}" data-lane-value="${value}"><div><span id="radio_label_${name}_${id}">${text}</span></div></label></div>`).join("")}
+      </fieldset>`;
+    await context.route(`${workableOrigin}/contoso/j/YESNO12345/apply**`, (route) => route.fulfill({
+      contentType: "text/html",
+      body: `<!doctype html><title>Apply</title><main><h1>Software Engineering Intern</h1><form>
+        <label for="email">Email</label><input id="email" name="email" type="email" required>
+        ${group("QA_1", "q1", "Have you written code or built a software project through coursework, personal projects, a coding program, or an internship?")}
+        ${group("QA_2", "q2", "Do you have experience with at least one programming language, such as JavaScript, TypeScript, Python, or Java?")}
+        <button type="submit">Submit application</button></form></main>
+        <script>window.submissions=0;document.querySelector('form').onsubmit=e=>{e.preventDefault();window.submissions++};
+        for (const option of document.querySelectorAll('[data-ui="option"]'))
+          option.addEventListener('click', () => {
+            for (const other of option.parentElement.querySelectorAll('[data-ui="option"]')) {
+              other.setAttribute('aria-checked', String(other === option));
+              other.querySelector('input').checked = other === option;
+            }
+          });</script>`,
+    }));
+    const page = await context.newPage();
+    await page.goto(`${workableOrigin}/contoso/j/YESNO12345/apply/`);
+    const tabId = (await panel.evaluate(async () => chrome.tabs.query({}))).find((tab) => tab.url === page.url())!.id!;
+    await ui({ type: "TRACK_ITEMS", items: [{ url: page.url(), tabId }] });
+    await ui({ type: "FILL_STEP", id: (await state()).applications[0].id, tabId });
+    await expect(page.locator("#email")).toHaveValue(profile.email, { timeout: 25000 });
+    await expect(page.locator("#QA_1_yes")).toBeChecked({ timeout: 30000 });
+    await expect(page.locator("#QA_2_yes")).toBeChecked({ timeout: 30000 });
+    await expect(page.locator("#wrapper_QA_2_yes")).toHaveAttribute("aria-checked", "true");
+    await expect(page.locator("#QA_1_no")).not.toBeChecked();
+    // The programming-language question is answered from the saved skills
+    // without the model (profile-facts.ts); the other still goes to it.
+    expect(asked.join(" | ")).toMatch(/written code/);
+    expect(asked.join(" | ")).not.toMatch(/programming language/);
+    const app = (await state()).applications[0];
+    await expect.poll(async () => (await state()).applications[0].missing.filter((item: string) => /written code|programming language/.test(item))).toEqual([]);
+    expect(app.status).not.toBe("paused");
+    expect(await page.evaluate(() => (window as any).submissions)).toBe(0);
+    await page.close();
+  } finally {
+    await new Promise<void>((resolve) => providerServer.close(() => resolve()));
+  }
+});
+
 test("structured AI fallback lists unresolved fields before an explicit reviewed fill", async () => {
   // "Degree Level Sought": the profile answers a plain "Degree Level" (the
   // degree under way), so the list AI must suggest for asks
@@ -15891,4 +19388,648 @@ test("react-select waits for component attachment without replaying an opening o
     expect(await page.evaluate(() => (window as any).fixtureSubmits)).toBe(0);
     await page.close();
   }
+});
+
+// one employer's SmartRecruiters form: the
+// toast the site shows on saving an entry lay over the window for three
+// seconds; the next school's Institution menu opened under it, Down did
+// nothing there, and its pick was refused as covered. The Save that
+// followed failed for the empty Institution, the open editor was taken for
+// the next school's row, and only one school was added, unsaved.
+test("SmartRecruiters education entries wait out the save toast and each school is saved as its own", async () => {
+  await ui({ type: "API", path: "/v1/profile", method: "PUT", body: { ...profile, education: [
+    { organization: "Penn State", title: "Bachelor of Science", fieldOfStudy: "Data Science", startDate: "2018-08", endDate: "2022-05", location: "", details: "" },
+    { organization: "Virginia Tech", title: "Master of Science", fieldOfStudy: "Computer Science", startDate: "2022-08", endDate: "2024-05", location: "", details: "" },
+  ] } });
+  await context.route(`${smartRecruitersOrigin}/**`, (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: `<!doctype html><style>#toast{position:fixed;inset:0;z-index:20000;background:#0003}</style>
+        <main><label for="email">Email</label><input id="email" type="email"><oc-education><div id="entries"></div><button type="button" data-test="add-education">Add</button></oc-education></main><script>${smartRecruitersWidgets}
+        window.saved = [];
+        document.querySelector('[data-test="add-education"]').addEventListener("click", () => {
+          const entry = document.createElement("oc-education-entry");
+          entry.innerHTML = '<div data-test="education-edit-form"><oc-institution-autocomplete></oc-institution-autocomplete><button type="button" data-test="education-save">Save</button><p class="error"></p></div>';
+          document.getElementById("entries").append(entry);
+          const box = splAutocomplete(entry.querySelector("oc-institution-autocomplete"), { label: "Institution", test: "institution-autocomplete", custom: true, downless: true, suggest: (text) => ["Penn State", "Virginia Tech"].filter((name) => name.toLowerCase().startsWith(text.toLowerCase())) });
+          entry.querySelector('[data-test="education-save"]').addEventListener("click", () => {
+            // Saved only with an Institution chosen from the list.
+            const school = box.getAttribute("value");
+            if (!school) { entry.querySelector(".error").textContent = "Institution is required."; return; }
+            window.saved.push(school);
+            entry.innerHTML = '<div data-test="education-entry">' + school + '</div>';
+            const toast = document.createElement("div");
+            toast.id = "toast";
+            toast.textContent = "Education saved";
+            document.body.append(toast);
+            setTimeout(() => toast.remove(), 3000);
+          });
+        });
+      </script>`,
+    }),
+  );
+  const page = await context.newPage();
+  await page.goto(`${smartRecruitersOrigin}/oneclick-ui/company/Acme/publication/5`);
+  await panel.bringToFront();
+  await background(page);
+  await enqueue([page]);
+  await expect.poll(() => page.evaluate(() => (window as unknown as { saved: string[] }).saved), { timeout: 90_000 }).toEqual(["Penn State", "Virginia Tech"]);
+  await expect(page.locator('[data-test="education-edit-form"]')).toHaveCount(0);
+});
+
+// one employer's SmartRecruiters form: the
+// place of residence is asked as "Postal code / zip code", the same
+// location autocomplete as other forms' City, searched from three
+// characters. It was clicked and waited on for options that come only from
+// typed text.
+test("a SmartRecruiters Postal code / zip code is searched and chosen", async () => {
+  await ui({ type: "API", path: "/v1/profile", method: "PUT", body: { ...profile, city: "Blacksburg", state: "VA", postalCode: "24060" } });
+  await context.route(`${smartRecruitersOrigin}/**`, (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: `<!doctype html><main><label for="email">Email</label><input id="email" type="email"><div data-test="personal-info-location"><oc-location-autocomplete></oc-location-autocomplete></div></main><script>${smartRecruitersWidgets}
+        splAutocomplete(document.querySelector("oc-location-autocomplete"), { label: "Postal code / zip code", test: "location-autocomplete", downless: true, suggest: (text) => {
+          window.searched = text;
+          return text.startsWith("240") ? ["Blacksburg, VA 24060, US", "Blacksburg, VA 24061, US"] : [];
+        } });
+      </script>`,
+    }),
+  );
+  const page = await context.newPage();
+  await page.goto(`${smartRecruitersOrigin}/oneclick-ui/company/Acme/publication/6`);
+  await panel.bringToFront();
+  await background(page);
+  await enqueue([page]);
+  await expect.poll(() => page.evaluate(() => document.querySelector("spl-autocomplete")!.getAttribute("value")), { timeout: 45_000 }).toBe("Blacksburg, VA 24060, US");
+  expect(await page.evaluate(() => (window as unknown as { searched: string }).searched)).toBe("24060");
+});
+
+// Veolia's SmartRecruiters form: Down did
+// nothing in the menu, so its entry was clicked for real, but the menu was
+// redrawn as the pointer reached it and the box below took the press. The
+// fill paused itself as the applicant's "click on City" with nothing filled.
+test("a SmartRecruiters menu click that lands on another box is the fill's own and is made again", async () => {
+  await ui({ type: "API", path: "/v1/profile", method: "PUT", body: { ...profile, city: "Blacksburg", state: "VA" } });
+  await context.route(`${smartRecruitersOrigin}/**`, (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: `<!doctype html><style>body{margin:0}main{padding:20px}#below{display:block;width:400px;height:300px}</style><main><label for="email">Email</label><input id="email" type="email"><oc-location-autocomplete></oc-location-autocomplete><input id="below" aria-label="Referral code"></main><script>${smartRecruitersWidgets}
+        const box = splAutocomplete(document.querySelector("oc-location-autocomplete"), { label: "City", test: "location-autocomplete", downless: true, suggest: (text) => ["Blacksburg, VA, US", "Blacksburg, SC, US"].filter((name) => name.toLowerCase().startsWith(text.toLowerCase())) });
+        // The pointer's first arrival over the menu has the site redraw it:
+        // gone for a moment, the box below moves up under the pointer.
+        const menu = box.shadowRoot.querySelector('[role="listbox"]');
+        let redrawn = false;
+        menu.addEventListener("mousemove", (event) => {
+          if (redrawn || !event.isTrusted) return;
+          redrawn = true;
+          menu.style.display = "none";
+          setTimeout(() => { menu.style.display = ""; }, 800);
+        });
+        window.strayPresses = 0;
+        document.getElementById("below").addEventListener("mousedown", () => { window.strayPresses++; });
+      </script>`,
+    }),
+  );
+  const page = await context.newPage();
+  await page.goto(`${smartRecruitersOrigin}/oneclick-ui/company/Acme/publication/7`);
+  await panel.bringToFront();
+  await background(page);
+  await enqueue([page]);
+  await expect.poll(() => page.evaluate(() => document.querySelector("spl-autocomplete")!.getAttribute("value")), { timeout: 45_000 }).toBe("Blacksburg, VA, US");
+  const app = (await state()).applications.find((candidate) => candidate.url === page.url());
+  expect(app?.attempts.map((attempt) => attempt.note || "").join(" ")).not.toMatch(/You interacted/);
+  expect(app?.status).not.toBe("paused");
+  expect(await page.evaluate(() => (window as unknown as { strayPresses: number }).strayPresses)).toBe(0);
+});
+
+// one employer's SmartRecruiters résumé: the
+// spl-dropzone takes the file, empties its input, and lists the upload in
+// its files attribute once its own upload is done. Read by its input alone,
+// the finished upload was "Verify upload: Resume".
+test("a SmartRecruiters dropzone's listed upload reads as its value", async () => {
+  await context.route(`${smartRecruitersOrigin}/**`, (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: `<!doctype html><main><label for="email">Email</label><input id="email" type="email">
+        <oc-resume-upload><div data-test="resume-upload-container"><h3 data-test="section-title">Resume</h3><spl-dropzone data-test="resume-upload" label="" files="[]"></spl-dropzone></div></oc-resume-upload></main><script>
+        window.uploads = 0;
+        const zone = document.querySelector("spl-dropzone");
+        zone.attachShadow({ mode: "open" }).innerHTML = '<div class="c-spl-dropzone-wrapper"><label for="spl-dropzone-file-input-1"><span>Choose a file</span> <span>or drop it here</span></label><input type="file" id="spl-dropzone-file-input-1" accept=".pdf, .docx"></div><ul class="c-spl-file-list"></ul>';
+        const input = zone.shadowRoot.querySelector("input");
+        input.addEventListener("change", () => {
+          const name = input.files[0]?.name;
+          if (!name) return;
+          window.uploads++;
+          input.value = "";
+          // The site's own upload, then the file listed.
+          setTimeout(() => {
+            zone.setAttribute("files", JSON.stringify([{ fileName: name, fileURL: null, fileId: "1", attachmentType: "RESUME", name }]));
+            zone.shadowRoot.querySelector("ul").innerHTML = '<li><span class="c-spl-file-list-item-name">' + name + '</span></li>';
+          }, 3000);
+        });
+      </script>`,
+    }),
+  );
+  const page = await context.newPage();
+  await page.goto(`${smartRecruitersOrigin}/oneclick-ui/company/Acme/publication/7`);
+  await panel.bringToFront();
+  await background(page);
+  await enqueue([page]);
+  await expect.poll(async () => (await state()).applications.find((candidate) => candidate.url === page.url())?.status, { timeout: 60_000 }).toMatch(/^(ready|awaiting-user)$/);
+  const app = (await state()).applications.find((candidate) => candidate.url === page.url())!;
+  expect(app.missing.join(" ")).not.toMatch(/Verify upload|Choose a file manually/);
+  expect(await page.evaluate(() => (window as unknown as { uploads: number }).uploads)).toBe(1);
+  const fields = (await content(page, { type: "INSPECT" })).data.fields;
+  expect(fields.find((field: { kind: string }) => field.kind === "file")?.value).toMatch(/\.(pdf|docx)$/);
+});
+
+// one employer's SmartRecruiters screening step:
+// an info block asks for a school transcript, in its own shadow root, and
+// the "Additional attachments" uploader after it names no document. The
+// transcript was never attached.
+test("a SmartRecruiters attachments uploader gets the document the info block before it asks for", async () => {
+  appConfig.transcriptsDir = await scratch("lane-transcripts-");
+  await writeFile(join(appConfig.transcriptsDir, "Unofficial_Transcript.pdf"), "%PDF-1.4\n% a transcript\n");
+  await context.route(`${smartRecruitersOrigin}/**`, (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: `<!doctype html><main><label for="email">Email</label><input id="email" type="email">
+        <div class="spl-mt-2" data-test="question-container"><sr-question-field-info></sr-question-field-info></div>
+        <div class="spl-mt-2" data-test="question-container"><sr-question-field-files name=""><spl-dropzone files="[]"></spl-dropzone></sr-question-field-files></div>
+        </main><script>
+        window.uploaded = [];
+        const info = document.querySelector("sr-question-field-info").attachShadow({ mode: "open" });
+        info.innerHTML = '<sr-question-custom-form-field></sr-question-custom-form-field>';
+        info.querySelector("sr-question-custom-form-field").attachShadow({ mode: "open" }).innerHTML =
+          '<span><strong>Please submit a school transcript (official or unofficial) that confirms you are actively enrolled in a degree-granting program.</strong><br><br>(<i><strong>REQUIRED</strong></i>)</span>';
+        const files = document.querySelector("sr-question-field-files");
+        const shell = files.attachShadow({ mode: "open" });
+        shell.innerHTML = '<spl-form-field><label slot="label">Additional attachments</label><slot></slot></spl-form-field>';
+        const zone = files.querySelector("spl-dropzone");
+        zone.attachShadow({ mode: "open" }).innerHTML = '<div class="c-spl-dropzone-wrapper"><label for="spl-dropzone-file-input-2"><span>Choose a file</span> <span>or drop it here</span></label><input type="file" id="spl-dropzone-file-input-2"></div><ul class="c-spl-file-list"></ul>';
+        const input = zone.shadowRoot.querySelector("input");
+        input.addEventListener("change", () => {
+          const name = input.files[0]?.name;
+          if (!name) return;
+          window.uploaded.push(name);
+          input.value = "";
+          setTimeout(() => zone.setAttribute("files", JSON.stringify([{ fileName: name, name }])), 500);
+        });
+      </script>`,
+    }),
+  );
+  const page = await context.newPage();
+  await page.goto(`${smartRecruitersOrigin}/oneclick-ui/company/Acme/publication/9`);
+  await panel.bringToFront();
+  await enqueue([page]);
+  await expect.poll(() => page.evaluate(() => (window as unknown as { uploaded: string[] }).uploaded), { timeout: 60_000 }).toEqual(["Unofficial_Transcript.pdf"]);
+});
+
+// Enovation's Paylocity rows: a start date this
+// extension wrote, wrong, was "existing" once the page was loaded again, and
+// with existing values kept it was never corrected. A value it wrote itself
+// is its own to correct; one the page had before it is still kept.
+test("a value this extension wrote earlier is corrected on a later fill, though existing values are kept", async () => {
+  await ui({ type: "SETTINGS", settings: { concurrency: 4, generationConcurrency: 2, modelFill: "written", prefilled: "keep" } });
+  let held = "";
+  await context.route(`${origin}/own-writes`, (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: `<!doctype html><form><label>City<input id="city" value="${held}"></label><label>Nickname<input id="nickname" value="Ace"></label><button type="submit">Submit</button></form>`,
+    }),
+  );
+  const page = await context.newPage();
+  await page.goto(`${origin}/own-writes`);
+  await panel.bringToFront();
+  await enqueue([page]);
+  await expect(page.locator("#city")).toHaveValue(profile.city!, { timeout: 45000 });
+  await expect.poll(async () => (await state()).applications[0].status, { timeout: 45000 }).toMatch(/^(awaiting-user|ready)$/);
+  // The profile changes; the page comes back holding what was written.
+  held = profile.city!;
+  await ui({ type: "API", path: "/v1/profile", method: "PUT", body: { ...profile, city: "Blacksburg" } });
+  await page.reload();
+  await expect(page.locator("#city")).toHaveValue(profile.city!);
+  await ui({ type: "FILL_STEP", id: (await state()).applications[0].id });
+  await expect(page.locator("#city")).toHaveValue("Blacksburg", { timeout: 45000 });
+  // The page's own value stays.
+  await expect(page.locator("#nickname")).toHaveValue("Ace");
+});
+
+// one employer's City again: the box, typed, read
+// as locked while the site looked its places up, and the pick was given up
+// 380 ms later ("locked before the pick"). A short hold is waited out.
+test("a SmartRecruiters City held busy while its places load is still chosen", async () => {
+  await ui({ type: "API", path: "/v1/profile", method: "PUT", body: { ...profile, city: "Blacksburg", state: "VA" } });
+  await context.route(`${smartRecruitersOrigin}/**`, (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: `<!doctype html><main><oc-personal-information><label for="email">Email</label><input id="email" type="email"><oc-location-autocomplete></oc-location-autocomplete></oc-personal-information></main><script>${smartRecruitersWidgets}
+        splAutocomplete(document.querySelector("oc-location-autocomplete"), { label: "City", test: "location-autocomplete", busy: 1200, suggest: (text) =>
+          ["Blacksburg, VA, US", "Blacksburg, SC, US"].filter((name) => name.toLowerCase().startsWith(text.toLowerCase())) });
+      </script>`,
+    }),
+  );
+  const page = await context.newPage();
+  await page.goto(`${smartRecruitersOrigin}/oneclick-ui/company/Acme/publication/12`);
+  await panel.bringToFront();
+  await enqueue([page]);
+  await expect.poll(() => page.evaluate(() => document.querySelector("spl-autocomplete")!.getAttribute("value")), { timeout: 45_000 }).toBe("Blacksburg, VA, US");
+});
+
+// Wise's SmartRecruiters City: the site answered
+// the first letters' search while the keys were going and the whole text's
+// only after them; Down and Enter on the early list were lost to the late
+// answer and the box dropped what was typed. The list for the final text is
+// waited for.
+test("a SmartRecruiters City is chosen from the list for the whole text, not an early search's", async () => {
+  await ui({ type: "API", path: "/v1/profile", method: "PUT", body: { ...profile, city: "Tempe", state: "AZ" } });
+  await context.route(`${smartRecruitersOrigin}/**`, (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: `<!doctype html><main><oc-personal-information><label for="email">Email</label><input id="email" type="email"><oc-location-autocomplete></oc-location-autocomplete></oc-personal-information></main><script>${smartRecruitersWidgets}
+        splAutocomplete(document.querySelector("oc-location-autocomplete"), { label: "City", test: "location-autocomplete",
+          staged: { early: ["Temecula, CA, US", "Temple, TX, US"], earlyAfter: 300, lateAfter: 700 },
+          suggest: (text) => ["Tempe, AZ, US", "Tempe, AZ 85281, US"].filter((name) => name.toLowerCase().startsWith(text.toLowerCase())) });
+      </script>`,
+    }),
+  );
+  const page = await context.newPage();
+  await page.goto(`${smartRecruitersOrigin}/oneclick-ui/company/Acme/publication/13`);
+  await panel.bringToFront();
+  await enqueue([page]);
+  await expect.poll(() => page.evaluate(() => document.querySelector("spl-autocomplete")!.getAttribute("value")), { timeout: 45_000 }).toBe("Tempe, AZ, US");
+});
+
+// Microsoft's careers form: its "Job specific
+// questions" are native Yes/No radios marked readonly, which radios ignore;
+// read as not writable, none of the three was ever seen.
+test("readonly Yes/No radios, which radios ignore, are answered", async () => {
+  await ui({ type: "API", path: "/v1/profile", method: "PUT", body: { ...profile, answers: [...(profile.answers || []), { question: "Can you meet this citizenship verification requirement?", answer: "Yes" }] } });
+  await context.route(`${origin}/readonly-radios`, (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: `<!doctype html><form><fieldset><legend id="q1_legend">Job specific questions</legend>
+        <label id="q1_label" for="q1">Can you meet this citizenship verification requirement?</label>
+        <div role="radiogroup" id="q1" aria-labelledby="q1_label">
+          <div><input aria-label="Yes, Can you meet this citizenship verification requirement?" id="q1-0.0" name="q1" type="radio" readonly aria-required="true"><label for="q1-0.0" aria-hidden="true"><span>Yes</span></label></div>
+          <div><input aria-label="No, Can you meet this citizenship verification requirement?" id="q1-1.0" name="q1" type="radio" readonly aria-required="true"><label for="q1-1.0" aria-hidden="true"><span>No</span></label></div>
+        </div></fieldset><button type="submit">Submit</button></form>`,
+    }),
+  );
+  const page = await context.newPage();
+  await page.goto(`${origin}/readonly-radios`);
+  await panel.bringToFront();
+  await enqueue([page]);
+  await expect(page.locator('[id="q1-0.0"]')).toBeChecked({ timeout: 45000 });
+});
+
+// ICE's iCIMS form: the form reloaded itself
+// at a new query (a new csrf) mid-fill, and the fill ended in an error
+// ("the message channel closed before a response was received") instead of
+// reading the same form again.
+test("a form that reloads at a new query mid-fill is read again, not failed", async () => {
+  await context.route(`${origin}/requery-page`, (route) =>
+    route.fulfill({ contentType: "text/html", body: `<!doctype html><title>Apply</title><h1>Apply</h1><iframe id="form" src="/requery-frame?in_iframe=1&csrf=1" style="width:800px;height:600px"></iframe>` }));
+  await context.route(`${origin}/requery-frame**`, (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: `<!doctype html><form>
+        <label>First name<input name="first"></label><label>Last name<input name="last"></label>
+        <label>Email<input name="email" type="email"></label><label>Phone<input name="phone"></label>
+        <button type="submit">Submit</button></form><script>
+        document.querySelector('[name="first"]').addEventListener('input', () => {
+          if (!sessionStorage.getItem('requeried')) { sessionStorage.setItem('requeried', '1'); location.replace('/requery-frame?in_iframe=1&csrf=' + Date.now()); }
+        });</script>`,
+    }),
+  );
+  const page = await context.newPage();
+  await page.goto(`${origin}/requery-page`);
+  await panel.bringToFront();
+  await enqueue([page]);
+  await expect.poll(async () => (await state()).applications[0].status, { timeout: 45000 }).toMatch(/^(awaiting-user|ready|paused|failed)$/);
+  const app = (await state()).applications[0];
+  expect(app.attempts.at(-1)?.status).not.toBe("error");
+  expect(app.status).not.toBe("failed");
+});
+
+// ICE's iCIMS page: after the extension was reloaded and the
+// page refreshed into the new build, the badges the earlier copies of the
+// script drew stayed beside the new one (a stale "Fill failed" among them).
+test("a page shows one badge, whatever earlier copies of the script left", async () => {
+  await context.route(`${origin}/stale-badge`, (route) =>
+    route.fulfill({ contentType: "text/html", body: `<!doctype html><title>Engineer</title><main><h1>Engineer</h1><form><label>First name<input name="firstName" required></label><label>Badge number<input name="badge" required></label></form></main><script>
+      for (let n = 0; n < 2; n++) { const stale = document.createElement("application-lane-badge"); stale.setAttribute("data-application-lane", "badge"); stale.setAttribute("title", "Fill failed"); document.body.append(stale); }
+    </script>` }),
+  );
+  const page = await context.newPage();
+  await page.goto(`${origin}/stale-badge`);
+  await panel.bringToFront();
+  await enqueue([page]);
+  await expect(page.locator('[name="firstName"]')).toHaveValue(profile.firstName, { timeout: 40000 });
+  // Only the current badge is left once it is drawn.
+  await expect(page.locator("application-lane-badge")).toHaveCount(1, { timeout: 20000 });
+  await expect(page.locator("application-lane-badge")).toHaveAttribute("data-tone", "attention", { timeout: 20000 });
+});
+
+// A capture taken after a fill named the recording as of its last
+// checkpoint, so what happened on the page since (a pause, its cause) was not
+// in it (Salesforce's Workday). The capture saves it first.
+test("a capture's recording holds what happened on the page up to the capture", async () => {
+  await context.route(`${origin}/recorded-capture`, (route) =>
+    route.fulfill({ contentType: "text/html", body: `<!doctype html><form><label>First name<input name="firstName"></label><label>Nickname<input name="nickname"></label><button type="submit">Submit</button></form>` }));
+  const page = await context.newPage();
+  await page.goto(`${origin}/recorded-capture`);
+  await panel.bringToFront();
+  await enqueue([page]);
+  await expect(page.locator('[name="firstName"]')).toHaveValue(profile.firstName, { timeout: 40000 });
+  await expect.poll(async () => (await state()).applications[0].status, { timeout: 45000 }).toMatch(/^(awaiting-user|ready)$/);
+  await page.waitForTimeout(1500);
+  // The applicant types after the fill.
+  await page.bringToFront();
+  await page.locator('[name="nickname"]').pressSequentially("Ace");
+  await page.waitForTimeout(500);
+  const { liveLine } = await import("../../scripts/lane-live");
+  const port = (backend.address() as { port: number }).port;
+  const line = await liveLine(`ws://127.0.0.1:${port}/v1/live`, async () => token, `http://127.0.0.1:${port}`);
+  const reply = await line.send("capture", (await state()).applications[0].id);
+  line.close();
+  expect(reply.ok).toBe(true);
+  const capture = JSON.parse(await readFile(join(backendDirectory, "captures", `${reply.detail}.json`), "utf8"));
+  const recording = await ui({ type: "API", path: `/v1/recordings/${capture.recordingId}` });
+  expect(JSON.stringify(recording.events)).toContain("Ace");
+});
+
+// Salesforce's Workday: the page moved focus while the fill was
+// typing, its keys landed in another box, and the fill paused as if the
+// applicant had typed there. While it sends keys, every key is its own.
+test("the fill's own keys landing in another box than the one typed into never pause it", async () => {
+  await ui({ type: "SETTINGS", settings: { concurrency: 4, generationConcurrency: 2, networkCapture: "off" } });
+  const workdayOrigin = atsOrigins[0];
+  await ui({
+    type: "API",
+    path: "/v1/profile",
+    method: "PUT",
+    body: { ...profile, work: [{ organization: "Example Labs", title: "Software Engineer", location: "Tucson, AZ", details: "Built TypeScript services.", startDate: "2025-03", endDate: "" }] },
+  });
+  await context.route(`${workdayOrigin}/**`, (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: `<!doctype html><main data-automation-id="applicationPage">
+        <label for="notes">Notes</label><input id="notes" type="text">
+        <div data-automation-id="workExperience-16" id="workExperience-16">
+          <div data-automation-id="formField-jobTitle" data-fkit-id="workExperience-16--jobTitle"><label for="workExperience-16--jobTitle"><span>Job Title<abbr aria-hidden="true">*</abbr></span></label><div><input type="text" id="workExperience-16--jobTitle" name="jobTitle" aria-required="true"></div></div>
+          <div data-automation-id="formField-startDate" data-fkit-id="workExperience-16--startDate">
+            <fieldset><legend><label id="label41"><span>From<abbr aria-hidden="true">*</abbr></span></label></legend>
+              <div id="workExperience-16--startDate" role="group" data-automation-id="dateInputWrapper">
+                <div id="workExperience-16--startDate-dateSectionMonth" tabindex="0"><div aria-hidden="true" data-automation-id="dateSectionMonth-display">MM</div><input role="spinbutton" aria-label="Month" aria-valuemax="12" aria-valuemin="1" aria-required="true" id="workExperience-16--startDate-dateSectionMonth-input" data-automation-id="dateSectionMonth-input" tabindex="-1"></div>
+                <div>/</div>
+                <div id="workExperience-16--startDate-dateSectionYear" tabindex="-1"><div aria-hidden="true" data-automation-id="dateSectionYear-display">YYYY</div><input role="spinbutton" aria-label="Year" aria-valuemax="9999" aria-valuemin="1" aria-required="true" id="workExperience-16--startDate-dateSectionYear-input" data-automation-id="dateSectionYear-input"></div>
+              </div>
+            </fieldset>
+          </div>
+        </div>
+      </main><script>
+        // On the first real key in Month the page sends focus elsewhere, once,
+        // and the next key lands in another box.
+        const month = document.querySelector('[data-automation-id="dateSectionMonth-input"]');
+        let moved = false;
+        month.addEventListener('keydown', (event) => { if (event.isTrusted && !moved) { moved = true; setTimeout(() => document.getElementById('notes').focus(), 0); } });
+      </script>`,
+    }),
+  );
+  const page = await context.newPage();
+  await page.goto(`${workdayOrigin}/en-US/acme/job/moved-keys`);
+  await panel.bringToFront();
+  await enqueue([page]);
+  await expect.poll(async () => (await state()).applications[0]?.status, { timeout: 45_000 }).toMatch(/ready|awaiting-user|paused/);
+  const app = (await state()).applications[0];
+  expect(app.status).not.toBe("paused");
+  expect(app.note || "").not.toMatch(/You interacted/);
+});
+
+// Rippling's Location: a text box that asks
+// Google Maps for places as it is typed and draws them a second later in a
+// dialog; the fill wrote the text and left that list open, nothing picked.
+test("Rippling's Location box has its suggestion picked, or its list closed when none fits", async () => {
+  await ui({ type: "API", path: "/v1/profile", method: "PUT", body: { ...profile, city: "Tempe", state: "Arizona" } });
+  await context.route(`${ripplingOrigin}/**`, (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: `<!doctype html><html><head><title>Apply - Software Engineer Intern</title></head><body><form onsubmit="window.submissions++; return false">
+        <div data-testid="field"><div><span aria-describedby="field-tip-47" id="field-46-label">Location</span><span>*</span></div>
+        <div><div data-testid="location"><div><div><span><span data-icon="SEARCH_OUTLINE" aria-hidden="true"></span></span><input data-testid="input-undefined" data-lpignore="true" id="field-46" aria-required="true" autocomplete="off" aria-label="textbox" aria-labelledby="field-46-label" aria-autocomplete="list" aria-haspopup="listbox" class="css-dci29u efnm4lm5" name="PYL7wmQCBx"></div></div></div></div></div>
+        <button type="submit">Submit application</button></form>
+        <script>
+          window.submissions = 0; window.picks = 0;
+          const input = document.getElementById("field-46");
+          const mode = new URLSearchParams(location.search).get("mode");
+          let timer;
+          const close = () => document.querySelectorAll("[data-places]").forEach((dialog) => dialog.remove());
+          input.addEventListener("input", () => {
+            clearTimeout(timer); close();
+            const typed = input.value;
+            // Google answers a second after the keys; the list is a dialog
+            // drawn outside the form.
+            timer = setTimeout(() => {
+              const dialog = document.createElement("div");
+              dialog.setAttribute("role", "dialog"); dialog.setAttribute("data-places", "");
+              dialog.className = "rpd-theme-berry-default-light css-94w9bw e1qmum010";
+              const entry = document.createElement("div");
+              entry.innerHTML = "<div><span>" + (mode === "none" ? "Zzyzx Road, Nowhere, USA" : typed + ", USA") + "</span></div>";
+              entry.addEventListener("click", () => {
+                window.picks++;
+                Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set.call(input, entry.textContent);
+                input.dispatchEvent(new Event("input", { bubbles: true }));
+                clearTimeout(timer); close();
+              });
+              dialog.append(entry);
+              document.body.append(dialog);
+            }, 1000);
+          });
+          document.addEventListener("keydown", (event) => { if (event.key === "Escape") close(); });
+          document.addEventListener("mousedown", (event) => { if (!event.target.closest("[data-places]") && event.target !== input) close(); });
+        </script></body></html>`,
+    }),
+  );
+  const picked = await context.newPage();
+  await picked.goto(`${ripplingOrigin}/acme/jobs/7c0ffee0-0000-4000-8000-000000000002/apply?step=application`);
+  await panel.bringToFront();
+  await enqueue([picked]);
+  await expect.poll(async () => (await state()).applications[0].status, { timeout: 45000 }).toMatch(/^(awaiting-user|ready)$/);
+  await expect(picked.locator("#field-46")).toHaveValue("Tempe, Arizona, USA");
+  expect(await picked.evaluate(() => (window as any).picks)).toBe(1);
+  expect(await picked.locator("[data-places]").count()).toBe(0);
+  expect(await picked.evaluate(() => (window as any).submissions)).toBe(0);
+  await picked.close();
+  const none = await context.newPage();
+  await none.goto(`${ripplingOrigin}/acme/jobs/7c0ffee0-0000-4000-8000-000000000003/apply?step=application&mode=none`);
+  await panel.bringToFront();
+  await enqueue([none]);
+  await expect.poll(async () => (await state()).applications.at(-1)!.status, { timeout: 45000 }).toMatch(/^(awaiting-user|ready)$/);
+  expect(await none.evaluate(() => (window as any).picks)).toBe(0);
+  expect(await none.locator("[data-places]").count()).toBe(0);
+  expect(await none.evaluate(() => (window as any).submissions)).toBe(0);
+});
+
+// iCIMS' own education blocks: the boxes are
+// named by their ids ("icims_0_SchoolName") and the school list of the
+// "currently enrolled" part only by a code ("sync"), and the "Education
+// (Completed)" heading above says to enter only the highest finished degree.
+// The degree under way went into its first block, and its list was left.
+test("iCIMS' completed-education blocks take the finished degree and the enrolled list the one under way", async () => {
+  await ui({
+    type: "API", path: "/v1/profile", method: "PUT",
+    body: {
+      ...profile,
+      education: [
+        { organization: "Virginia Tech", title: "Master of Science", fieldOfStudy: "Data Science", startDate: "2025-08", endDate: "2027-12", current: true, location: "Blacksburg, VA", details: "" },
+        { organization: "Penn State", title: "Bachelor of Science", fieldOfStudy: "Computer Science", startDate: "2016-08", endDate: "2020-05", location: "University Park, PA", details: "" },
+      ],
+    },
+  });
+  const block = (n: number) => `<table><tbody>
+    <tr><td colspan="2"><p>School/Institution Name</p><p><span><input type="text" id="icims_${n}_SchoolName" name="icims_${n}_SchoolName" aria-required="true" i_required="true"></span></p></td></tr>
+    <tr><td colspan="2"><p>Country</p><p><span><select id="icims_${n}_SchoolCountry" name="icims_${n}_SchoolCountry" aria-required="true"><option value=""></option><option value="9044">United States</option><option value="9099">Canada</option></select></span></p></td></tr>
+    <tr><td colspan="2"><p>City</p><p><span><input type="text" id="icims_${n}_SCity" name="icims_${n}_SCity" aria-label="SCity" aria-required="true"></span></p></td></tr>
+    <tr><td style="width: 20%;"><span>Did you Graduate?<br></span><span><select id="icims_${n}_S_Graduate" name="icims_${n}_S_Graduate" data-label="Graduate" aria-label="Graduate" aria-required="true"><option value=""></option><option value="59812">Yes</option><option value="59813">No</option></select></span></td></tr>
+    <tr><td colspan="2"><p>Type of Degree (High School/GED/Bachelor/etc.)&nbsp;</p><p><span><input type="text" id="icims_${n}_SDegree" name="icims_${n}_SDegree" aria-required="true"></span></p></td></tr>
+    <tr><td colspan="2"><p>Major/Area of Study</p><p><span><input type="text" id="icims_${n}_SMajor" name="icims_${n}_SMajor" aria-required="true"></span></p></td></tr>
+  </tbody></table>`;
+  await context.route(`${origin}/icims-education`, (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: `<!doctype html><title>Form</title><form onsubmit="return false">
+        <table><tbody><tr><td colspan="3"><strong>EDUCATION (CURRENTLY ENROLLED)</strong></td></tr>
+        <tr><td colspan="3">Current School/Institution Name<br><span><select id="icims_f_School_Name_sync" name="icims_f_School_Name_sync" data-label="sync" aria-label="sync" aria-required="true"><option value="">Select</option><option>Penn State</option><option>Virginia Tech</option><option>Contoso University</option></select></span></td></tr></tbody></table>
+        <table><tbody><tr><td colspan="3" valign="top"><p><strong>EDUCATION (COMPLETED)</strong></p></td></tr></tbody></table>
+        <div id="grpContainer_Education"><div class="icims_group_loop" data-group-loop-name="Education"><strong><span style="color:#ff0000">Only enter highest level education you have graduated from (remove all others)</span></strong>${block(0)}</div>
+        <div class="icims_group_loop" data-group-loop-name="Education">${block(1)}</div></div>
+      </form>`,
+    }),
+  );
+  const page = await context.newPage();
+  await page.goto(`${origin}/icims-education`);
+  await enqueue([page]);
+  await expect(page.locator("#icims_0_SchoolName")).toHaveValue("Penn State", { timeout: 45000 });
+  await expect(page.locator("#icims_0_SDegree")).toHaveValue(/Bachelor/);
+  await expect(page.locator("#icims_0_SMajor")).toHaveValue("Computer Science");
+  await expect(page.locator("#icims_0_S_Graduate")).toHaveValue("59812");
+  await expect(page.locator("#icims_f_School_Name_sync")).toHaveValue("Virginia Tech");
+  for (const id of ["SchoolName", "SCity", "SDegree", "SMajor"]) await expect(page.locator(`#icims_1_${id}`)).toHaveValue("");
+});
+
+// iCIMS' duplicate education block: the site
+// built a second block from the imported resume (same school, Degree
+// "Bachelors", Country and State empty and required) under "Only enter highest
+// level education you have graduated from (remove all others)". The page's
+// own "Remove Additional" submit input is handled by its group-loop script,
+// which removes the last block and never posts the form; the fill uses it.
+test("iCIMS' duplicate completed-education block is removed with the site's own remove control", async () => {
+  await ui({
+    type: "API", path: "/v1/profile", method: "PUT",
+    body: {
+      ...profile,
+      education: [
+        { organization: "Penn State", title: "Bachelor of Science", fieldOfStudy: "Computer Science", startDate: "2016-08", endDate: "2020-05", location: "University Park, PA", details: "" },
+      ],
+    },
+  });
+  const block = (n: number) => `<table><tbody>
+    <tr><td colspan="2"><p>School/Institution Name</p><p><span><input type="text" id="icims_${n}_SchoolName" name="icims_${n}_SchoolName" aria-required="true" i_required="true"></span></p></td></tr>
+    <tr><td colspan="2"><p>Country</p><p><span><select id="icims_${n}_SchoolCountry" name="icims_${n}_SchoolCountry" aria-required="true"><option value=""></option><option value="9044">United States</option><option value="9099">Canada</option></select></span></p></td></tr>
+    <tr><td colspan="2"><p>City</p><p><span><input type="text" id="icims_${n}_SCity" name="icims_${n}_SCity" aria-label="SCity" aria-required="true"></span></p></td></tr>
+    <tr><td style="width: 20%;"><span>Did you Graduate?<br></span><span><select id="icims_${n}_S_Graduate" name="icims_${n}_S_Graduate" data-label="Graduate" aria-label="Graduate" aria-required="true"><option value=""></option><option value="59812">Yes</option><option value="59813">No</option></select></span></td></tr>
+    <tr><td colspan="2"><p>Type of Degree (High School/GED/Bachelor/etc.)&nbsp;</p><p><span><input type="text" id="icims_${n}_SDegree" name="icims_${n}_SDegree" aria-required="true"></span></p></td></tr>
+    <tr><td colspan="2"><p>Major/Area of Study</p><p><span><input type="text" id="icims_${n}_SMajor" name="icims_${n}_SMajor" aria-required="true"></span></p></td></tr>
+  </tbody></table>`;
+  const loop = (n: number) => `<div class="icims_group_loop" data-group-loop-name="Education">
+    <strong><br><span style="font-family: arial, helvetica, sans-serif; color: #ff0000; font-size: 10pt;">Only enter highest level education you have graduated from (remove all others)</span></strong>
+    <table id="tableContainer_Education" class="iCIMS_groupLoopTable" style="width: 100%; border: 0px;"><tbody><tr><td id="grp_Education">${block(n)}</td></tr></tbody></table></div>`;
+  await context.route(`${origin}/icims-education-remove`, (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: `<!doctype html><title>Form</title><form name="icims_form" method="POST" action="/icims-posted">
+        <table><tbody><tr><td colspan="3" valign="top"><p><strong>EDUCATION (COMPLETED)</strong></p></td></tr></tbody></table>
+        <div id="grpContainer_Education" class="mceContainer"><input type="hidden" name="icims_gh_Education" value="2">
+        <a name="icims_ga_Education"></a>${loop(0)}
+        ${loop(1)}
+        <table style="border: 0px;"><tbody><tr><td>
+          <input type="submit" data-group-loop="Education" class="group-loop-remove" name="icims_gsd_Education" id="icims_gsd_Education" value="Remove Additional (Education - Completed)">
+          <input type="submit" data-group-loop="Education" class="group-loop-add" name="icims_gsi_Education" id="icims_gsi_Education" value="Add Additional (Education - Completed)">
+        </td></tr></tbody></table></div>
+        <script>
+          window.posts = 0; window.removeClicks = 0;
+          document.getElementById("icims_1_SchoolName").value = "Penn State";
+          document.getElementById("icims_1_SDegree").value = "Bachelors";
+          // webForm.js' group loop: a clicked group-loop input is marked, the
+          // form's submit is stopped, and removing drops the last block (when
+          // more than one) and sets the hidden count.
+          var count = function () { return document.querySelectorAll('.icims_group_loop[data-group-loop-name="Education"]').length; };
+          document.querySelectorAll("input[type=submit]").forEach(function (input) {
+            input.addEventListener("click", function () {
+              document.querySelectorAll("input[type=submit][clicked]").forEach(function (other) { other.removeAttribute("clicked"); });
+              input.setAttribute("clicked", "true");
+              if (input.classList.contains("group-loop-remove")) window.removeClicks++;
+            });
+          });
+          document.forms.icims_form.addEventListener("submit", function (event) {
+            var action = document.querySelector("input[clicked=true][data-group-loop]");
+            if (!action) { window.posts++; event.preventDefault(); return; }
+            action.removeAttribute("clicked");
+            event.preventDefault();
+            if (action.classList.contains("group-loop-remove") && count() > 1) {
+              var all = document.querySelectorAll('.icims_group_loop[data-group-loop-name="Education"]');
+              all[all.length - 1].remove();
+            }
+            document.querySelector('input[name="icims_gh_Education"]').value = String(count());
+            document.getElementById("icims_gsd_Education").style.display = count() > 1 ? "" : "none";
+          });
+        </script>
+      </form>`,
+    }),
+  );
+  const page = await context.newPage();
+  await page.goto(`${origin}/icims-education-remove`);
+  await enqueue([page]);
+  await expect(page.locator("#icims_0_SchoolName")).toHaveValue("Penn State", { timeout: 45000 });
+  await expect(page.locator("#icims_0_SDegree")).toHaveValue(/Bachelor/);
+  await expect(page.locator(".icims_group_loop")).toHaveCount(1, { timeout: 45000 });
+  await expect(page.locator("#icims_1_SchoolName")).toHaveCount(0);
+  expect(await page.locator('input[name="icims_gh_Education"]').inputValue()).toBe("1");
+  expect(await page.evaluate(() => (window as any).removeClicks)).toBe(1);
+  expect(await page.evaluate(() => (window as any).posts)).toBe(0);
+});
+
+test("profile facts fill age and education locally without asking AI", async () => {
+  runtimeGenerate = async () => ({ resume: [], coverLetter: [], answers: [] });
+  await ui({ type: "API", path: "/v1/profile", method: "PUT", body: {
+    ...profile, dateOfBirth: "2000-01-01", age18OrOlder: "", preferredName: "Lex",
+    education: [
+      { organization: "Test Graduate School", title: "Master of Science", fieldOfStudy: "Data Science", startDate: "2020-01", endDate: "2099-05", current: true },
+      { organization: "Test College", title: "Bachelor of Science", fieldOfStudy: "Computer Science", startDate: "2010-01", endDate: "2014-05", current: false },
+    ],
+  } });
+  await ui({ type: "SETTINGS", settings: { concurrency: 4, generationConcurrency: 2, modelFill: "auto" } });
+  await context.route(`${origin}/profile-facts`, route => route.fulfill({ contentType: "text/html", body: `<!doctype html><form>
+    <label>First name<input name="firstName" required></label>
+    <label>Last name<input name="lastName" required></label>
+    <label>Email<input name="email" type="email" required></label>
+    <label>Are you 18 or older?<select id="adult" required><option value="">Select</option><option>Yes</option><option>No</option></select></label>
+    <label>What degree are you currently pursuing?<select id="current"><option value="">Select</option><option>Bachelor's degree</option><option>Master's degree</option><option>PhD</option></select></label>
+    <label>What is the highest level of education you have completed?<select id="finished"><option value="">Select</option><option>Bachelor's degree</option><option>Master's degree</option><option>PhD</option></select></label>
+    <label>Preferred Name (Optional)<input id="preferred"></label>
+    <label>Phone Extension<input id="extension"></label>
+    <button type="submit">Submit</button></form><script>window.submissions=0;document.querySelector('form').addEventListener('submit',e=>{e.preventDefault();window.submissions++})</script>` }));
+  const page = await context.newPage();
+  await page.goto(`${origin}/profile-facts`);
+  await enqueue([page]);
+  await expect.poll(async () => (await state()).applications[0]?.status, { timeout: 45000 }).toMatch(/^(ready|awaiting-user)$/);
+  await expect(page.locator("#adult")).toHaveValue("Yes");
+  await expect(page.locator("#current")).toHaveValue("Master's degree");
+  await expect(page.locator("#finished")).toHaveValue("Bachelor's degree");
+  await expect(page.locator("#preferred")).toHaveValue("Lex");
+  await expect(page.locator("#extension")).toHaveValue("");
+  const saved = JSON.parse(await readFile(join(backendDirectory, "state.json"), "utf8"));
+  expect(saved.jobs.filter((job: { purpose?: string }) => job.purpose === "field-fallback" || job.purpose === "answers")).toEqual([]);
+  expect(await page.evaluate(() => (window as any).submissions)).toBe(0);
 });

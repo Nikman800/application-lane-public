@@ -86,8 +86,12 @@ export function normalizeFit(
     return [{ ...item, status, evidence: [...new Set(evidence)] }];
   });
   const required = requirements.filter((item) => item.importance === "required");
-  if (!required.length || invalidRequirement)
-    return { ...unknownFit(profile, "The required qualifications could not be fully established from this posting. Check fit again or review the full job description before deciding."), requirements };
+  // A requirement the check worded in its own words is not trusted, nor is
+  // the rest of that check; the posting itself was read (one employer's Workday: this read as the posting not being found).
+  if (invalidRequirement)
+    return { ...unknownFit(profile, "The posting was read, but the fit check quoted a requirement that is not in it, so its result is not trusted. Check fit again."), requirements };
+  if (!required.length)
+    return { ...unknownFit(profile, "The posting was read, but no required qualifications were found in it. Review the full job description before deciding."), requirements };
   const matched = required.filter((item) => item.status === "matched").length;
   const unmet = required.filter((item) => item.status === "unmet").length;
   const uncertain = required.filter((item) => item.status === "uncertain").length;

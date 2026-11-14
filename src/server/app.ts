@@ -4,17 +4,17 @@ import {
   type ServerResponse,
 } from "node:http";
 import { existsSync } from "node:fs";
-import { mkdir, readFile, readdir, rm, unlink } from "node:fs/promises";
+import { mkdir, readFile, readdir, rm, unlink, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { basename, join, resolve } from "node:path";
 import { timingSafeEqual } from "node:crypto";
 import { z } from "zod";
-import { generationSchema, profileSchema, type FixerItem, type FixerOverview, type FixerResult } from "../shared/model";
+import { ISSUE_IMAGE_LIMIT, generationSchema, profileSchema, type FixerItem, type FixerOverview, type FixerResult } from "../shared/model";
 import { cleanFixerSettings } from "../shared/fixer-settings";
 import { devToolsEnabled } from "../shared/dev-tools";
 import { Store, atomicJSON, type Config } from "./store";
 import { attachLive } from "./live";
-import { profileTargets, searchJobs, searchSettingsSchema, stageDefaults, isTracked, type KnownOpening } from "./job-search";
+import { knownOpenings as knownFrom, profileTargets, searchJobs, searchSettingsSchema, stageDefaults, isTracked, type KnownOpening } from "./job-search";
 import { checkSites, type SiteCheck } from "./site-check";
 import { classify, fillHistory, greenhouseJob, readGreenhouse, siteGaps, type Preview, type QueuedApplication } from "./form-preview";
 import type { Field } from "../shared/model";
@@ -27,6 +27,7 @@ import { applicationProfile, profileConflicts } from "./profile-sync";
 import { configView, saveTranscript, updateConfig } from "./settings";
 import { packageRoot, packageVersion } from "./paths";
 import { Pairing, pairingBanner, type PairingAnnouncement } from "./pairing";
+import { fromFixingFlag, lapse, repairsSchema, repairSchema, type Repair } from "../shared/repairs";
 
 const recordingSchema = z
 .object({
@@ -64,6 +65,8 @@ const queueSnapshotSchema = z.object({
   applications: z.array(z.object({
     id: z.string().max(100),
     url: z.string().max(2000),
+    sourceUrl: z.string().max(2000).optional(),
+    postingUrl: z.string().max(2000).optional(),
     company: z.string().max(300),
     title: z.string().max(500),
     status: z.string().max(40),
@@ -82,6 +85,7 @@ const submissionSchema = z.object({
   company: z.string().max(300),
   title: z.string().max(500),
   url: z.string().max(3000),
+  sourceUrl: z.string().max(3000).optional(),
   ats: z.string().max(200).optional(),
   submittedAt: z.number().int().nonnegative(),
   confirmedBySite: z.boolean(),
@@ -213,11 +217,53 @@ const send = (res: ServerResponse, status: number, value: unknown) => {
   res.end(JSON.stringify(value));
 };
 
+// Where the build metadata of the extension a backend serves is read: the
+// one it was given, else LANE_EXTENSION_DIR (a backend started beside a test
+// build), else dist/extension, which the applicant's Chrome loads.
+export function extensionBuildDir(given?: string, env: NodeJS.ProcessEnv = process.env): string {
+  if (given) return resolve(given);
+  if (env.LANE_EXTENSION_DIR) return resolve(packageRoot, env.LANE_EXTENSION_DIR);
+  return join(packageRoot, "dist", "extension");
+}
+
+// The repair records, with the fixer's old flags (fixing.json, a note and a
+// time) carried over once, and owners gone quiet lapsed.
+export async function readRepairs(directory: string, now = Date.now()): Promise<Record<string, Repair>> {
+  const file = join(directory, "repairs.json");
+  const saved = await readFile(file, "utf8").then((text) => JSON.parse(text) as unknown, () => undefined);
+  const repairs: Record<string, Repair> = saved === undefined ? {} : repairsSchema.parse(saved);
+  let changed = false;
+  const legacy = join(directory, "fixing.json");
+  if (existsSync(legacy)) {
+    const flags = JSON.parse(await readFile(legacy, "utf8").catch(() => "{}")) as Record<string, { since: number; note: string }>;
+    for (const [id, flag] of Object.entries(flags)) if (!repairs[id]) repairs[id] = fromFixingFlag(id, flag, now);
+    await rm(legacy, { force: true });
+    changed = true;
+  }
+  for (const [id, repair] of Object.entries(repairs)) {
+    const lapsed = lapse(repair, now);
+    if (lapsed !== repair) {
+      repairs[id] = lapsed;
+      changed = true;
+    }
+  }
+  if (changed) await atomicJSON(file, repairs);
+  return repairs;
+}
+
 export async function createApp(
   config: Config,
   directory: string,
   generate?: Generate,
-  options: { announcePairing?: (announcement: PairingAnnouncement) => void } = {},
+  options: {
+    announcePairing?: (announcement: PairingAnnouncement) => void;
+    // The extension build this backend serves, for /v1/status to say whether
+    // the extension loaded is older. A browser test's backend names its own
+    // copy of the test build: reading dist/extension, a rebuild of the
+    // applicant's extension mid-suite showed "A newer build is ready" in
+    // unrelated tests' panels.
+    extensionDir?: string;
+  } = {},
 ) {
   // The six-digit pairing code (pairing.ts), shown where the backend runs.
   const pairing = new Pairing(options.announcePairing || ((announcement) => console.log(pairingBanner(announcement))));
@@ -333,7 +379,7 @@ export async function createApp(
             "Relevant profile facts and job text are sent to your configured AI endpoint.",
           // The newest build in dist/, for the panel to tell whether the
           // extension loaded is older (src/shared/build.ts).
-          extensionBuild: await readFile(join(packageRoot, "dist", "extension", "build.json"), "utf8").then((text) => JSON.parse(text), () => undefined),
+          extensionBuild: await readFile(join(extensionBuildDir(options.extensionDir), "build.json"), "utf8").then((text) => JSON.parse(text), () => undefined),
         });
       if (path === "/v1/profile" && req.method === "GET")
         return send(res, 200, store.data.profile);
@@ -530,9 +576,23 @@ export async function createApp(
             har: harSchema.optional(),
             recording: recordingSchema.optional(),
             frames: z.array(z.record(z.unknown())).max(100),
+            // Screenshots the applicant pasted into the report.
+            images: z
+              .array(z.object({
+                mime: z.enum(["image/png", "image/jpeg", "image/webp", "image/gif"]),
+                data: z.string().regex(/^[A-Za-z0-9+/]+={0,2}$/).max(Math.ceil(ISSUE_IMAGE_LIMIT.bytes / 3) * 4),
+              }))
+              .max(ISSUE_IMAGE_LIMIT.count)
+              .optional(),
           })
-          .parse(await jsonBody(req, 100 * 1024 * 1024));
-        const { har, recording, ...report } = bundle;
+          .parse(await jsonBody(req, 160 * 1024 * 1024));
+        const { har, recording, images, ...fields } = bundle;
+        // Each screenshot is a file beside the report, named in it.
+        const extension = { "image/png": "png", "image/jpeg": "jpg", "image/webp": "webp", "image/gif": "gif" } as const;
+        const imageNames = (images || []).map((image, index) => `${fields.id}.image-${index + 1}.${extension[image.mime]}`);
+        await mkdir(join(directory, "issues"), { recursive: true });
+        await Promise.all((images || []).map((image, index) => writeFile(join(directory, "issues", imageNames[index]), Buffer.from(image.data, "base64"))));
+        const report = { ...fields, ...(imageNames.length ? { images: imageNames } : {}) };
         if (recording && report.recordingId !== recording.id) throw new Error("Recording does not match report.");
         if (har && report.network?.entries !== har.log.entries.length) throw new Error("Network capture does not match report.");
         // The report JSON is the fixer's commit marker: publish it last.
@@ -549,7 +609,9 @@ export async function createApp(
           .object({
             id: z.string().uuid(),
             createdAt: z.number().int().nonnegative(),
-            trigger: z.literal("fill"),
+            // "check": taken on the fixer's request (lane check), on a page
+            // left to settle after a fill.
+            trigger: z.enum(["fill", "check"]),
             applicationId: z.string().uuid().optional(),
             application: z.record(z.unknown()).optional(),
             tab: z.object({
@@ -622,9 +684,10 @@ export async function createApp(
       // only when the search ran, one saved three days before marked none of
       // the applications tracked since.
       const knownOpenings = async () => {
-        const queued = JSON.parse(await readFile(join(directory, "queue.json"), "utf8").catch(() => "null")) as { applications?: KnownOpening[] } | null;
-        const submitted = JSON.parse(await readFile(join(directory, "submissions.json"), "utf8").catch(() => "[]")) as KnownOpening[];
-        return [...(queued?.applications || []), ...submitted].map(({ url, company, title }) => ({ url, company, title }));
+        type Kept = KnownOpening & { sourceUrl?: string; postingUrl?: string };
+        const queued = JSON.parse(await readFile(join(directory, "queue.json"), "utf8").catch(() => "null")) as { applications?: Kept[] } | null;
+        const submitted = JSON.parse(await readFile(join(directory, "submissions.json"), "utf8").catch(() => "[]")) as Kept[];
+        return knownFrom([...(queued?.applications || []), ...submitted]);
       };
       // Which site each opening is applied on, and whether a rule covers it,
       // each address checked once and kept (site-check.ts). A search waits
@@ -709,19 +772,27 @@ export async function createApp(
       }
       if (path === "/v1/queue" && req.method === "GET")
         return send(res, 200, JSON.parse(await readFile(queuePath, "utf8").catch(() => "null")));
-      // Applications the fixer is correcting: the full-screen
-      // view shows them apart, so the applicant leaves them alone meanwhile.
-      const fixingPath = join(directory, "fixing.json");
-      const readFixing = async () =>
-        JSON.parse(await readFile(fixingPath, "utf8").catch(() => "{}")) as Record<string, { since: number; note: string }>;
-      if (path === "/v1/fixing" && req.method === "GET") return send(res, 200, await readFixing());
-      if (path === "/v1/fixing" && req.method === "POST") {
-        const { id, note, done } = z.object({ id: z.string().min(1).max(100), note: z.string().max(500).optional(), done: z.boolean().optional() }).parse(await jsonBody(req));
-        const fixing = await readFixing();
-        if (done) delete fixing[id];
-        else fixing[id] = { since: fixing[id]?.since || Date.now(), note: note ?? fixing[id]?.note ?? "" };
-        await atomicJSON(fixingPath, fixing);
-        return send(res, 200, fixing);
+      // What the fixer is repairing, application by application
+      // (src/shared/repairs.ts): the full-screen view shows "needs fixing"
+      // and "being fixed" from these, so the applicant leaves them alone
+      // meanwhile. The transitions are the lane command's; this keeps the
+      // records, and gives a repair whose owner went quiet back to the
+      // queue with its defects still open.
+      if (path === "/v1/repairs" && req.method === "GET") return send(res, 200, await readRepairs(directory));
+      const repairMatch = path.match(/^\/v1\/repairs\/([^/]+)$/);
+      if (repairMatch && req.method === "PUT") {
+        const repair = repairSchema.parse(await jsonBody(req, 1024 * 1024));
+        if (repair.applicationId !== decodeURIComponent(repairMatch[1])) throw new Error("The record is for another application.");
+        const repairs = await readRepairs(directory);
+        repairs[repair.applicationId] = repair;
+        await atomicJSON(join(directory, "repairs.json"), repairs);
+        return send(res, 200, repair);
+      }
+      if (repairMatch && req.method === "DELETE") {
+        const repairs = await readRepairs(directory);
+        delete repairs[decodeURIComponent(repairMatch[1])];
+        await atomicJSON(join(directory, "repairs.json"), repairs);
+        return send(res, 200, { removed: true });
       }
       if (path === "/v1/inbox" && req.method === "GET") return send(res, 200, await readInbox());
       if (path === "/v1/inbox" && req.method === "POST") {
@@ -858,6 +929,9 @@ export async function createApp(
             if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
           });
           await unlink(join(directory, "issues", `${issueMatch[1]}.har.json`)).catch(() => {});
+          // And its screenshots.
+          for (const name of await readdir(join(directory, "issues")).catch(() => [] as string[]))
+            if (name.startsWith(`${issueMatch[1]}.image-`)) await unlink(join(directory, "issues", name)).catch(() => {});
           return send(res, 200, { deleted: true });
         }
         if (req.method === "GET") {

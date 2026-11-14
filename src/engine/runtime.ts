@@ -53,6 +53,13 @@ export async function fillDocument(
   };
 }
 
+// Whether the page has an empty resume slot its site rewrites the form from
+// (the rule's resumeFirstPaths): the resume then goes first and alone.
+export function resumeSlotOpen(): boolean {
+  const config = siteConfig();
+  return paths(config?.resumeFirstPaths).some((path) => queryXPathAll(document, path).length > 0);
+}
+
 // Some sites expose a document slot before creating its native file input.
 // Track the slot itself so missing documents and manual uploads stay visible.
 export function configuredFileControls() {
@@ -123,8 +130,10 @@ export function submittedOnPage(): boolean {
 // so it never reads as this. Only a frame the extension filled may say it
 // (background.ts): an employer's page around a framed form has no boxes of
 // its own, and its job text may thank applicants.
+// TikTok's: "Thanks for your interest in TikTok. We have received your
+// resume." on /resume/applied.
 const confirmationWording =
-  /\b(your )?application (has been|was|is|has) (successfully |now )?(submitted|received|sent|been received)\b|\b(your )?application is in(?=\s*(?:[.!]|$))|\bthank you for (applying|your application|submitting)\b|\bapplication (submitted|received)\b|\byou(?: have|'ve) successfully applied\b/i;
+  /\b(your )?application (has been|was|is|has) (successfully |now )?(submitted|received|sent|been received)\b|\b(your )?application is in(?=\s*(?:[.!]|$))|\bthank you for (applying|your application|submitting)\b|\bapplication (submitted|received)\b|\byou(?: have|'ve) successfully applied\b|\bwe(?: have|'ve) received your (resume|application|submission)\b/i;
 export function confirmationInPlace(): boolean {
   const shown = (element: Element) =>
     (element as HTMLElement).getClientRects?.().length > 0 && !element.closest("[hidden],[aria-hidden='true']");
@@ -134,9 +143,17 @@ export function confirmationInPlace(): boolean {
     ),
   ].filter(shown);
   if (boxes.length > 1) return false;
-  return [...document.querySelectorAll("h1,h2,h3,h4,h5,p,[role='status'],[role='alert']")].some((element) => {
-    const text = (element.textContent || "").replace(/\s+/g, " ").trim();
-    return text.length > 0 && text.length <= 200 && confirmationWording.test(text) && shown(element);
+  const says = (text: string) => text.length > 0 && text.length <= 200 && confirmationWording.test(text);
+  if ([...document.querySelectorAll("h1,h2,h3,h4,h5,p,[role='status'],[role='alert']")].some((element) =>
+    says((element.textContent || "").replace(/\s+/g, " ").trim()) && shown(element)))
+    return true;
+  // A message box drawn as a plain div or span (iCIMS' green "Your
+  // application was submitted successfully. Thank you for applying.",
+  // General Dynamics): read by its own text, so a block
+  // holding a whole posting is never read as one message.
+  return [...document.querySelectorAll("div,span")].some((element) => {
+    const own = [...element.childNodes].filter((node) => node.nodeType === Node.TEXT_NODE).map((node) => node.textContent || "").join(" ");
+    return says(own.replace(/\s+/g, " ").trim()) && shown(element);
   });
 }
 

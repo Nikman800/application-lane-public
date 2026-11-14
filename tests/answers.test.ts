@@ -23,7 +23,7 @@ import {
   writeFieldFallback,
 } from "../src/server/field-fallback";
 import { structuredFallbackField } from "../src/shared/questions";
-import { GenerationQueue, postingReadable, unsupportedClaims, wantsLetter } from "../src/server/generation";
+import { CHECKING_BUDGET_MS, GenerationQueue, postingReadable, unsupportedClaims, wantsLetter } from "../src/server/generation";
 import { evidenceEntries, heldByOneEntry, supportedBy, talksAboutSources, unclaimed, checkers, verifier, type Draft, type Verdict } from "../src/server/verify";
 import { configSchema, Store } from "../src/server/store";
 
@@ -391,6 +391,148 @@ test("later steps of one application reuse its documents and answer only their o
   const redrafted = await queue.enqueue({ ...request([field("Gender", { kind: "select", options: ["Male", "Female"] })]), operation: 6, applicationId, redraft: true });
   await settle(redrafted);
   assert.equal(drafts, 2);
+});
+
+test("the second model's check holds a step's documents back for at most a minute", () => {
+  // It ran to its old two minutes on one step: the page waited
+  // that long for its résumé and letter.
+  assert.ok(CHECKING_BUDGET_MS <= 60_000);
+});
+
+test("fields the profile can never answer are not sent to the model (Vizient, 2026-11-12)", () => {
+  // Employee ID, Facebook and Twitter were sent after every page, and the
+  // fill waited 8 to 32 s for the model to skip them.
+  for (const label of ["Employee ID (if applicable)", "Employee Number", "Facebook", "Twitter", "X (Twitter) profile", "Instagram URL"])
+    assert.equal(structuredFallbackField(field(label, { kind: "text", required: false })), false, label);
+  // The profile's own links, and a required employee number, are still asked.
+  for (const [label, required] of [["LinkedIn profile", false], ["GitHub", false], ["Personal website", false], ["Employee ID", true]] as const)
+    assert.equal(structuredFallbackField(field(label, { kind: "text", required })), true, label);
+});
+
+test("the model leaves the rows after the first in a completed-education section alone (iCIMS, report 1aa778db)", () => {
+  const section = "EDUCATION (COMPLETED)";
+  assert.equal(structuredFallbackField(field("City", { kind: "text", required: true, section, index: 0 })), true);
+  assert.equal(structuredFallbackField(field("City", { kind: "text", required: true, section, index: 1 })), false);
+  assert.equal(structuredFallbackField(field("State/Province", { kind: "select", required: true, section, index: 1 })), false);
+  // Other sections' later rows are still asked.
+  assert.equal(structuredFallbackField(field("City", { kind: "text", required: true, section: "WORK EXPERIENCE", index: 1 })), true);
+});
+
+test("saving an answer keeps an application's documents; changing the profile's facts redrafts them", async () => {
+  // A saved answer raised the profile's revision, and the next step drafted
+  // and checked the documents again: 43 s where reuse takes half a second
+  // (Verdantas).
+  const store = new Store(await mkdtemp(join(tmpdir(), "lane-reuse-answers-")));
+  await store.init();
+  store.data.profile = structuredClone(profile);
+  const config = configSchema.parse({ postingLookup: false, token: "synthetic-token-".repeat(4), model: "fixture", endpoint: "http://127.0.0.1:9/v1", tailorDir: "unused" });
+  let drafts = 0;
+  const queue = new GenerationQueue(
+    store,
+    config,
+    async () => {
+      drafts++;
+      return {
+        resume: [{ factId: "a", text: profile.facts[0].text }],
+        coverLetter: [{ text: "Dear Hiring Team,", factIds: [] }, { text: profile.facts[0].text, factIds: ["a"] }],
+        answers: [],
+      };
+    },
+    async () => {
+      throw new Error("no tailoring in this test");
+    },
+    async (given) => ({ answers: given.fields.map((f) => ({ fieldId: f.id, value: "x", factIds: [] })), warnings: [], withheld: [], sources: {} }),
+  );
+  const applicationId = randomUUID();
+  const run = async (operation: number) => {
+    const job = await queue.enqueue({ ...request([field("Gender", { kind: "select", options: ["Male", "Female"] })]), operation, applicationId, profileRevision: store.data.profile.revision });
+    const deadline = Date.now() + 30000;
+    while (["queued", "running"].includes(job.status)) {
+      assert.ok(Date.now() < deadline);
+      await new Promise((r) => setTimeout(r, 25));
+    }
+    assert.equal(job.status, "complete", job.error);
+    return job;
+  };
+  const first = await run(1);
+  assert.equal(drafts, 1);
+  store.data.profile.answers = [...store.data.profile.answers, { question: "Can you provide proof of work authorization?", answer: "Yes" }];
+  store.data.profile.revision += 1;
+  const afterAnswer = await run(2);
+  assert.equal(drafts, 1);
+  assert.deepEqual(afterAnswer.artifacts.map((a) => a.kind), first.artifacts.map((a) => a.kind));
+  store.data.profile.facts = [...store.data.profile.facts, { id: "b", text: "Ran a campus hackathon for 300 students." }];
+  store.data.profile.revision += 1;
+  await run(3);
+  assert.equal(drafts, 2);
+});
+
+// A later step's answers were drafted again on each fill of it, 49 s, 88 s
+// and 102 s, with nothing changed.
+test("filling a step again gives the answers already drafted for its questions, and drafts only what changed", async () => {
+  const store = new Store(await mkdtemp(join(tmpdir(), "lane-repeat-queue-")));
+  await store.init();
+  store.data.profile = structuredClone(profile);
+  const config = configSchema.parse({ postingLookup: false, token: "synthetic-token-".repeat(4), model: "fixture", endpoint: "http://127.0.0.1:9/v1", tailorDir: "unused", transcriptsDir: await mkdtemp(join(tmpdir(), "lane-repeat-transcripts-")) });
+  const asked: string[][] = [];
+  let round = 0;
+  const queue = new GenerationQueue(
+    store,
+    config,
+    async () => ({
+      resume: [{ factId: "a", text: profile.facts[0].text }],
+      coverLetter: [{ text: "Dear Hiring Team,", factIds: [] }, { text: profile.facts[0].text, factIds: ["a"] }],
+      answers: [],
+    }),
+    async () => {
+      throw new Error("no tailoring in this test");
+    },
+    async (request) => {
+      const fields = request.fields.filter((f) => f.kind === "textarea" && (!request.questionIds || request.questionIds.includes(f.id)));
+      asked.push(fields.map((f) => f.label));
+      round++;
+      return { answers: fields.map((f) => ({ fieldId: f.id, value: `About ${f.label}, draft ${round}`, factIds: [] })), warnings: [], withheld: [], sources: {} };
+    },
+  );
+  const settle = async (job: { status: string; error?: string }) => {
+    const deadline = Date.now() + 30000;
+    while (["queued", "running"].includes(job.status)) {
+      assert.ok(Date.now() < deadline);
+      await new Promise((r) => setTimeout(r, 25));
+    }
+    assert.equal(job.status, "complete", job.error);
+  };
+  const applicationId = randomUUID();
+  const fill = async (operation: number, fields: Field[], revision = 1, application = applicationId) => {
+    const job = await queue.enqueue({ ...request(fields), operation, applicationId: application, profileRevision: revision });
+    await settle(job);
+    return job;
+  };
+  // The documents step, then the questions step.
+  await fill(1, [field("Resume", { kind: "file", documentKind: "resume" })]);
+  const step = await fill(2, [field("Why Acme?", { id: "q-1" }), field("What are you proud of?", { id: "q-2" })]);
+  const drafted = asked.length;
+  assert.deepEqual(asked.at(-1), ["Why Acme?", "What are you proud of?"]);
+  const first = step.narrative!.answers.map((a) => a.value);
+  assert.deepEqual(first, [`About Why Acme?, draft ${round}`, `About What are you proud of?, draft ${round}`]);
+  // The same step again, its fields under new ids: nothing is drafted.
+  const again = await fill(3, [field("Why Acme? *", { id: "q-7" }), field("What are you proud of?", { id: "q-8" })]);
+  assert.equal(asked.length, drafted);
+  assert.deepEqual(again.narrative!.answers.map((a) => [a.fieldId, a.value]), [["q-7", first[0]], ["q-8", first[1]]]);
+  // A question asked in other words is drafted; the other is given again.
+  const reworded = await fill(4, [field("Why Acme?", { id: "q-1" }), field("What are you most proud of?", { id: "q-2" })]);
+  assert.deepEqual(asked.at(-1), ["What are you most proud of?"]);
+  assert.deepEqual(reworded.narrative!.answers.map((a) => a.value), [first[0], `About What are you most proud of?, draft ${round}`]);
+  // Another application drafts its own.
+  await fill(1, [field("Why Acme?", { id: "q-1" })], 1, randomUUID());
+  assert.deepEqual(asked.at(-1), ["Why Acme?"]);
+  // A new profile revision drafts again.
+  const calls = asked.length;
+  store.data.profile = { ...structuredClone(profile), revision: 2 };
+  const revised = await fill(5, [field("Why Acme?", { id: "q-1" })], 2);
+  assert.equal(asked.length, calls + 1);
+  assert.deepEqual(asked.at(-1), ["Why Acme?"]);
+  assert.notEqual(revised.narrative!.answers[0].value, first[0]);
 });
 
 test("the word check knows the applicant's school by its short name, R², and plurals", () => {
@@ -840,7 +982,7 @@ test("the queue applies the verifier's reading, keeps withheld questions empty, 
   store.data.profile = structuredClone(profile);
   const config = configSchema.parse({ postingLookup: false, token: "synthetic-token-".repeat(4), model: "fixture", endpoint: "http://127.0.0.1:9/v1", tailorDir: "unused" });
   let seen: Draft[] = [];
-  const run = async (verify: (drafts: Draft[]) => Promise<Map<string, Verdict>>, keptAnswer = "From the letter request.") => {
+  const run = async (verify: (drafts: Draft[]) => Promise<Map<string, Verdict>>, keptAnswer = "From the letter request.", letterBody = "I built a TypeScript web application used by 2,000 students. I use it daily. I did this as an intern. Students used it for course planning. It ran on a small server. I wrote its tests.") => {
     const queue = new GenerationQueue(
       store,
       config,
@@ -849,7 +991,7 @@ test("the queue applies the verifier's reading, keeps withheld questions empty, 
         coverLetter: [
           { text: "Dear Hiring Team,", factIds: [] },
           {
-            text: "I built a TypeScript web application used by 2,000 students. I use it daily. I did this as an intern. Students used it for course planning. It ran on a small server. I wrote its tests.",
+            text: letterBody,
             factIds: ["a"],
           },
         ],
@@ -942,6 +1084,12 @@ test("the queue applies the verifier's reading, keeps withheld questions empty, 
   assert.match(opened.coverLetter[1].text, /^I built a TypeScript web application used by 2,000 students\. I use it daily\./);
   assert.match(opened.warnings!.join(" "), /Kept a paragraph of the cover letter whole whose opening the checking model did not find in your profile: "I built a TypeScript web application/);
   assert.doesNotMatch(opened.warnings!.join(" "), /Took a sentence out of the cover letter/);
+  // Naming the role applied for is no claim to check, however the check
+  // faulted it (: held and named on every letter).
+  const role = "I am applying for the Data Analyst Intern role at Acme. I built a TypeScript web application used by 2,000 students. I use it daily.";
+  const named = await run(async () => new Map([["answer:written", verdict()], ["letter:1", verdict({ filler: ["I am applying for the Data Analyst Intern role at Acme"] })]]), undefined, role);
+  assert.match(named.coverLetter[1].text, /^I am applying for the Data Analyst Intern role at Acme\./);
+  assert.doesNotMatch((named.warnings || []).join(" "), /Kept a paragraph|Took a sentence out of the cover letter/);
   // A verifier that faults most of the letter is telling about itself: the
   // letter stands, and the card says so. Two answers both faulted is no such
   // sign (the same report: an essay was filled unchecked whenever a second
@@ -1162,6 +1310,42 @@ test("structured fallback includes unresolved profile fields but never prose, se
   );
 });
 
+test("a preferred-name checkbox is handled locally without sending an AI request", async (t) => {
+  // The model cites the first name; Workday then shows the preferred-name
+  // boxes.
+  let calls = 0;
+  const server = createServer(async (req, res) => {
+    calls++;
+    for await (const _chunk of req) void _chunk;
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ suggestions: [
+      { fieldId: "q1", value: "Yes", sourceIds: ["profile.firstName"] },
+    ] }) } }] }));
+  });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  t.after(() => new Promise<void>((resolve) => server.close(() => resolve())));
+  const config = configSchema.parse({
+    postingLookup: false,
+    token: "fallback-token-".repeat(4),
+    model: "fallback-fixture",
+    endpoint: `http://127.0.0.1:${(server.address() as { port: number }).port}/v1`,
+  });
+  const box = field("I have a preferred name", { id: "preferred", kind: "checkbox", required: false, options: [] });
+  const ask = (given: typeof profile) => writeFieldFallback(
+    config,
+    { ...request([box]), purpose: "field-fallback", fallbackReasons: [{ fieldId: "preferred", reason: "Normal fill could not match this field." }] },
+    given,
+    new AbortController().signal,
+  );
+  const none = await ask(profile);
+  assert.deepEqual(none.drafts, []);
+  // A preferred name saved as the first name is none either.
+  const same = await ask(profileSchema.parse({ ...profile, preferredName: "Alex" }));
+  assert.deepEqual(same.drafts, []);
+  assert.equal(calls, 0);
+});
+
 test("AI structured-field suggestions require saved sources and exact available choices", async (t) => {
   let sent: any;
   const server = createServer(async (req, res) => {
@@ -1237,7 +1421,9 @@ test("AI structured-field suggestions require saved sources and exact available 
       kind: "text",
       section: "Education Information 1",
     }),
-    field("Degree level", {
+    // This portal-specific label still needs interpretation. A plain
+    // "Degree level" is now answered by normal matching before this call.
+    field("Qualification category", {
       id: "degree",
       kind: "select",
       section: "Education Information 1",
@@ -1261,6 +1447,10 @@ test("AI structured-field suggestions require saved sources and exact available 
       kind: "text",
       required: false,
       section: "Job-Specific Information",
+    }),
+    field("Degree level", {
+      id: "local-degree", kind: "select", section: "Education Information 1",
+      options: ["High school", "Bachelor's degree", "Master's degree"],
     }),
   ];
   const result = await writeFieldFallback(
@@ -1293,6 +1483,8 @@ test("AI structured-field suggestions require saved sources and exact available 
   assert.equal(result.drafts[4].value, "");
   assert.match(result.drafts[4].skipReason!, /follow-up to a Yes/);
   const input = JSON.parse(sent.messages[1].content);
+  assert.equal(result.drafts.some(draft => draft.fieldId === "local-degree"), false);
+  assert.equal(input.fields.some((candidate: { label: string }) => candidate.label === "Degree level"), false);
   assert.ok(
     input.sources.some(
       (source: { id: string; text: string }) =>
@@ -1643,7 +1835,20 @@ test("a degree listed with the subjects it covers, and a Low-to-High language sc
   assert.equal(pick("M.S. Data Science, Analytics & Engineering (Human-Centered Applications)", [], program), "Masters");
   assert.equal(pick("Bachelors of Science", [], program), "Bachelors");
   assert.equal(pick("Computer Science", [], program), undefined);
-  const scale = ["Select One", "1 - Low", "2 - Medium", "3 - High"];
+  // Oracle's: the level with examples after it.
+  const withExamples = [
+    "Graduate Doctoral Degrees (e.g., Doctor of Medicine, Juris Doctor, Doctor of Philosophy)",
+    "Graduate Master's Degrees (e.g., Master of Arts, Master of Engineering, Master of Business Administration, Master of Education)",
+    "None",
+    "Post Doctoral Degrees and Education",
+    "Undergraduate Associate Degrees (e.g., Associate of Arts, Associate of Science)",
+    "Undergraduate Bachelor's Degrees (e.g., Bachelor of Science, Bachelor of Business Administration, Bachelor of Fine Arts)",
+    "Upper Secondary Education (e.g., High School Diploma, A-Levels, GED, International Baccalaureate)",
+  ];
+  assert.equal(pick("Masters of Science", ["Master of Science"], withExamples), withExamples[1]);
+  assert.equal(pick("Bachelors of Science", [], withExamples), withExamples[5]);
+  assert.equal(pick("Computer Science", [], withExamples), undefined);
+  const scale =["Select One", "1 - Low", "2 - Medium", "3 - High"];
   const [first, ...rest] = levelChoices("native");
   assert.equal(pick(first, rest, scale), "3 - High");
   const [basic, ...basics] = levelChoices("basic");
@@ -1711,6 +1916,29 @@ test("a claim the checker reworded is held to the sentence it came from", async 
   assert.deepEqual(verdicts.get("letter:1")?.unsupported, []);
 });
 
+// one employer's Ashby: "What full time job(s) are you applying
+// for?" answered with the job's title lost it, its "Engineer I" read as the
+// applicant speaking and the posting set aside.
+test("the job applied for, a title with a level I, is the posting's to vouch for", () => {
+  const title = "Engineer I, Software - Autonomy Capabilities - New Grad - 6129";
+  assert.equal(supportedBy(`${title}.`, "", `${title}.`, [], `Job title: ${title}\nWe build autonomy.`), true);
+  assert.equal(supportedBy(`${title}.`, "", `${title}.`, [], "We build autonomy."), false);
+  // The applicant speaking is still held to the profile.
+  assert.equal(supportedBy("I built autonomy software.", "", "I built autonomy software.", [], "We build autonomy software."), false);
+});
+
+// one employer's Lever GPA list: single values in tenths under an
+// "On a 4.0 scale." placeholder. A GPA between two is the one it has reached.
+test("a GPA between a list's tenths takes the one below it, never above", () => {
+  const gpa = ["4.0", "3.9", "3.8", "3.7", "3.6", "3.5", "3.4", "3.3", "3.2", "3.1", "3.0 or under"];
+  const pick = (value: string) => pickOption({ value, numeric: Number(value) }, gpa, (option) => option);
+  assert.equal(pick("3.84"), "3.8");
+  assert.equal(pick("3.8"), "3.8");
+  assert.equal(pick("3.99"), "3.9");
+  assert.equal(pick("4.0"), "4.0");
+  assert.equal(pick("2.7"), "3.0 or under");
+});
+
 // one employer's Greenhouse questions: a GPA list noting its scale
 // after each range, and a graduation list of academic seasons.
 test("a GPA takes a range noted with its 4.0 scale, and a graduation month its season", () => {
@@ -1727,4 +1955,31 @@ test("a GPA takes a range noted with its 4.0 scale, and a graduation month its s
   assert.equal(pick("May 2026", terms), "Earlier than Fall 2026");
   // Summer 2027 itself is none of them.
   assert.equal(pick("July 2027", terms), undefined);
+});
+
+
+test("a salary is chosen from a list of ranges, and a phone country from one that puts its dial code first", () => {
+  const pick = (value: string, options: string[], choices?: string[]) => pickOption({ value, choices }, options, (o) => o);
+  const ranges = ["Under $80,000", "$80,000 - $99,999", "$100,000 - $119,999", "$120,000+"];
+  assert.equal(pick("$100,000", ranges), "$100,000 - $119,999");
+  assert.equal(pick("$75,000", ranges), "Under $80,000");
+  assert.equal(pickOption({ value: "USD 100,000/year", numeric: 100000 }, ranges, (o) => o), "$100,000 - $119,999");
+  assert.equal(pick("$150,000", ranges), "$120,000+");
+  assert.equal(pick("$100K", ["$90K to $110K", "$110K to $130K"]), "$90K to $110K");
+  assert.equal(pick("$100,000", ["Prefer a conversation", "Under $50,000"]), undefined);
+  const codes = ["+93 (Afghanistan)", "+1 (United States)", "+44 (United Kingdom)"];
+  assert.equal(pick("United States", codes), "+1 (United States)");
+  assert.equal(pick("Canada", codes), undefined);
+});
+
+test("a street search's whole-address listings are chosen by the saved street, with its city and state when given", () => {
+  const listed = ["100 EAST MAIN STREET, ROANOKE, VIRGINIA", "100 EAST MAIN STREET, BLACKSBURG, VIRGINIA", "100 WEST MAIN STREET, BLACKSBURG, VIRGINIA"];
+  const choices = ["100 E. Main St, Blacksburg, Virginia", "100 E. Main St, Blacksburg, VA"];
+  assert.equal(pickOption({ value: "100 E. Main St", choices }, listed, (o) => o), "100 EAST MAIN STREET, BLACKSBURG, VIRGINIA");
+  // The street alone fits one listing.
+  assert.equal(pickOption({ value: "100 E. Main St" }, ["100 EAST MAIN STREET, BLACKSBURG, VIRGINIA", "100 WEST MAIN STREET, BLACKSBURG, VIRGINIA"], (o) => o), "100 EAST MAIN STREET, BLACKSBURG, VIRGINIA");
+  // Two cities and no way to tell them apart is no pick.
+  assert.throws(() => pickOption({ value: "100 E. Main St" }, listed, (o) => o));
+  // Another house number or street is never taken.
+  assert.equal(pickOption({ value: "102 E. Main St", choices: ["102 E. Main St, Blacksburg, VA"] }, listed, (o) => o), undefined);
 });

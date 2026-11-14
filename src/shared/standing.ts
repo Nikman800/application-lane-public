@@ -6,6 +6,7 @@ import { askedCountry, citizenOf, jobCountry, usCitizen, usPerson, workAuthoriza
 import { parseSalary, salaryAnswer } from "./salary";
 import { localDate, writtenDate } from "./dates";
 import { degreeLevel } from "./education";
+import { ageAnswer } from "./profile-facts";
 
 const geography = globals as Geography;
 
@@ -66,12 +67,18 @@ const topics: [Topic, RegExp][] = [
   // ("Wage Or Salary Required", an employer.)
   ["salary", /\b(salary|compensation|pay|wage)\b.*\b(expect\w*|desired|requirements?|required|requested|target)\b|\b(desired|expected|target) (annual |base )?(salary|compensation|pay)\b/],
   // "What date are you available to start work?" asks it too.
-  ["start", /\b(earliest|soonest)\b.*\bstart\b|\bwhen (can|could|would) you (be able to )?start\b|\b(what|which) date (are|would|will) you (be )?available to (start|begin)\b|\bwhen (are|will|would) you (be )?available to (start|begin)\b|^(desired |available |earliest |preferred )?start date$|^date available$|^available start date$/],
+  // A program's own start date, asked Yes or No ("This program has a fixed
+  // start date mentioned in the job advert. Are you available to join on
+  // that date?", a SmartRecruiters screening step).
+  ["start", /\b(available|able) to (join|start|begin)\b.*\bon (that|the|this|its) (start )?date\b|\b(earliest|soonest)\b.*\bstart\b|\bwhen (can|could|would) you (be able to )?start\b|\b(what|which) date (are|would|will) you (be )?available to (start|begin)\b|\bwhen (are|will|would) you (be )?available to (start|begin)\b|^(desired |available |earliest |preferred )?start date$|^date available$|^available start date$|\bdate available to start\b/],
   ["fullTime", /\b(available|able|willing|commit)\b.*\b(full time|monday( through| to| thru)? friday|40 hours)\b/],
   ["assessment", /\b(take home|coding (assessment|challenge|test)|technical assessment|online assessment)\b/],
   ["adult", /\b(at least|over|older than) (the age of )?18\b|\b18 years( of age)? (or older|and older|old or older)\b/],
   // ("Have you worked for an employer in the past 12 months?": the time comes after the employer.)
-  ["priorEmployment", /\b(previously|ever|formerly|in the past)\b.*\b(worked|employed|been employed|an employee|a contractor)\b|\bformer employee\b|\bworked (for|at|with) us before\b|\b(worked|been employed) (for|at|by) .+ (in|within|during) the (past|last)\b/],
+  // one employer's "Have you ever provided services to an employer or any of its
+  // subsidiaries/affiliates as a contingent worker or contractor…"
+  // is the same question.
+  ["priorEmployment", /\b(previously|ever|formerly|in the past)\b.*\b(worked|employed|been employed|an employee|a contractor|contractor|contingent worker|provided services)\b|\bformer employee\b|\b(current or former|former or current)\b.*\b(intern|employee|page|contractor|worker)\b|\bworked (for|at|with) us before\b|\b(worked|been employed) (for|at|by) .+ (in|within|during) the (past|last)\b/],
   // Asked on most SuccessFactors forms, and left to the applicant each time
   //: "Are you able to perform the essential job
   // functions … with or without reasonable accommodation?", "Military
@@ -215,7 +222,7 @@ const counted: Record<string, number> = { one: 1, two: 2, three: 3, four: 4, fiv
 export function priorEmploymentAnswer(profile: Profile, question: string): "Yes" | "No" | undefined {
   const asked = normalize(askedPart(question));
   const named = asked
-    .match(/\b(?:for|at|by|with) (.+?)(?: (?:before|previously|formerly|ever|in the (?:past|last)|within|during|as an?|or (?:any|one) of)\b.*)?$/)?.[1]
+    .match(/\b(?:for|at|by|with|(?<=services) to) (.+?)(?: (?:before|previously|formerly|ever|in the (?:past|last)|within|during|as an?|or (?:any|one) of)\b.*)?$/)?.[1]
     ?.trim();
   const own = named && !/^(us|our|this|the|your|it|any|an?)( (company|organization|employer|firm|team|business))?$|^(our|this|the) (company|organization|employer|firm|team|business)\b/.test(named) ? named : undefined;
   const company = own || profile.applyingTo?.company || "";
@@ -265,10 +272,52 @@ export function enrolledNow(profile: Pick<Profile, "education">, now = new Date(
   });
 }
 
+// Questions about the company applied to and its family, for an applicant who
+// has said they never worked for any company they apply to (iCIMS):
+// the status list ("Which best describes your current status with Acme or
+// one of its related companies?") takes its "Never employed" option; "Are you
+// currently or have you been an Acme Defense LLC employee or contractor…?" and
+// "Do you currently work for an Acme Truck Vehicle Sales Dealership?" are No,
+// the second only when the applicant's own employer is known and is not
+// the company's. Only a question naming the company (its first word) is
+// answered; the flag's meaning is not stretched to any other employer.
+function companyFamily(field: Field, profile: Profile): Answer | undefined {
+  if (profile.neverWorkedForApplyingCompanies !== true) return;
+  const key = employerWords(profile.applyingTo?.company || "").split(" ")[0];
+  if (!key || key.length < 3) return;
+  const asked = normalize(askedPart(field.label));
+  if (!asked.split(" ").includes(key)) return;
+  if (/^(text|textarea|email|tel|number|url|date|datepicker)$/.test(field.kind)) return;
+  if (/\b(status|relationship|affiliation) with\b/.test(asked) && /\b(related|affiliated) (companies|entities)|\bsubsidiar|\baffiliates\b/.test(asked)) {
+    const never = field.options.filter((option) => /^never\b.*\b(employed|worked)\b/.test(normalize(option)));
+    return never.length === 1 ? { value: never[0] } : undefined;
+  }
+  if (/\b(employee|contractor|worker)\b/.test(asked) && /^(are you|have you|were you)\b/.test(asked) && /\b(currently|have you been|were you)\b/.test(asked) && !/\b(referred|related|friend)/.test(asked))
+    return yesNo("No", field);
+  // Or worded "Are you currently working for <Company> outside of the United
+  // States?" / "…for a <Company> Distributor or Pro Partner?" (Oracle's hdde
+  // form).
+  if (/^(do you (currently )?work|are you (currently )?working) (for|at|with)\b/.test(asked)) {
+    const own = profile.currentCompany?.trim() || (profile.work || []).find((row) => row.current === true)?.organization?.trim() || "";
+    if (!own || normalize(own).split(" ").includes(key)) return;
+    return yesNo("No", field);
+  }
+  return;
+}
+
 export function standingAnswer(field: Field, profile: Profile): Answer | undefined {
   const label = normalize(field.label);
   const topic = questionTopic(field.label);
-  if (!topic) return;
+  if (!topic) return companyFamily(field, profile);
+  if (topic === "adult") return ageAnswer(field, profile);
+  // Whether the employer's own advertised pay suits the applicant ("Does the
+  // advertised salary band meet your expectations?", a SmartRecruiters
+  // screening step): Yes. A question naming a figure is weighed
+  // against the profile's below instead.
+  if (topic === "salary" && field.options.some((option) => /^yes\b/i.test(option.trim())) && !/\d/.test(field.label) &&
+      /\b(advertised|posted|stated|listed|published|offered|this|the) (salary|pay|compensation|wage)( band| range| bracket)?\b/.test(label) &&
+      /\b(meets?|match(es)?|aligns?|fits?|suits?|acceptable|in line)\b/.test(label))
+    return yesNo("Yes", field);
   // Enrolled now: a degree under way, begun at least a term ago (such
   // questions ask for a semester done). Yes only; anyone else is left to
   // answer it, since the conditions around it vary.
@@ -317,7 +366,9 @@ export function standingAnswer(field: Field, profile: Profile): Answer | undefin
   if (topic === "referred" && !profile.answers.some((answer) => questionTopic(answer.question) === "referred")) {
     // "…by someone at an employer?": its first word, without "Electric
     // Company, LLC" after it.
-    const company = label.match(/\b(?:at|from|of) ([a-z0-9&]+)(?: [a-z0-9&]+)*$/)?.[1];
+    // "…by a current Employee?" names none: the company applied to.
+    const company = label.match(/\b(?:at|from|of) ([a-z0-9&]+)(?: [a-z0-9&]+)*$/)?.[1] ||
+      (/\breferred\b.* by an? (current )?(employee|associate|team member)$/.test(label) ? employerWords(profile.applyingTo?.company || "").split(" ")[0] : undefined);
     if (!company || /^(us|our|this|the|your|a|an)$/.test(company)) return;
     const theirs = (text: string) => normalize(text).includes(company);
     if ((profile.references || []).some((reference) => theirs(`${reference.relationship || ""} ${reference.email || ""}`))) return;
@@ -365,9 +416,7 @@ export function standingAnswer(field: Field, profile: Profile): Answer | undefin
       ? savedFor("relocate") || profile.willingToRelocate
       : topic === "relocate"
       ? profile.willingToRelocate
-      : topic === "adult"
-        ? profile.age18OrOlder
-        : topic === "usPerson" && person !== undefined
+      : topic === "usPerson" && person !== undefined
           ? (person ? "Yes" : "No")
           : // The applicant's citizenships, work authorization entries or
             // export-control statement saying so answer a citizenship
@@ -410,6 +459,15 @@ export function standingAnswer(field: Field, profile: Profile): Answer | undefin
     return own === profile.salary || numeric ? answer : { value: saved.trim(), numeric: answer.numeric };
   }
   if (topic === "start") {
+    // A job's or school's own Start Date is no question of availability: a
+    // saved "When can you start? Immediately" gave every Work History row of
+    // Enovation's Paylocity form this month, over the dates the applicant had
+    // set by hand.
+    if (/\b(work|employment|experience|education|history|job|school)\b/i.test(field.section || "")) return;
+    // Whether one can start on the date the employer set: an applicant who
+    // can start now can then. Any other saved answer may not, and is left.
+    if (field.options.some((option) => /^yes\b/i.test(option.trim())) && /\bon (that|the|this|its) (start )?date\b/.test(label))
+      return /^\s*(immediately|immediate|asap|right away|now)\b/i.test(saved) ? yesNo("Yes", field) : undefined;
     // "Immediately" answers a text box or a list that offers it. A box that
     // takes only a date gets today's: the date the applicant could start.
     // Another saved answer ("Two weeks' notice") is no date, and is left.
@@ -417,6 +475,18 @@ export function standingAnswer(field: Field, profile: Profile): Answer | undefin
     // got "Immediately" typed into it.
     // A question asked in words ("What is your earliest start date?") still
     // takes "Immediately".
+    // One part of a date split in three after its question ("When are you
+    // available to start?: Month", Bose's Workday questionnaire): "Immediately"
+    // was typed into each box and none took it. Today's date, part by part, as the graduation date's is.
+    const part = field.label.match(/(?:\?\s*:?|[.:]\s*:|\bdate\s*:|\bstart\??\s*:)\s*(month|day|year)\s*$/i)?.[1].toLowerCase();
+    if (part) {
+      if (!/^\s*(immediately|immediate|asap|right away|now)\b/i.test(saved)) return;
+      const [year, monthNumber, day] = localDate().split("-");
+      const name = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"][Number(monthNumber) - 1];
+      if (part === "year") return { value: year };
+      if (part === "month") return { value: name, choices: [name.slice(0, 3), monthNumber, String(Number(monthNumber))] };
+      return { value: String(Number(day)), choices: [day] };
+    }
     if (/date/.test(field.kind) || (!field.options.length && /^(date available|available (start )?date|availability date|(earliest )?start date|date of availability)$/.test(label))) {
       if (!/^\s*(immediately|immediate|asap|right away|now)\b/i.test(saved)) return;
       // Amazon's picker names its format, "Date: Year-Month-Day", and calls

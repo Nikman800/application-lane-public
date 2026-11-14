@@ -16,13 +16,17 @@
   "submitButtonPaths": [],
   "submittedSuccessPaths": [],
   "trackedInputSelectors": [],
+  "resumeFirstPaths": [
+    "//div[contains(@class,'attachmentField')][not(label[starts-with(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'additional document')])][label[contains(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'resume')] or .//*[contains(@class,'attachmentText')][starts-with(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'upload a resume') or starts-with(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'attach a resume') or starts-with(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'add a resume') or translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')='resume']][not(.//*[contains(@class,'removeAttachments')])][not(.//span[contains(@class,'attachmentLastModified')][normalize-space(.)])]",
+    "//div[contains(@class,'attachmentField')][label[starts-with(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'additional document')]][ancestor::*[contains(@class,'rcmFormSection')][1]//*[contains(@class,'sectionInstructionTxt')][contains(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'resume')]][not(//div[contains(@class,'attachmentField')][label[contains(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'resume')] or .//*[contains(@class,'attachmentText')][contains(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'resume')]])][not(.//*[contains(@class,'removeAttachments')])][not(.//span[contains(@class,'attachmentLastModified')][normalize-space(.)])]"
+  ],
   "inputSelectors": [
     [
       "resume",
       [
         {
           "path": [
-            "//div[contains(@class,'attachmentField')][label[contains(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'resume')] or .//*[contains(@class,'attachmentText')][contains(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'resume')]]"
+            "//div[contains(@class,'attachmentField')][not(label[starts-with(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'additional document')])][label[contains(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'resume')] or .//*[contains(@class,'attachmentText')][starts-with(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'upload a resume') or starts-with(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'attach a resume') or starts-with(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'add a resume') or translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')='resume']]"
           ],
           "actions": [
             {
@@ -55,6 +59,32 @@
               "time": 3000,
               "allowFailure": true,
               "condition": "%INPUTPATH%[not(.//span[contains(@class,'attachmentLastModified')][number(concat(substring(normalize-space(.),8,4),substring(normalize-space(.),2,2),substring(normalize-space(.),5,2))) >= %TODAY%])]"
+            }
+          ]
+        },
+        {
+          "path": [
+            "//div[contains(@class,'attachmentField')][label[starts-with(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'additional document')]][ancestor::*[contains(@class,'rcmFormSection')][1]//*[contains(@class,'sectionInstructionTxt')][contains(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'resume')]][not(//div[contains(@class,'attachmentField')][label[contains(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'resume')] or .//*[contains(@class,'attachmentText')][contains(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'resume')]])]"
+          ],
+          "actions": [
+            {
+              "path": "%INPUTPATH%//span[contains(@class,'addAttachments')]",
+              "method": "click",
+              "time": 3000,
+              "condition": "%INPUTPATH%[not(.//span[contains(@class,'attachmentLastModified')][normalize-space(.)])][not(.//*[contains(@class,'removeAttachments')])]"
+            },
+            {
+              "path": "//input[@type='file'][starts-with(@name,'fileData')]",
+              "method": "uploadResume",
+              "time": 5000,
+              "condition": "%INPUTPATH%[not(.//span[contains(@class,'attachmentLastModified')][normalize-space(.)])][not(.//*[contains(@class,'removeAttachments')])]"
+            },
+            {
+              "path": "//button[@title='Upload']",
+              "method": "click",
+              "time": 3000,
+              "allowFailure": true,
+              "condition": "%INPUTPATH%[not(.//span[contains(@class,'attachmentLastModified')][normalize-space(.)])][not(.//*[contains(@class,'removeAttachments')])]"
             }
           ]
         }
@@ -108,7 +138,7 @@
       [
         {
           "path": [
-            ".//div[contains(@class,'RCMFormField')][label[contains(@class,'rcmFormFieldLabel')][starts-with(translate(normalize-space(translate(.,'* ','  ')),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'country of residence')]]//input[contains(@class,'rcmpaginatedselectinput')]"
+            ".//div[contains(@class,'RCMFormField')][label[contains(@class,'rcmFormFieldLabel')][starts-with(translate(normalize-space(translate(.,'* ','  ')),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'country of residence') or translate(normalize-space(translate(.,'* : ','    ')),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')='country']]//input[contains(@class,'rcmpaginatedselectinput')]"
           ],
           "actions": [
             {

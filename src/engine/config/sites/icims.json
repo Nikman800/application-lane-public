@@ -10,7 +10,9 @@
   "containerRequired": false,
   "defaultMethod": "default",
   "submitButtonPaths": [],
-  "submittedSuccessPaths": [],
+  "submittedSuccessPaths": [
+    "//*[text()[contains(normalize-space(.), 'application was submitted successfully') or contains(normalize-space(.), 'received the submission for this opportunity')]]"
+  ],
   "trackedInputSelectors": [],
   "inputSelectors": [
     [
@@ -73,13 +75,16 @@
                   ],
                   "values": {
                     "Associate's degree": [
-                      "Associates Degree"
+                      "Associates Degree",
+                      "Associate's Degree/College Diploma"
                     ],
                     "Bachelor's degree": [
-                      "Bachelors Degree"
+                      "Bachelors Degree",
+                      "Bachelor's Degree"
                     ],
                     "Master's degree": [
-                      "Masters Degree"
+                      "Masters Degree",
+                      "Master's Degree"
                     ]
                   }
                 }

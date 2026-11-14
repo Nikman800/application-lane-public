@@ -39,7 +39,9 @@ const icons = (await readdir("src/extension/icons")).filter((file) => /^icon-\d+
 const iconSet = Object.fromEntries(
   icons.map((file) => [file.match(/\d+/)[0], `icons/${file}`]).sort((a, b) => Number(a[0]) - Number(b[0])),
 );
-const stamp = { builtAt: Date.now(), commit: `${git("rev-parse", "--short", "HEAD") || "unknown"}${changed ? "+changes" : ""}` };
+// LANE_BUILD_COMMIT: a frozen copy of the tree has no git; the validation
+// runner names the snapshot it built from (scripts/validate.ts).
+const stamp = { builtAt: Date.now(), commit: process.env.LANE_BUILD_COMMIT || `${git("rev-parse", "--short", "HEAD") || "unknown"}${changed ? "+changes" : ""}` };
 
 // The owner's development tools (the dashboard's Fixer page): on where
 // scripts/fixer.ts is in the tree, unless LANE_DEV_TOOLS=1 or 0 says

@@ -21,6 +21,10 @@ export const companyFor = (url: string, title = "") => {
   if (fromTitle) return fromTitle.slice(0, 300);
   const slug = pathname.split("/").filter(Boolean)[0];
   if (board && slug) return titleCase(slug);
+  // Paylocity serves every employer from recruiting.paylocity.com and titles
+  // its pages "<Employer> - <Job title>": two applications were filed as
+  // "recruiting".
+  if (/(^|\.)paylocity\.com$/.test(hostname)) return title.match(/^(.+?)\s+-\s+\S/)?.[1]?.trim().slice(0, 300) || "Application";
   // careers.acme.com and jobs.acme.com name the employer in the next label.
   const labels = hostname.split(".").slice(0, -1);
   return labels.find((label) => !genericCompany.test(label)) || "Application";

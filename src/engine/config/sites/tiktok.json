@@ -1,0 +1,169 @@
+{
+  "ats": "TikTok",
+  "urls": [
+    "*://lifeattiktok.com/resume/*/apply*",
+    "*://*.lifeattiktok.com/resume/*/apply*",
+    "*://careers.tiktok.com/resume/*/apply*"
+  ],
+  "urlsExcluded": [],
+  "embeddedPaths": [],
+  "pathsExcluded": [],
+  "containerPath": [],
+  "containerRequired": false,
+  "defaultMethod": "default",
+  "inputSelectors": [
+    [
+      "resume",
+      [
+        {
+          "path": [
+            "//*[contains(concat(' ',normalize-space(@class),' '),' uploadResume-section ') or @id='formily-item-attachment_resume']"
+          ],
+          "actions": [
+            {
+              "path": "%INPUTPATH%//input[@type='file']",
+              "method": "uploadResume",
+              "condition": "%INPUTPATH%[not(.//*[contains(concat(' ',normalize-space(@class),' '),' uploadFile-loadedUpdate ')][number(translate(substring(normalize-space(substring-after(.,':')),1,10),'-','')) >= %TODAY%])]"
+            }
+          ]
+        }
+      ]
+    ],
+    [
+      "work_auth",
+      [
+        {
+          "path": [
+            "//*[contains(concat(' ',normalize-space(@class),' '),' ud-formily-item ')][*[contains(concat(' ',normalize-space(@class),' '),' ud-formily-item-label ')][contains(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'authorized to work') or contains(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'authorization to work') or contains(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'eligible to work')]]//input[contains(@class,'ud__select__selector__search__input')]"
+          ],
+          "actions": [
+            {
+              "method": "click",
+              "condition": "%INPUTPATH%/ancestor::*[contains(concat(' ',normalize-space(@class),' '),' ud__select__selector ')][1][not(contains(concat(' ',normalize-space(@class),' '),' ud__select__selector-not-empty '))]"
+            },
+            {
+              "path": "(//*[contains(concat(' ',normalize-space(@class),' '),' ud__select__dropdown ')][not(contains(@class,'-hidden'))][not(contains(@style,'display: none'))][not(contains(@class,'-leave'))])[last()]//*[contains(concat(' ',normalize-space(@class),' '),' ud__select__list__item ')][not(contains(@class,'ud__select__list__item-disabled'))][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')='%LOWERVALUE%']",
+              "method": "click",
+              "time": 3000,
+              "pickRequired": true,
+              "condition": "%INPUTPATH%/ancestor::*[contains(concat(' ',normalize-space(@class),' '),' ud__select__selector ')][1][not(contains(concat(' ',normalize-space(@class),' '),' ud__select__selector-not-empty '))]"
+            }
+          ]
+        }
+      ]
+    ],
+    [
+      "sponsorship",
+      [
+        {
+          "path": [
+            "//*[contains(concat(' ',normalize-space(@class),' '),' ud-formily-item ')][*[contains(concat(' ',normalize-space(@class),' '),' ud-formily-item-label ')][contains(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'sponsorship')]]//input[contains(@class,'ud__select__selector__search__input')]"
+          ],
+          "actions": [
+            {
+              "method": "click",
+              "condition": "%INPUTPATH%/ancestor::*[contains(concat(' ',normalize-space(@class),' '),' ud__select__selector ')][1][not(contains(concat(' ',normalize-space(@class),' '),' ud__select__selector-not-empty '))]"
+            },
+            {
+              "path": "(//*[contains(concat(' ',normalize-space(@class),' '),' ud__select__dropdown ')][not(contains(@class,'-hidden'))][not(contains(@style,'display: none'))][not(contains(@class,'-leave'))])[last()]//*[contains(concat(' ',normalize-space(@class),' '),' ud__select__list__item ')][not(contains(@class,'ud__select__list__item-disabled'))][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')='%LOWERVALUE%']",
+              "method": "click",
+              "time": 3000,
+              "pickRequired": true,
+              "condition": "%INPUTPATH%/ancestor::*[contains(concat(' ',normalize-space(@class),' '),' ud__select__selector ')][1][not(contains(concat(' ',normalize-space(@class),' '),' ud__select__selector-not-empty '))]"
+            }
+          ]
+        }
+      ]
+    ],
+    [
+      "source",
+      [
+        {
+          "path": [
+            "//*[contains(concat(' ',normalize-space(@class),' '),' ud-formily-item ')][*[contains(concat(' ',normalize-space(@class),' '),' ud-formily-item-label ')][contains(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'hear about')]]//input[contains(@class,'ud__select__selector__search__input')]"
+          ],
+          "actions": [
+            {
+              "method": "click",
+              "condition": "%INPUTPATH%/ancestor::*[contains(concat(' ',normalize-space(@class),' '),' ud__select__selector ')][1][not(contains(concat(' ',normalize-space(@class),' '),' ud__select__selector-not-empty '))]"
+            },
+            {
+              "path": "(//*[contains(concat(' ',normalize-space(@class),' '),' ud__select__dropdown ')][not(contains(@class,'-hidden'))][not(contains(@style,'display: none'))][not(contains(@class,'-leave'))])[last()]//*[contains(concat(' ',normalize-space(@class),' '),' ud__select__list__item ')][not(contains(@class,'ud__select__list__item-disabled'))][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')='%LOWERVALUE%']",
+              "method": "click",
+              "time": 3000,
+              "pickRequired": true,
+              "condition": "%INPUTPATH%/ancestor::*[contains(concat(' ',normalize-space(@class),' '),' ud__select__selector ')][1][not(contains(concat(' ',normalize-space(@class),' '),' ud__select__selector-not-empty '))]"
+            },
+            {
+              "path": "//body",
+              "method": "event",
+              "event": "mousedown"
+            }
+          ],
+          "values": {
+            "LinkedIn": [
+              "Social Networking Platforms"
+            ],
+            "Facebook": [
+              "Social Networking Platforms"
+            ],
+            "Instagram": [
+              "Social Networking Platforms"
+            ],
+            "Twitter": [
+              "Social Networking Platforms"
+            ],
+            "TikTok": [
+              "Social Networking Platforms"
+            ],
+            "Handshake": [
+              "Recruitment Website"
+            ],
+            "Indeed": [
+              "Recruitment Website"
+            ],
+            "Glassdoor": [
+              "Recruitment Website"
+            ],
+            "Job board": [
+              "Recruitment Website"
+            ],
+            "Company website": [
+              "Recruitment Website"
+            ],
+            "Google": [
+              "Internet Search"
+            ],
+            "Search engine": [
+              "Internet Search"
+            ],
+            "Career fair": [
+              "Campus Event (e.g. Career Fair, Recruitment Talk, etc.)"
+            ],
+            "Referral": [
+              "Recommendation by company employee"
+            ],
+            "Employee referral": [
+              "Recommendation by company employee"
+            ],
+            "Friend": [
+              "Word-of-mouth through friends/campus ambassadors"
+            ],
+            "Application Lane": [
+              "Others"
+            ],
+            "Other": [
+              "Others"
+            ],
+            "Other (please specify)": [
+              "Others"
+            ]
+          }
+        }
+      ]
+    ]
+  ],
+  "submitButtonPaths": [],
+  "submittedSuccessPaths": [],
+  "trackedInputSelectors": []
+}

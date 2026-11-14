@@ -52,6 +52,19 @@ export const historySchema = z.object({
   // folder. A form asking for one level's transcript gets that entry's.
   transcript: z.string().max(200).optional(),
 });
+// What changes in the profile for one kind of job: an
+// applicant who stays enrolled a term longer for internships gives those a
+// later graduation date. Chosen by words in the job's title; the first that
+// matches applies. Each change names the education entry it is for.
+export const roleOverrideSchema = z.object({
+  name: z.string().trim().min(1).max(80),
+  titleWords: z.array(z.string().trim().min(1).max(60)).max(20).default([]),
+  education: z.array(z.object({
+    index: z.number().int().min(0).max(30),
+    endDate: z.string().max(20),
+  })).max(30).default([]),
+});
+export type RoleOverride = z.infer<typeof roleOverrideSchema>;
 // A professional reference the applicant is willing to have contacted. Phone
 // and email are optional because forms differ in which one they require.
 export const referenceSchema = z.object({
@@ -231,6 +244,17 @@ export function migrateProfile(raw: unknown): unknown {
       profile.phone = split.national;
     }
   }
+  // Where the applicant hears about jobs is a site or board, never a person:
+  // a saved reference's name there (typed in when the box read "Referral
+  // sources") is dropped, since references have their own section.
+  if (Array.isArray(profile.referralSource) && Array.isArray(profile.references)) {
+    const people = new Set(
+      (profile.references as { name?: unknown }[]).map((reference) => normalize(text(reference?.name))).filter(Boolean),
+    );
+    profile.referralSource = (profile.referralSource as unknown[]).filter(
+      (source) => typeof source !== "string" || !people.has(normalize(source)),
+    );
+  }
   profile.schemaVersion = PROFILE_VERSION;
   return profile;
 }
@@ -317,6 +341,8 @@ const profileObject = z.object({
   work: z.array(historySchema).max(30).default([]),
   education: z.array(historySchema).max(30).default([]),
   references: z.array(referenceSchema).max(10).default([]),
+  // What changes for some kinds of job (roleOverrideSchema).
+  roleOverrides: z.array(roleOverrideSchema).max(10).default([]),
   answers: z
     .array(
       z.object({
@@ -331,7 +357,32 @@ export const profileSchema = z.preprocess(migrateProfile, profileObject);
 export type Reference = z.infer<typeof referenceSchema>;
 // The job a fill is for, set on the profile it is given (never saved): its
 // country (ISO code) and employer, when known.
-export type ApplyingTo = { country?: string; company?: string };
+export type ApplyingTo = { country?: string; company?: string; title?: string };
+// The override a job's title selects: the first whose words it holds, each
+// as a whole word ("intern" is in "Software Engineer Intern", not in
+// "International").
+export function overrideFor(overrides: RoleOverride[], title: string): RoleOverride | undefined {
+  const text = ` ${title.toLowerCase().replace(/[^a-z0-9+#]+/g, " ")} `;
+  return overrides.find((override) =>
+    override.titleWords.some((word) => {
+      const wanted = word.toLowerCase().replace(/[^a-z0-9+#]+/g, " ").trim();
+      // A word's plural is the same word: "Software Engineering Internships"
+      // was taken for a full-time job.
+      return Boolean(wanted) && [wanted, `${wanted}s`, `${wanted}es`].some((form) => text.includes(` ${form} `));
+    }));
+}
+// The profile as an application for this job is answered from.
+export function forRole<T extends { education: { endDate: string }[]; roleOverrides?: RoleOverride[] }>(profile: T, title: string): T {
+  const override = overrideFor(profile.roleOverrides || [], title);
+  if (!override?.education.length) return profile;
+  return {
+    ...profile,
+    education: profile.education.map((row, index) => {
+      const change = override.education.find((entry) => entry.index === index && entry.endDate.trim());
+      return change ? { ...row, endDate: change.endDate.trim() } : row;
+    }),
+  };
+}
 export type Profile = z.infer<typeof profileObject> & { applyingTo?: ApplyingTo };
 export const emptyProfile: Profile = profileSchema.parse({
   firstName: "",
@@ -404,6 +455,12 @@ export type Observation = {
   // Document slots the page draws without a file box (SuccessFactors'
   // attachment widgets): "resume", "cover".
   documentSlots?: string[];
+  // SuccessFactors sections still folded: a page of nothing else has its
+  // whole form behind them.
+  foldedSections?: number;
+  // An empty resume slot on a site that rewrites the form from the resume
+  // (its rule's resumeFirstPaths, SuccessFactors): uploaded before the fill.
+  resumeSlotOpen?: boolean;
   canAdvance: boolean;
   atReview: boolean;
   // Sections the site config can add rows to when the step shows no fields
@@ -413,7 +470,7 @@ export type Observation = {
   // that keeps the form apart from the posting, usually the posting.
   referrer?: string;
 };
-export const CONTENT_VERSION = "2026-11-08-lists-handled";
+export const CONTENT_VERSION = "2026-11-13-linkedin-section-alone";
 export type Proposal = {
   fieldId: string;
   value: string;
@@ -423,6 +480,9 @@ export type Proposal = {
   choices?: string[];
   decline?: boolean;
   numeric?: number;
+  // The scale a GPA is on (4 for 3.84): a band whose figures go past it is
+  // another scale's and is never chosen (Oracle's "Below 50" for 3.84).
+  scale?: number;
   expectedValue: string;
   revision: number;
   source: string;
@@ -538,6 +598,9 @@ export type GenerationJob = {
   applicationId: string;
   operation: number;
   profileRevision: number;
+  // What the documents are made from: the profile without its saved
+  // answers, which no document holds (generation.ts documentsKey).
+  documentsKey?: string;
   status: "queued" | "running" | "complete" | "failed" | "cancelled";
   artifacts: Artifact[];
   narrative?: Narrative;
@@ -550,6 +613,10 @@ export type GenerationJob = {
   postingKey?: string;
   // The same role at the same company (see generation.ts).
   postingRole?: string;
+  // The written answers this job delivered (those that passed checking), by
+  // the question they answer, with the warnings that went with them: a
+  // repeat fill of the step reuses them (see generation.ts).
+  answered?: { question: string; value: string; factIds: string[]; warnings: string[] }[];
   // The documents as files the applicant can pick in a site's file chooser:
   // a folder under the backend's documentsDir (under its Sent once submitted).
   exported?: {
@@ -665,6 +732,13 @@ export type Application = {
   fitJobId?: string;
   fitError?: string;
   // The model's suggestion step after a fill is still running.
+  // What this extension wrote on the application's pages, by field label:
+  // after a reload a page's values are all "existing", and an answer of its
+  // own that a later fix corrects (a start date written as today's,
+  // Enovation's Paylocity rows) was kept as if
+  // the applicant had given it. A field still holding what was written here
+  // is the extension's to correct.
+  ownWrites?: { label: string; value: string }[];
   assisting?: boolean;
   // The last automatic suggestion step: the fields it was given, on which
   // tab and profile, and whether it ran to the end. Its leftovers are only
@@ -789,6 +863,10 @@ export type SubmissionRecord = {
 export type QueueSummaryItem = {
   id: string;
   url: string;
+  // Where it began (the listing it was tracked from) and its posting, as
+  // the job search knows an opening by.
+  sourceUrl?: string;
+  postingUrl?: string;
   company: string;
   title: string;
   status: AppStatus;
@@ -856,6 +934,9 @@ export type IssueFrame = {
   html?: string;
   error?: string;
 };
+// A screenshot added to a report: its type and its bytes as base64.
+export type IssueImage = { mime: "image/png" | "image/jpeg" | "image/webp" | "image/gif"; data: string };
+export const ISSUE_IMAGE_LIMIT = { count: 5, bytes: 8 * 1024 * 1024 };
 export type IssueReport = {
   id: string;
   createdAt: number;
@@ -881,6 +962,9 @@ export type IssueReport = {
   // fromLoad: it holds the page from its first request.
   network?: { entries: number; fromLoad: boolean; recovered?: number; missing?: number };
   frames: IssueFrame[];
+  // Screenshots the applicant pasted or attached, saved beside the report
+  // (issues/<id>.image-<n>.<ext>): their file names.
+  images?: string[];
   // What the report fixer did with it (scripts/fixer.ts).
   fixer?: FixerResult;
 };

@@ -122,6 +122,7 @@ export function createPalette(theme: ThemeTokens, depth: ColorDepth) {
   const fg = (hex: string) => paint(sgr(hex, depth));
   const stageOf: Record<string, string> = {
     "needs you": theme.warning,
+    "needs fixing": theme.warning,
     "being fixed": theme.info,
     "in progress": theme.stage.applying,
     failed: theme.danger,

@@ -136,6 +136,8 @@ test("fill and switch go to the extension over the live line, and come back with
     assert.match(await lane("switch", "f00dca"), /did switch for f00dcafe/);
     // Abandoned from the command line as the panel's Abandon.
     assert.match(await lane("abandon", "acme"), /Acme — Software Engineer: did abandon for f00dcafe/);
+    // Marked submitted from the command line, as the TUI's m.
+    assert.match(await lane("submitted", "acme"), /Acme — Software Engineer: did submitted for f00dcafe/);
     assert.match(await lane("fill", "nobody"), /No application matches "nobody"/);
     // A command line watching hears the extension's queue.
     const watcher = join_();
@@ -221,14 +223,21 @@ test("the command line searches for openings and queues them by number", async (
     const previewed = (await (await fetch(`${url}/v1/search`, { headers: auth })).json()).listings[0].preview;
     assert.deepEqual(previewed?.history?.company, { applications: 1, left: ["How did you hear about us?"] });
     // An application the fixer is correcting is shown apart, for the
-    // applicant to leave alone, until it is marked done.
-    assert.match(await lane("fixing", "f00dca", "retrying", "the", "upload"), /marked as being fixed/);
+    // applicant to leave alone, until it is given back (repair
+    // records).
+    assert.match(await lane("repair", "f00dca", "--defect", "the resume upload did not finish"), /needs fixing\.\n\s+1\. open\s+other\s+the resume upload did not finish/);
+    assert.match(await lane("status"), /Needs fixing \(queued for the fixer; leave these alone\):\n\s+\[f00dca\] Acme — Software Engineer\n\s+the resume upload did not finish/);
+    assert.match(await lane("fixing", "f00dca", "retrying", "the", "upload"), /being fixed by fixer; next: retrying the upload/);
     const marked = await lane("status");
     assert.match(marked, /being fixed\s+1/);
     assert.match(marked, /Being fixed \(leave these alone for now\):\n\s+\[f00dca\] Acme — Software Engineer\n\s+retrying the upload/);
     assert.doesNotMatch(marked, /Needs you:/);
-    assert.match(await lane("fixed", "f00dca"), /no longer marked/);
+    // No refill without a reason to expect progress.
+    assert.match(await lane("retry", "f00dca"), /Not refilled\. Say why a refill should go differently now/);
+    // Given back with its defect open: the record keeps it.
+    assert.match(await lane("release", "f00dca", "the applicant attaches it by hand"), /back with the applicant; 1 defect\(s\) stay open/);
     assert.match(await lane("status"), /Needs you:\n\s+\[f00dca\] Acme/);
+    assert.match(await lane("repairs", "--all"), /released, open/);
   } finally {
     server.close();
   }

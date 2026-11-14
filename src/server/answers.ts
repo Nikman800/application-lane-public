@@ -22,6 +22,7 @@ import { conflictWarning, graduationFor, graduationRule, profileConflicts } from
 
 import { applicationQuestion, fitAnswerLength, logisticsQuestion as logistics } from "../shared/questions";
 import { questionTopic } from "../shared/standing";
+import { proposals } from "../shared/matching";
 export { applicationQuestion } from "../shared/questions";
 
 export type SkillContext = {
@@ -230,7 +231,8 @@ export async function writeAnswers(
   const reasons: Record<string, string> = {};
   // Without the posting there is nothing to say why from: those questions
   // are the applicant's.
-  const fields = request.fields.filter(applicationQuestion).filter((field) => !request.questionIds || request.questionIds.includes(field.id)).filter((field) => {
+  const normal = new Set(proposals(request.fields, profile).map(proposal => proposal.fieldId));
+  const fields = request.fields.filter(applicationQuestion).filter(field => !normal.has(field.id)).filter((field) => !request.questionIds || request.questionIds.includes(field.id)).filter((field) => {
     if (request.description.trim() || !opinionQuestion(field.label)) return true;
     withheld.push(field.id);
     reasons[field.id] = "Add the job posting to draft a motivation answer.";

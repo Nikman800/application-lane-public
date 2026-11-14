@@ -12,7 +12,7 @@ node --version     # expect v22
 ## 2. Get Application Lane and start the backend
 
 ```bash
-git clone https://github.com/Nikman800/application-lane-public.git application-lane
+git clone https://github.com/Nikman800/application-lane.git application-lane
 cd application-lane
 npm ci
 npm run build

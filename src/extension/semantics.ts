@@ -1,4 +1,5 @@
 import { type Field } from "../shared/model";
+import { tdsDateBox } from "../engine/page/tds-date-picker";
 import { wordLimit } from "../shared/questions";
 import { askedLevel } from "../shared/transcripts";
 
@@ -117,17 +118,35 @@ export function groupQuestion(element: Element): { text: string; raw: string } |
   for (let depth = 0; block && depth < 5 && !members.every((member) => block!.contains(member)); depth++) block = block.parentElement;
   if (!block || !members.every((member) => block!.contains(member))) return;
   // Another group's controls in the same block mean it is a whole form
-  // section, not one question.
-  if ([...block.querySelectorAll("input,textarea,select")].some((control) => !members.includes(control as HTMLInputElement) && (control as HTMLInputElement).type !== "hidden")) return;
-  const before: string[] = [];
-  const raw: string[] = [];
-  for (const child of block.children) {
-    if (members.some((member) => child.contains(member))) break;
-    raw.push(child.textContent || "");
-    before.push(labelText(child));
+  // section, not one question. A box to write one's own answer in, under
+  // the group's name or an unnamed box beside it ("Custom" and its text
+  // field, Lever's pronouns), is part of the group.
+  const ownControl = (control: Element) =>
+    members.includes(control as HTMLInputElement) ||
+    (control as HTMLInputElement).type === "hidden" ||
+    (control as HTMLInputElement).name === element.name ||
+    (control instanceof HTMLInputElement && control.type === element.type && !control.name);
+  const lone = (candidate: Element) => [...candidate.querySelectorAll("input,textarea,select")].every(ownControl);
+  if (!lone(block)) return;
+  const textBefore = (holder: Element) => {
+    const before: string[] = [];
+    const raw: string[] = [];
+    for (const child of holder.children) {
+      if (members.some((member) => child.contains(member))) break;
+      raw.push(child.textContent || "");
+      before.push(labelText(child));
+    }
+    return { text: cleanLabel(before.filter(Boolean).join(" ")), raw: raw.join(" ") };
+  };
+  let found = textBefore(block);
+  // The question can sit a level or two further out, beside the list that
+  // holds the options (Lever's "Pronouns": a label, then a field holding
+  // the list).
+  for (let climb = 0; !found.text && climb < 2 && block.parentElement && lone(block.parentElement); climb++) {
+    block = block.parentElement;
+    found = textBefore(block);
   }
-  const text = cleanLabel(before.filter(Boolean).join(" "));
-  return text ? { text, raw: raw.join(" ") } : undefined;
+  return found.text ? found : undefined;
 }
 
 // Ashby names each box of a checkbox question after its own option
@@ -289,11 +308,35 @@ export function fieldLabel(element: Control): string {
     const legend = labelText(element.closest('[data-automation-id^="formField-"]')?.querySelector("legend") || null);
     if (legend) return cleanLabel(`${legend}: ${own}`);
   }
+  // iCIMS draws a date as Month, Day and Year boxes, and a salary as Currency,
+  // Amount and Rate, under one line of text in the cell around them ("Date
+  // Available to Start", "Desired Salary"): each box read only as its part
+  // ("Month", "Amount (Numbers only)"), so no question was answered
+  // (International).
+  const icimsGroup = element.closest(".iCIMS_Forms_DateOnlyField,.iCIMS_Forms_SalaryField");
+  if (icimsGroup && /^(month|day|year|amount\b.*)$/i.test(own)) {
+    const question = textBeforeGroup(icimsGroup);
+    if (question) return cleanLabel(`${question}: ${own}`);
+  }
   if (promptOnly.test(own)) {
     const question = questionAbove(element);
     if (question) return cleanLabel(question);
   }
   return own || "Unlabelled field";
+}
+
+// The text just before a group of boxes in the same table cell: siblings
+// back from the group, then from the span or paragraph holding it. Another
+// control in the way ends the search.
+function textBeforeGroup(group: Element): string {
+  for (let node: Element | null = group, depth = 0; node && depth < 3 && !/^(TD|TH|TR|TABLE|FORM)$/.test(node.tagName); node = node.parentElement, depth++) {
+    for (let before = node.previousSibling, steps = 0; before && steps < 6; before = before.previousSibling, steps++) {
+      if (before instanceof Element && before.querySelector(controlSelector)) return "";
+      const text = (before.textContent || "").replace(/\s+/g, " ").trim().replace(/\s*\*$/, "");
+      if (text) return text.slice(0, 200);
+    }
+  }
+  return "";
 }
 
 // A label that only says to pick ("Make Selection Here") carries no question:
@@ -470,6 +513,21 @@ export function fileQuestion(element: Control): { kind: DocumentKind; text: stri
     const found = named([labels.map(labelText).join(" "), identity].join(" "));
     if (found) return found;
   }
+  // SmartRecruiters asks for the document in an info block of its own just
+  // before a plain "Additional attachments" uploader, its words in that
+  // block's shadow root: "Please submit a school transcript (official or
+  // unofficial)…".
+  const host = (node: Node) => ((node.getRootNode() as ShadowRoot).host as Element | undefined) || undefined;
+  let question: Element | undefined = element;
+  for (let depth = 0; question && depth < 16 && !question.matches('[data-test="question-container"]'); depth++)
+    question = question.parentElement || host(question);
+  const previous = question?.matches('[data-test="question-container"]') ? question.previousElementSibling : null;
+  if (previous?.matches('[data-test="question-container"]') && previous.querySelector("sr-question-field-info") && !previous.querySelector("input,select,textarea")) {
+    const deepText = (root: Element | ShadowRoot): string =>
+      [root.textContent || "", ...[...root.querySelectorAll("*")].flatMap((child) => (child.shadowRoot ? [deepText(child.shadowRoot)] : []))].join(" ");
+    const asked = named(deepText(previous).replace(/\s+/g, " ").trim().slice(0, 600));
+    if (asked) return asked;
+  }
   // Oracle's block names what goes in its one uploader, nine levels up, in
   // its title and instructions: "Additional Documents. Add any additional
   // documents. E.g.: Cover Letter, Certificate, Reference letter.".
@@ -499,6 +557,21 @@ function uploaderScope(element: HTMLInputElement) {
 export function currentFileName(element: Control): string {
   if (!(element instanceof HTMLInputElement) || element.type !== "file")
     return "";
+  // SmartRecruiters' spl-dropzone clears its input once a file is taken and
+  // lists the upload in its own files attribute (JSON): a finished resume
+  // read as missing (one employer's SmartRecruiters form).
+  const dropzone = (element.getRootNode() as ShadowRoot).host;
+  if (dropzone?.localName === "spl-dropzone") {
+    try {
+      const files: unknown = JSON.parse(dropzone.getAttribute("files") || "[]");
+      const names = Array.isArray(files)
+        ? files.map((file) => String((file as { fileName?: unknown; name?: unknown })?.fileName || (file as { name?: unknown })?.name || "").trim()).filter(Boolean)
+        : [];
+      if (names.length) return names.join(", ").slice(0, 300);
+    } catch {
+      /* Not a list: read as the page draws it, below. */
+    }
+  }
   // Only the uploader's own few levels: once a site swaps another uploader's
   // input for a filename chip, a wider single-input scope reaches that chip.
   let scope: Element = element;
@@ -618,6 +691,24 @@ function ripplingQuestion(element: Element): string {
   return above && !above.querySelector(controlSelector) ? labelText(above) : "";
 }
 
+// iCIMS draws a form's own box with the question as text in its table cell
+// above it ("School/Institution Name") and names the box by its field id
+// ("icims_0_SchoolName") or a short code in aria-label ("sync", "Graduate"):
+// read so, no school box of an education block was known as one. Its date parts (Month/Day/Year) keep their own labels.
+function icimsCellQuestion(element: Control): string {
+  if (!/^icims_(?:\d+_|f_)/.test(element.id) || element.closest(".iCIMS_Table,.iCIMS_DateField-Month,.iCIMS_DateField-Day,.iCIMS_DateField-Year")) return "";
+  if (!(element instanceof HTMLInputElement && /^(text|)$/.test(element.type)) && !(element instanceof HTMLSelectElement)) return "";
+  const coded = (element.getAttribute("aria-label") || "").trim();
+  if (!element.closest(".icims_group_loop") && !(element.getAttribute("data-label") && coded && !/\s/.test(coded))) return "";
+  const cell = element.closest("td");
+  if (!cell) return "";
+  const range = element.ownerDocument.createRange();
+  range.setStart(cell, 0);
+  range.setEndBefore(element);
+  const text = cleanLabel(range.toString().replace(/\s+/g, " ").trim());
+  return text && text.length <= 120 ? text : "";
+}
+
 export function ownLabel(element: Control): string {
   // A toggle choice's option is its own text ("Yes", "No").
   if (isToggleChoice(element)) return cleanLabel(element.textContent || "");
@@ -637,6 +728,13 @@ export function ownLabel(element: Control): string {
     const named = (native?.getAttribute("aria-labelledby") || "").split(/\s+/).filter(Boolean)
       .map((id) => labelText(root.querySelector(`#${CSS.escape(id)}`))).filter(Boolean).join(" ");
     if (named || (native && labelText(element))) return named || labelText(element);
+    // A button drawn as a radio holds its option as its own text: Oracle's
+    // cx-select-pills (<button role="radio"><span> Yes</span></button>) read
+    // as empty options, and no Yes/No question was answered.
+    if (!native && element instanceof HTMLButtonElement && element.getAttribute("role") === "radio") {
+      const own = labelText(element);
+      if (own) return own;
+    }
   }
   if (sharedRadioQuestion(element)) {
     const option = radioOptionBeside(element);
@@ -654,19 +752,24 @@ export function ownLabel(element: Control): string {
     const title = element.parentElement?.previousElementSibling;
     if (title?.matches("label.ashby-application-form-question-title") && labelText(title)) return labelText(title);
   }
+  const cellAsked = icimsCellQuestion(element);
+  if (cellAsked) return cellAsked;
   const explicit = associatedLabel(element);
   if (explicit) return explicit;
   if (element instanceof HTMLInputElement && /^(radio|checkbox)$/.test(element.type)) {
     const after = textAfterRadio(element);
     if (after) return after;
   }
+  // Lever's question first: its school picker is a Select2 whose visible
+  // selection reads only its placeholder ("Select a university or college",
+  // an employer), and the school was not matched.
+  const lever = questionLabel(element);
+  if (lever) return lever;
   // Select2's hidden select is named by its visible selection (Amazon's,
   // whose only name is the selection's aria-labelledby).
   const selection = select2Selection(element);
   const shown = selection && ownLabel(selection as unknown as Control);
   if (shown) return shown;
-  const lever = questionLabel(element);
-  if (lever) return lever;
   // A nearby standalone label is useful only in a single-control field, not
   // across an entire form or a repeated row.
   const wrapper = element.closest(
@@ -708,8 +811,32 @@ export function ownLabel(element: Control): string {
     : cleanLabel(fallback);
 }
 
+// Meta's careers site marks the whole page's scroll container aria-hidden
+// (id="scrollview", a full-width wrapper a few levels under <body>) while the
+// form inside it is drawn and in use: read as hidden, all 25 of its fields
+// were missed and Fill reported "No fields were detected". An aria-hidden element that is the page itself, drawn over the
+// viewport, hides nothing from the applicant.
+function pageShell(node: Element): boolean {
+  const body = node.ownerDocument.body;
+  let depth = 0;
+  let parent = node.parentElement;
+  for (; parent && parent !== body; parent = parent.parentElement) depth++;
+  if (!parent || depth > 4 || node.closest("[hidden],[inert]")) return false;
+  const view = node.ownerDocument.defaultView;
+  const box = node.getBoundingClientRect();
+  const style = getComputedStyle(node);
+  return Boolean(view) && style.display !== "none" && style.visibility !== "hidden" &&
+    box.width >= view!.innerWidth * 0.8 && box.height > 0 && box.right > 0 && box.left < view!.innerWidth;
+}
+
+function hiddenFromView(element: Element): boolean {
+  for (let node = element.closest('[aria-hidden="true"]'); node; node = node.parentElement?.closest('[aria-hidden="true"]') ?? null)
+    if (!pageShell(node)) return true;
+  return false;
+}
+
 export function rendered(element: Element): boolean {
-  if (element.closest('[hidden],[inert],[aria-hidden="true"]')) return false;
+  if (element.closest("[hidden],[inert]") || hiddenFromView(element)) return false;
   const style = getComputedStyle(element);
   return (
     style.visibility !== "hidden" &&
@@ -776,11 +903,16 @@ export function writable(element: Control): boolean {
   // A read-only combobox naming its list is chosen from, not typed into:
   // Microsoft's careers form draws every list so, and its sponsorship
   // question was refused as "no longer writable".
-  const chosenFrom = element.getAttribute("role") === "combobox" && Boolean(element.getAttribute("aria-controls"));
+  const chosenFrom = (element.getAttribute("role") === "combobox" && Boolean(element.getAttribute("aria-controls"))) ||
+    // Or a date box set from its calendar (Tesla's).
+    Boolean(tdsDateBox(element));
   return (
     controlVisible(element) &&
     !(element as HTMLInputElement).disabled &&
-    (!(element as HTMLInputElement).readOnly || chosenFrom) &&
+    // A radio or checkbox ignores readonly, and Microsoft's careers form
+    // marks its Yes/No radios so: its three "Job specific questions" were
+    // never seen.
+    (!(element as HTMLInputElement).readOnly || chosenFrom || /^(radio|checkbox)$/.test((element as HTMLInputElement).type)) &&
     element.getAttribute("aria-disabled") !== "true" &&
     element.getAttribute("aria-readonly") !== "true"
   );
@@ -790,6 +922,36 @@ export function sectionFor(element: Control): {
   section: string;
   index: number;
 } {
+  // An entry form a site rule opened for one profile row (Oracle's) says
+  // whose it is, so the page-wide fill maps its Degree, Major and School to
+  // that row and not to row 0 (Higher: row 1's form held row 0's
+  // school and major). The page's own section name stays where it has one
+  // (SuccessFactors' "Work Experiences").
+  const found = pageSectionFor(element);
+  const ruled = element.closest("[data-lane-entry]")?.getAttribute("data-lane-entry")?.match(/^(education|experience):(\d+)$/);
+  if (!ruled) return found;
+  return { section: found.section || (ruled[1] === "education" ? "Education" : "Experience"), index: Number(ruled[2]) };
+}
+
+function pageSectionFor(element: Control): {
+  section: string;
+  index: number;
+} {
+  // iCIMS's own education and work blocks: "icims_1_SchoolName" is the second
+  // block, and the page's heading above the group ("EDUCATION (COMPLETED)")
+  // is its section, which tells a finished degree's blocks from the "currently
+  // enrolled" part.
+  const loop = element.closest(".icims_group_loop[data-group-loop-name]");
+  const loopRow = element.id.match(/^icims_(\d+)_/);
+  if (loop && loopRow) {
+    const name = (loop.getAttribute("data-group-loop-name") || "").toLowerCase();
+    const heading = [...(element.getRootNode() as Document | ShadowRoot).querySelectorAll("strong,b,h1,h2,h3,h4")]
+      .filter((node) => Boolean(node.compareDocumentPosition(loop) & Node.DOCUMENT_POSITION_FOLLOWING) && !node.closest(".icims_group_loop"))
+      .map((node) => cleanLabel(node.textContent || ""))
+      .filter((text) => text.length <= 80 && text.toLowerCase().includes(name))
+      .at(-1);
+    return { section: (heading || name).slice(0, 500), index: Number(loopRow[1]) };
+  }
   const known = element.closest(
     '.education--form,[data-automation-id="educationSection"],[data-automation-id^="education-"]',
   );
@@ -912,6 +1074,15 @@ export function isRequired(element: Control): boolean {
     select2Selection(element)?.getAttribute("aria-required") === "true"
   )
     return true;
+  // A choice of a required group: the group says so, not each choice. A
+  // group drawn in its component's shadow root, the choices slotted into it
+  // (SmartRecruiters' spl-radio-group, its fieldset aria-required="true"),
+  // is found through the slot: four starred Yes/No questions read as
+  // optional.
+  if (element.getAttribute("role") === "radio") {
+    const group = element.closest('[role="radiogroup"]') || element.assignedSlot?.closest('[role="radiogroup"]');
+    if (group?.getAttribute("aria-required") === "true") return true;
+  }
   if (element.getAttribute("role") === "combobox") {
     const shell = element.closest(".select__container");
     if (shell?.querySelector('input[required][aria-hidden="true"]'))
@@ -1015,6 +1186,31 @@ export function selectedCustomValue(element: Control): string | undefined {
     return (copy.textContent || "").replace(/\s+/g, " ").trim();
   }
   if (element.getAttribute("role") !== "combobox") return;
+  // SmartRecruiters' spl-select keeps its choice as the host's value, and its
+  // button shows only a flag: the chosen spl-select-option's text ("United
+  // States +1") is the answer. Read as empty, the phone's Country code was
+  // chosen fifteen times over in one fill.
+  if (element instanceof HTMLButtonElement) {
+    let host = (element.getRootNode() as ShadowRoot).host as Element | undefined;
+    for (let depth = 0; host && depth < 4 && !host.matches("spl-select"); depth++) host = (host.getRootNode() as ShadowRoot).host;
+    if (host?.matches("spl-select")) {
+      const value = host.getAttribute("value") || "";
+      const option = value ? [...host.querySelectorAll("spl-select-option")].find((candidate) => candidate.getAttribute("value") === value) : undefined;
+      return option ? (option.textContent || option.getAttribute("label") || value).replace(/\s+/g, " ").replace(/\+\s+/g, "+").trim() : value;
+    }
+  }
+  // A react-widgets dropdown draws its open list inside itself, and the list
+  // stays there once opened: read as the box's whole text, Paylocity's "Have
+  // you worked with us before?" went from "--" to "----YesNo" as it opened,
+  // and the pick was given up as a value changed since inspection
+  //. Its choice is the one in its "rw-input"; "--" is none.
+  if (element.matches(".rw-dropdownlist")) {
+    const shown = element.querySelector(":scope > .rw-input");
+    if (shown) {
+      const text = (shown.textContent || "").trim();
+      return /^-+$/.test(text) ? "" : text;
+    }
+  }
   // iCIMS search dropdowns show their placeholder as the anchor's text.
   if (
     element.matches('a[id$="_icimsDropdown"]') &&

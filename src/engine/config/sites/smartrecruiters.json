@@ -64,10 +64,24 @@
           "path": [
             "//spl-autocomplete[@label='City']/shadow-root/spl-input/shadow-root/input"
           ],
-          "method": "trustedChoose"
+          "method": "trustedChoose",
+          "valueKey": "city_state"
         },
         "//spl-autocomplete[@label='City']//input",
         "//spl-input[@label='City']/shadow-root/input"
+      ]
+    ],
+    [
+      "postal_code",
+      [
+        {
+          "path": [
+            "//*[@data-test='personal-info-location']//spl-autocomplete[@data-test='location-autocomplete'][contains(@label,'Postal')]/shadow-root/spl-input/shadow-root/input",
+            "//spl-autocomplete[@label='Postal code / zip code']/shadow-root/spl-input/shadow-root/input"
+          ],
+          "method": "trustedChoose",
+          "valueKey": "postal_code"
+        }
       ]
     ],
     [
@@ -271,6 +285,13 @@
               "description",
               [
                 ".//*[@data-test='education-description']//spl-textarea/shadow-root/textarea"
+              ]
+            ],
+            [
+              "currently_studying",
+              [
+                ".//*[@data-test='education-current']//spl-checkbox/shadow-root/input[@type='checkbox']",
+                ".//*[@data-test='education-current']//input[@type='checkbox']"
               ]
             ],
             [

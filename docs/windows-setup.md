@@ -25,7 +25,7 @@ In WSL, install Node 22 inside Linux, for example with [nvm](https://github.com/
 From a clone:
 
 ```powershell
-git clone https://github.com/Nikman800/application-lane-public.git application-lane
+git clone https://github.com/Nikman800/application-lane.git application-lane
 cd application-lane
 npm ci
 npm run build

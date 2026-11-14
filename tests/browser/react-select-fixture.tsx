@@ -12,32 +12,41 @@ class Select extends React.Component<{
   id: string;
   label: string;
   options: Option[];
-  value: Option | null;
-  onChange: (option: Option | null) => void;
+  value: Option | Option[] | null;
+  onChange: (option: any) => void;
+  // A multi-select ("Please select all which apply") keeps a list of picks.
+  isMulti?: boolean;
+  required?: boolean;
 }> {
   state = { open: false, input: "" };
   selectOption(option: Option) {
-    this.props.onChange(option);
+    const { isMulti, value } = this.props;
+    this.props.onChange(isMulti ? [...((value as Option[] | null) || []), option] : option);
     this.setState({ open: false, input: "" });
   }
   render() {
-    const { id, label, options, value } = this.props;
+    const { id, label, options, value, isMulti, required } = this.props;
+    const picked = Array.isArray(value) ? value : [];
     return (
       <div className="select__container">
-        <label id={`${id}-label`}>{label}</label>
+        <label id={`${id}-label`} htmlFor={id} className="label select__label">{label}{required && <span aria-hidden="true">*</span>}</label>
         <div
           className="select__control"
           onMouseDown={(event) => {
             if (event.nativeEvent.isTrusted) this.setState({ open: true });
           }}
         >
-          {value && <div className="select__single-value">{value.label}</div>}
+          {value && !Array.isArray(value) && <div className="select__single-value">{value.label}</div>}
+          {isMulti && picked.map((option) => (
+            <div key={option.value} className="select__multi-value"><div className="select__multi-value__label">{option.label}</div></div>
+          ))}
           <input
             className="select__input"
             id={id}
             role="combobox"
             aria-autocomplete="list"
             aria-expanded={this.state.open}
+            aria-required={required ? "true" : undefined}
             aria-labelledby={`${id}-label`}
             value={this.state.input}
             onChange={(event) => this.setState({ input: event.target.value })}
@@ -88,6 +97,36 @@ function AsyncSelect(props: {
 // Virginia Tech under its official name ("s27"), among schools sharing its
 // words.
 const schools: Option[] = realSchools.map((label, index) => ({ label, value: `s${index + 1}` }));
+
+// Riot Games' Greenhouse form, its labels and
+// option lists as captured, the company named Contoso: How did you hear
+// with "None of the above / Other", a multi-select of business-fluent
+// languages, and a month asked "If yes" after a question answered No.
+const option = (label: string, index: number, prefix: string): Option => ({ label, value: `${prefix}${index}` });
+function RiotForm() {
+  const [values, setValues] = useState<Record<string, any>>({ question_1006: { label: "No", value: "t2" } });
+  const set = (key: string) => (value: any) => setValues((current) => ({ ...current, [key]: value }));
+  useEffect(() => {
+    (window as any).selected = Object.fromEntries(Object.entries(values).map(([key, value]) =>
+      [key, Array.isArray(value) ? value.map((each) => each.value) : value?.value || ""]));
+  }, [values]);
+  return (
+    <main>
+      <h1>Data Engineering Intern - Summer 2027</h1>
+      <form onSubmit={(event) => event.preventDefault()}>
+        <label>Email<input name="email" /></label>
+        <Select id="question_1001" required label="How did you hear about this job?" value={values.question_1001 || null} onChange={set("question_1001")}
+          options={["Contoso Website", "Linkedin", "Internet Job Board", "Industry Event (eg. GDC)", "College/Campus Event", "Employee Referral", "Social Media", "None of the above / Other"].map((label, i) => option(label, i, "h"))} />
+        <Select id="question_1003[]" required isMulti label="In which language(s) are you business fluent?" value={values["question_1003[]"] || null} onChange={set("question_1003[]")}
+          options={["Cantonese", "Czech", "English", "French", "German", "Japanese", "Spanish (Latin American)", "Spanish (Spain)", "Other"].map((label, i) => option(label, i, "l"))} />
+        <Select id="question_1006" required label="As we are majority owned by Contoso, we would like to know if you have worked for Contoso or a company owned or otherwise affiliated with Contoso within the last 12 months." value={values.question_1006 || null} onChange={set("question_1006")}
+          options={["Yes", "No"].map((label, i) => option(label, i + 1, "t"))} />
+        <Select id="question_1007" required label="If yes, can you please indicate the last month you worked for Contoso and/or an affiliate company. " value={values.question_1007 || null} onChange={set("question_1007")}
+          options={["n/a", "January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"].map((label, i) => option(label, i, "m"))} />
+      </form>
+    </main>
+  );
+}
 
 function Form() {
   const [values, setValues] = useState<Record<string, Option | null>>({});
@@ -185,4 +224,4 @@ function Form() {
 }
 
 (window as any).submissions = 0;
-createRoot(document.getElementById("root")!).render(<Form />);
+createRoot(document.getElementById("root")!).render(new URLSearchParams(window.location.search).get("riot") ? <RiotForm /> : <Form />);

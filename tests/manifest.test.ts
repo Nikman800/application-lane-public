@@ -30,3 +30,9 @@ test("every build carries the version from package.json", () => {
   for (const target of ["extension", "baseline", "store"] as const)
     assert.equal(extensionManifest({ target, version, icons }).version, version);
 });
+
+test("the toolbar action has a default shortcut, and it opens the side panel the button opens", () => {
+  const full = extensionManifest({ target: "extension", version, icons });
+  assert.equal((full.commands as any)._execute_action.suggested_key.default, "Alt+Shift+L");
+  assert.equal((full.commands as any)["fill-step"].suggested_key.default, "Alt+Shift+F");
+});

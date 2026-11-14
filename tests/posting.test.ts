@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { fetchPosting, fetchPostingPage, htmlText, postingEndpoint, postingFromPage, publicPostingURL } from "../src/server/posting";
+import { atsPostingPage, fetchPosting, fetchPostingPage, htmlText, postingEndpoint, postingFromPage, publicPostingURL } from "../src/server/posting";
 
 const long = "Build backend services in Python and Go for the payments platform. ".repeat(3);
 
@@ -233,4 +233,36 @@ test("a posting endpoint that drops its first answer is asked once more", async 
   });
   assert.equal(calls, 2);
   assert.equal(posting?.title, "Software Engineer Internship");
+});
+
+// iCIMS has no posting API: from any step of its form, the job's own page
+// is read, framed (in_iframe=1), where it carries schema.org JobPosting data
+// as below (a General Dynamics posting, with a placeholder
+// employer).
+test("an iCIMS form's later step reads the job's posting page", async () => {
+  const form = "https://careers-acme.icims.com/jobs/75970/full-stack-software-engineering-intern%2c-summer-2027/form?form=OFCCP_Forms_Packet&step=6&isPacket=1&type=4";
+  assert.equal(atsPostingPage(form), "https://careers-acme.icims.com/jobs/75970/job?in_iframe=1");
+  assert.equal(atsPostingPage("https://careers-acme.icims.com/jobs/search?ss=1"), undefined);
+  assert.equal(atsPostingPage("https://example.com/jobs/75970/job"), undefined);
+  const page = `<!doctype html><html><head><title>Find a Job</title><script type="application/ld+json">${JSON.stringify({
+    hiringOrganization: { "@type": "Organization", name: "Contoso Mission Systems, Inc", sameAs: "https://contoso.example/" },
+    validThrough: "2027-11-09T05:00:00.000Z",
+    jobLocation: [{ address: { addressCountry: "US", streetAddress: "UNAVAILABLE", "@type": "PostalAddress", postalCode: "UNAVAILABLE", addressLocality: "Blacksburg", addressRegion: "VA" }, "@type": "Place" }],
+    employmentType: "INTERN",
+    "@context": "http://schema.org",
+    "@type": "JobPosting",
+    title: "Full-Stack Software Engineering Intern, Summer 2027",
+    description: `&lt;p&gt;${long}&lt;/p&gt;`,
+  })}</script></head><body><div class="iCIMS_JobContent">…</div></body></html>`;
+  const asked: string[] = [];
+  const posting = await fetchPosting([form], {
+    fetch: (async (url: string) => {
+      asked.push(String(url));
+      return new Response(page, { status: 200, headers: { "content-type": "text/html; charset=utf-8" } });
+    }) as typeof fetch,
+  });
+  assert.deepEqual(asked, ["https://careers-acme.icims.com/jobs/75970/job?in_iframe=1"]);
+  assert.equal(posting?.title, "Full-Stack Software Engineering Intern, Summer 2027");
+  assert.equal(posting?.company, "Contoso Mission Systems, Inc");
+  assert.match(posting!.description, /payments platform/);
 });

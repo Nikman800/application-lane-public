@@ -56,8 +56,13 @@ const unnamedPlace = /\b(which|what|any|other|another|each|all|following|multipl
 
 // The country a question asks about: one it names, or "" for one that names
 // none. Undefined when it names several, or a place that is no country.
+// A United States territory named beside the United States is part of the
+// same authorization: one employer's "Are you legally authorized to work in the
+// U.S. and Puerto Rico?" read as two countries, and went unanswered.
+const usTerritories = new Set(["PR", "GU", "VI", "AS", "MP", "UM"]);
 export function askedCountry(label: string): string | undefined {
-  const named = countriesNamed(geography, label);
+  let named = countriesNamed(geography, label);
+  if (named.includes("US")) named = named.filter((code) => !usTerritories.has(code));
   if (named.length > 1) return;
   if (named.length === 1) return named[0];
   if (unnamedPlace.test(normalize(label))) return;

@@ -351,14 +351,14 @@
             ]
           ],
           "containerPath": [
-            ".//div[@role='group'][@aria-labelledby='Work-Experience-%NUMBER0%-panel']",
+            ".//div[@role='group'][starts-with(@aria-labelledby,'Work-Experience-') or starts-with(@aria-labelledby,'Work-History-')][contains(@aria-labelledby,'-%NUMBER0%-panel')]",
             ".//*[@data-automation-id='workExperience-%NUMBER0%']"
           ],
           "addButtonPath": [
-            ".//div[@role='group'][@aria-labelledby='Work-Experience-section']//button[@data-automation-id='add-button']"
+            ".//div[@role='group'][starts-with(@aria-labelledby,'Work-Experience-') or starts-with(@aria-labelledby,'Work-History-')][contains(@aria-labelledby,'-section')]//button[@data-automation-id='add-button']"
           ],
           "confirmAddedPath": [
-            ".//div[@role='group'][@aria-labelledby='Work-Experience-%NUMBER0%-panel']",
+            ".//div[@role='group'][starts-with(@aria-labelledby,'Work-Experience-') or starts-with(@aria-labelledby,'Work-History-')][contains(@aria-labelledby,'-%NUMBER0%-panel')]",
             ".//*[@data-automation-id='workExperience-%NUMBER0%']"
           ]
         }
@@ -518,14 +518,14 @@
             ]
           ],
           "containerPath": [
-            ".//div[@role='group'][@aria-labelledby='Education-%NUMBER0%-panel']",
+            ".//div[@role='group'][starts-with(@aria-labelledby,'Education-')][contains(@aria-labelledby,'-%NUMBER0%-panel')]",
             ".//*[@data-automation-id='education-%NUMBER0%']"
           ],
           "addButtonPath": [
-            ".//div[@role='group'][@aria-labelledby='Education-section']//button[@data-automation-id='add-button']"
+            ".//div[@role='group'][starts-with(@aria-labelledby,'Education-')][contains(@aria-labelledby,'-section')]//button[@data-automation-id='add-button']"
           ],
           "confirmAddedPath": [
-            ".//div[@role='group'][@aria-labelledby='Education-%NUMBER0%-panel']",
+            ".//div[@role='group'][starts-with(@aria-labelledby,'Education-')][contains(@aria-labelledby,'-%NUMBER0%-panel')]",
             ".//*[@data-automation-id='education-%NUMBER0%']"
           ]
         }
@@ -588,7 +588,8 @@
                       "path": [
                         "//*[@data-automation-activepopup='true' or @data-automation-id='activeListContainer']//*[@data-automation-id='promptOption'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]",
                         "//*[@data-automation-activepopup='true' or @data-automation-id='activeListContainer']//*[@data-automation-id='promptOption' or @data-automation-id='promptLeafNode' or @role='option'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]",
-                        "//*[@role='listbox'][@id=//button[@aria-haspopup='listbox' and @aria-expanded='true']/@aria-controls]//*[@role='option'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]"
+                        "//*[@role='listbox'][@id=//button[@aria-haspopup='listbox' and @aria-expanded='true']/@aria-controls]//*[@role='option'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]",
+                        "//*[@data-automation-activepopup='true' or @data-automation-id='activeListContainer' or @role='listbox'][not(@role) or @id=//button[@aria-haspopup='listbox' and @aria-expanded='true']/@aria-controls]//*[@data-automation-id='promptOption' or @role='option'][translate(substring-after(normalize-space(.),' - '),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]"
                       ],
                       "method": "click",
                       "time": 4000
@@ -612,7 +613,8 @@
                       "path": [
                         "//*[@data-automation-activepopup='true' or @data-automation-id='activeListContainer']//*[@data-automation-id='promptOption'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]",
                         "//*[@data-automation-activepopup='true' or @data-automation-id='activeListContainer']//*[@data-automation-id='promptOption' or @data-automation-id='promptLeafNode' or @role='option'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]",
-                        "//*[@role='listbox'][@id=//button[@aria-haspopup='listbox' and @aria-expanded='true']/@aria-controls]//*[@role='option'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]"
+                        "//*[@role='listbox'][@id=//button[@aria-haspopup='listbox' and @aria-expanded='true']/@aria-controls]//*[@role='option'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]",
+                        "//*[@data-automation-activepopup='true' or @data-automation-id='activeListContainer' or @role='listbox'][not(@role) or @id=//button[@aria-haspopup='listbox' and @aria-expanded='true']/@aria-controls]//*[@data-automation-id='promptOption' or @role='option'][translate(substring-after(normalize-space(.),' - '),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]"
                       ],
                       "method": "click",
                       "time": 4000
@@ -636,7 +638,8 @@
                       "path": [
                         "//*[@data-automation-activepopup='true' or @data-automation-id='activeListContainer']//*[@data-automation-id='promptOption'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]",
                         "//*[@data-automation-activepopup='true' or @data-automation-id='activeListContainer']//*[@data-automation-id='promptOption' or @data-automation-id='promptLeafNode' or @role='option'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]",
-                        "//*[@role='listbox'][@id=//button[@aria-haspopup='listbox' and @aria-expanded='true']/@aria-controls]//*[@role='option'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]"
+                        "//*[@role='listbox'][@id=//button[@aria-haspopup='listbox' and @aria-expanded='true']/@aria-controls]//*[@role='option'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]",
+                        "//*[@data-automation-activepopup='true' or @data-automation-id='activeListContainer' or @role='listbox'][not(@role) or @id=//button[@aria-haspopup='listbox' and @aria-expanded='true']/@aria-controls]//*[@data-automation-id='promptOption' or @role='option'][translate(substring-after(normalize-space(.),' - '),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]"
                       ],
                       "method": "click",
                       "time": 4000
@@ -660,7 +663,33 @@
                       "path": [
                         "//*[@data-automation-activepopup='true' or @data-automation-id='activeListContainer']//*[@data-automation-id='promptOption'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]",
                         "//*[@data-automation-activepopup='true' or @data-automation-id='activeListContainer']//*[@data-automation-id='promptOption' or @data-automation-id='promptLeafNode' or @role='option'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]",
-                        "//*[@role='listbox'][@id=//button[@aria-haspopup='listbox' and @aria-expanded='true']/@aria-controls]//*[@role='option'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]"
+                        "//*[@role='listbox'][@id=//button[@aria-haspopup='listbox' and @aria-expanded='true']/@aria-controls]//*[@role='option'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]",
+                        "//*[@data-automation-activepopup='true' or @data-automation-id='activeListContainer' or @role='listbox'][not(@role) or @id=//button[@aria-haspopup='listbox' and @aria-expanded='true']/@aria-controls]//*[@data-automation-id='promptOption' or @role='option'][translate(substring-after(normalize-space(.),' - '),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]"
+                      ],
+                      "method": "click",
+                      "time": 4000
+                    }
+                  ]
+                }
+              ]
+            ],
+            [
+              "level_5",
+              [
+                {
+                  "path": [
+                    ".//*[starts-with(@data-automation-id,'formField-')][not(@data-automation-id='formField-language')]//button[@aria-haspopup='listbox']"
+                  ],
+                  "actions": [
+                    {
+                      "method": "click"
+                    },
+                    {
+                      "path": [
+                        "//*[@data-automation-activepopup='true' or @data-automation-id='activeListContainer']//*[@data-automation-id='promptOption'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]",
+                        "//*[@data-automation-activepopup='true' or @data-automation-id='activeListContainer']//*[@data-automation-id='promptOption' or @data-automation-id='promptLeafNode' or @role='option'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]",
+                        "//*[@role='listbox'][@id=//button[@aria-haspopup='listbox' and @aria-expanded='true']/@aria-controls]//*[@role='option'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]",
+                        "//*[@data-automation-activepopup='true' or @data-automation-id='activeListContainer' or @role='listbox'][not(@role) or @id=//button[@aria-haspopup='listbox' and @aria-expanded='true']/@aria-controls]//*[@data-automation-id='promptOption' or @role='option'][translate(substring-after(normalize-space(.),' - '),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]"
                       ],
                       "method": "click",
                       "time": 4000
@@ -741,13 +770,15 @@
           ],
           "containerPath": [
             ".//div[@role='group'][@aria-labelledby='Websites-%NUMBER0%-panel']",
+            ".//div[@role='group'][@aria-labelledby='LinkedIn-%NUMBER0%-panel']",
             ".//*[@data-automation-id='websitePanelSet-%NUMBER0%']"
           ],
           "addButtonPath": [
-            ".//div[@role='group'][@aria-labelledby='Websites-section']//button[@data-automation-id='add-button']"
+            ".//div[@role='group'][@aria-labelledby='Websites-section' or @aria-labelledby='LinkedIn-section']//button[@data-automation-id='add-button']"
           ],
           "confirmAddedPath": [
             ".//div[@role='group'][@aria-labelledby='Websites-%NUMBER0%-panel']",
+            ".//div[@role='group'][@aria-labelledby='LinkedIn-%NUMBER0%-panel']",
             ".//*[@data-automation-id='websitePanelSet-%NUMBER0%']"
           ]
         }

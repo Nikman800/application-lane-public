@@ -17,8 +17,9 @@ import smartrecruiters from "./sites/smartrecruiters.json" with { type: "json" }
 import successfactors from "./sites/successfactors.json" with { type: "json" };
 import talnet from "./sites/talnet.json" with { type: "json" };
 import tesla from "./sites/tesla.json" with { type: "json" };
+import tiktok from "./sites/tiktok.json" with { type: "json" };
 import workable from "./sites/workable.json" with { type: "json" };
 import workday from "./sites/workday.json" with { type: "json" };
 
-export const configs = [adp, amazon, ashby, avature, greenhouse, icims, jazzhr, lever, microsoft, oracle, paylocity, rippling, smartrecruiters, successfactors, talnet, tesla, workable, workday] as unknown as SiteConfig[];
+export const configs = [adp, amazon, ashby, avature, greenhouse, icims, jazzhr, lever, microsoft, oracle, paylocity, rippling, smartrecruiters, successfactors, talnet, tesla, tiktok, workable, workday] as unknown as SiteConfig[];
 export const globals = globalsData as GlobalConfig;

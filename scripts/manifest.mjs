@@ -31,6 +31,8 @@ export function extensionManifest({ target, version, icons }) {
       "sidePanel",
       "alarms",
       "webNavigation",
+      // The report dialog's "Paste image" button reads a copied screenshot.
+      "clipboardRead",
       // Real keystrokes for widgets that keep their own state and ignore
       // synthetic events (Workday's date sections). Chrome does not allow
       // "debugger" as an optional permission, so it is declared here. A
@@ -44,6 +46,13 @@ export function extensionManifest({ target, version, icons }) {
     optional_host_permissions: ["https://*/*", "http://*/*"],
     background: { service_worker: "background.js" },
     side_panel: { default_path: "panel.html" },
+    // Fill this step from the keyboard, on the page. Changed
+    // at chrome://extensions/shortcuts.
+    commands: {
+      // Opens the side panel: the toolbar button does, by the panel behaviour.
+      _execute_action: { suggested_key: { default: "Alt+Shift+L" }, description: "Open the Application Lane panel" },
+      "fill-step": { suggested_key: { default: "Alt+Shift+F" }, description: "Fill this step" },
+    },
     icons,
     action: { default_title: "Open Application Lane", default_icon: icons },
     content_security_policy: {

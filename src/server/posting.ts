@@ -12,7 +12,7 @@ export type Posting = {
   location?: string;
   description: string;
   // "Posting page": a page the applicant linked; "Pasted": text they pasted.
-  source: "Greenhouse" | "Lever" | "Ashby" | "Workday" | "Oracle" | "Workable" | "SmartRecruiters" | "Posting page" | "Pasted";
+  source: "Greenhouse" | "Lever" | "Ashby" | "Workday" | "Oracle" | "Workable" | "SmartRecruiters" | "iCIMS" | "Posting page" | "Pasted";
 };
 
 type Fetch = (url: string, init?: RequestInit) => Promise<Response>;
@@ -306,6 +306,26 @@ export async function fetchPosting(
       }
     }
   }
+  // An ATS with no posting API whose posting is a page of its own.
+  for (const url of urls) {
+    const page = atsPostingPage(url);
+    if (!page) continue;
+    const posting = await fetchPostingPage(page, options).catch(() => undefined);
+    if (posting && posting.description.length >= 100) return { ...posting, source: "iCIMS" };
+    if (options.signal?.aborted) return;
+  }
+}
+
+// iCIMS: any page of an application (…/jobs/<id>/<slug>/form?…step=6, its
+// login, its questions) is under the job's id, and the posting is
+// /jobs/<id>/job, whose framed copy (in_iframe=1) carries it as schema.org
+// JobPosting data (General Dynamics Mission Systems: the
+// posting could not be read from the form's later steps).
+export function atsPostingPage(raw: string): string | undefined {
+  const url = publicPostingURL(raw);
+  if (!url || !/^[\w-]+\.icims\.com$/i.test(url.hostname)) return;
+  const id = url.pathname.match(/^\/jobs\/(\d+)(?:\/|$)/)?.[1];
+  return id ? `https://${url.hostname.toLowerCase()}/jobs/${id}/job?in_iframe=1` : undefined;
 }
 
 // A posting page the applicant linked that no ATS endpoint above covers (a

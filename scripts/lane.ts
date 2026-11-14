@@ -9,13 +9,16 @@
 //   npm run lane -- fill <application>  Fill this step on its tab
 //   npm run lane -- switch <application> bring its tab to the front
 //   npm run lane -- abandon <application> stop applying, as the panel's Abandon
+//   npm run lane -- submitted <application> mark it submitted, as the panel's Mark submitted
 //   npm run lane -- search [options]    find openings to apply for
 //   npm run lane -- ui                  a full-screen view to do all of this
 //   npm run lane -- pair                a new pairing code for another browser
 // An application is named by the short id status shows, or by part of its
 // company or title.
 import { readFile } from "node:fs/promises";
-import { existsSync } from "node:fs";
+import { existsSync, statSync } from "node:fs";
+import { spawn } from "node:child_process";
+import { fileURLToPath } from "node:url";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import WebSocket from "ws";
@@ -25,6 +28,9 @@ import { themes } from "../src/shared/theme";
 import { computeProgress, DEFAULT_DAILY_GOAL } from "../src/shared/progress";
 import { colorDepth, createPalette, openingLine, styled, tabStrip, terminalTheme, visible } from "./lane-view";
 import { liveLine } from "./lane-live";
+import { repairCommands, type RepairContext } from "./lane-repairs";
+import { section, type Repair } from "../src/shared/repairs";
+import { packageRoot } from "../src/server/paths";
 
 const base = process.env.LANE_URL || "http://127.0.0.1:4318";
 const [command = "help", ...args] = process.argv.slice(2);
@@ -70,23 +76,31 @@ const questions = (app: QueueSummaryItem, most = 10) =>
   );
 // A fill that failed: the application failed, or its last fill ended in error.
 const failed = (app: QueueSummaryItem) => app.status === "failed" || app.lastFill?.status === "error";
-// Applications the fixer is correcting: shown apart, so they are left alone
-// until it is done (lane fixing / lane fixed).
-let fixing: Record<string, { since: number; note: string }> = {};
+// Applications the fixer has a repair open on (src/shared/repairs.ts): shown
+// apart, as needing fixing or being fixed, so they are left alone until the
+// repair is seen working live (lane repair / fixing / check).
+let repairs: Record<string, Repair> = {};
 const group = (app: QueueSummaryItem) =>
   app.stage === "submitted" ? "submitted"
     : app.status === "cancelled" || app.stage === "abandoned" ? "closed"
-    : fixing[app.id] ? "being fixed"
-    : failed(app) ? "failed"
+    : section(repairs[app.id]) || (failed(app) ? "failed"
     : ["queued", "inspecting", "preparing", "filling"].includes(app.status) || app.assisting ? "in progress"
     : app.status === "ready" ? "ready to review"
-    : "needs you";
+    : "needs you");
+// What a repair says about it, for the lists: what is being done, or what is
+// waiting to be fixed.
+const repairLine = (app: QueueSummaryItem) => {
+  const repair = repairs[app.id];
+  if (!repair) return "";
+  const open = repair.defects.filter((defect) => defect.status === "open");
+  return repair.nextAction || open.map((defect) => defect.field || defect.detail).slice(0, 3).join("; ").slice(0, 160);
+};
 
-const readFixing = async () => {
-  fixing = await api<typeof fixing>("/v1/fixing").catch(() => fixing);
+const readRepairs = async () => {
+  repairs = await api<typeof repairs>("/v1/repairs").catch(() => repairs);
 };
 async function snapshot(): Promise<QueueSnapshot> {
-  await readFixing();
+  await readRepairs();
   const queue = await api<QueueSnapshot | null>("/v1/queue");
   if (!queue) throw new Error("The extension has not sent its queue yet. Open Chrome with the extension paired.");
   return queue;
@@ -112,14 +126,14 @@ async function status() {
   const counts = new Map<string, number>();
   for (const app of queue.applications) counts.set(group(app), (counts.get(group(app)) || 0) + 1);
   console.log(colors.bold(`As of ${ago(queue.at)}: ${queue.applications.length} applications.`));
-  for (const key of ["being fixed", "in progress", "needs you", "ready to review", "failed", "submitted", "closed"])
+  for (const key of ["needs fixing", "being fixed", "in progress", "needs you", "ready to review", "failed", "submitted", "closed"])
     if (counts.get(key)) console.log(`  ${colors.group(key)(key.padEnd(16))} ${colors.bold(String(counts.get(key)))}`);
   if (inbox.length) console.log(`  ${colors.info("queued links".padEnd(16))} ${inbox.length} not tracked yet`);
-  const beingFixed = queue.applications.filter((app) => group(app) === "being fixed");
-  if (beingFixed.length) {
-    console.log(`\n${colors.group("being fixed")(colors.bold("Being fixed (leave these alone for now):"))}`);
-    for (const app of beingFixed)
-      console.log(`  ${colors.muted(`[${short(app)}]`)} ${colors.bold(name(app))}${fixing[app.id].note ? `\n    ${fixing[app.id].note}` : ""}`);
+  for (const key of ["being fixed", "needs fixing"] as const) {
+    const listed = queue.applications.filter((app) => group(app) === key);
+    if (!listed.length) continue;
+    console.log(`\n${colors.group(key)(colors.bold(key === "being fixed" ? "Being fixed (leave these alone for now):" : "Needs fixing (queued for the fixer; leave these alone):"))}`);
+    for (const app of listed) console.log(`  ${colors.muted(`[${short(app)}]`)} ${colors.bold(name(app))}${repairLine(app) ? `\n    ${repairLine(app)}` : ""}`);
   }
   const waiting = queue.applications.filter((app) => group(app) === "needs you").sort((a, b) => b.updatedAt - a.updatedAt);
   if (waiting.length) {
@@ -177,21 +191,6 @@ function find(queue: QueueSnapshot, wanted: string): QueueSummaryItem {
   if (!matches.length) throw new Error(`No application matches "${wanted}".`);
   throw new Error(`"${wanted}" matches ${matches.length}: ${matches.slice(0, 5).map((app) => `[${short(app)}] ${name(app)}`).join(", ")}`);
 }
-// lane fixing <application> [note]: mark it as being corrected by the
-// fixer; lane fixed <application>: done, back with the rest.
-async function markFixing(done: boolean) {
-  const [target, ...note] = words;
-  if (!target) {
-    await readFixing();
-    const queue = await snapshot();
-    const list = queue.applications.filter((app) => fixing[app.id]);
-    return console.log(list.length ? list.map((app) => `[${short(app)}] ${name(app)}${fixing[app.id].note ? ` — ${fixing[app.id].note}` : ""}`).join("\n") : "Nothing is being fixed.");
-  }
-  const app = find(await snapshot(), target);
-  await api("/v1/fixing", "POST", done ? { id: app.id, done: true } : { id: app.id, note: note.join(" ") });
-  console.log(`${name(app)}: ${done ? "no longer marked as being fixed." : "marked as being fixed."}`);
-}
-
 // lane reload: the extension takes its newest build (refused while anything
 // fills); lane refresh <application>: its page then loads that build.
 async function reload() {
@@ -202,7 +201,23 @@ async function reload() {
   console.log(result.detail || "Reloading.");
 }
 
-async function act(action: "fill" | "switch" | "abandon" | "refresh") {
+// lane own <application> "<field label>" "<value>"…: values this extension
+// wrote on its pages before it kept a record of its writes; a later fill
+// corrects them (src/extension/background.ts, "own").
+async function own() {
+  const [target, ...pairs] = words;
+  if (!target || !pairs.length || pairs.length % 2) throw new Error('Give the application, then pairs of field label and value: lane own <app> "Start Date" "11/2026"');
+  const app = find(await snapshot(), target);
+  const entries = [];
+  for (let at = 0; at < pairs.length; at += 2) entries.push({ label: pairs[at], value: pairs[at + 1] });
+  const line = await connect();
+  const result = await line.send("own", app.id, JSON.stringify(entries));
+  line.socket.close();
+  if (!result.ok) throw new Error(result.error || "It did not work.");
+  console.log(`${name(app)}: ${result.detail || "done."}`);
+}
+
+async function act(action: "fill" | "switch" | "abandon" | "refresh" | "submitted" | "unlock") {
   const app = find(await snapshot(), words.join(" "));
   const line = await connect();
   const result = await line.send(action, app.id);
@@ -257,7 +272,7 @@ async function search() {
 // openings from.
 async function ui() {
   if (!process.stdin.isTTY) throw new Error("ui needs a terminal.");
-  const tabs = ["needs you", "being fixed", "in progress", "failed", "ready to review", "submitted", "all", "find jobs"] as const;
+  const tabs = ["needs you", "needs fixing", "being fixed", "in progress", "failed", "ready to review", "submitted", "all", "find jobs"] as const;
   let queue = await snapshot();
   let found = await api<SearchResult | null>("/v1/search").catch(() => null);
   // The submissions history, for the streak and today's goal in the header.
@@ -278,7 +293,7 @@ async function ui() {
     if (!needed && spinner) (clearInterval(spinner), (spinner = undefined));
   };
   // What the fixer marks shows without waiting for the queue to change.
-  setInterval(() => void readFixing().then(draw), 10_000).unref();
+  setInterval(() => void readRepairs().then(draw), 10_000).unref();
   let tab = 0;
   let row = 0;
   let message = "";
@@ -286,10 +301,13 @@ async function ui() {
   let typing: string | undefined;
   // An application waiting on y to be abandoned.
   let abandoning: QueueSummaryItem | undefined;
+  // Marking one submitted asks first too, as the panel's button does not
+  // undo itself (the TUI's m).
+  let submitting: QueueSummaryItem | undefined;
   const line = await connect(
     (next) => {
       queue = next;
-      void readFixing().then(draw);
+      void readRepairs().then(draw);
       if (submittedNow() !== submittedSeen) (submittedSeen = submittedNow()), readSubmissions();
       animate();
       draw();
@@ -416,7 +434,7 @@ async function ui() {
         ? "paste or type links, Enter to queue, Esc to cancel"
         : searching()
           ? "←/→ tabs · ↑/↓ select · a queue this opening · / search again · q quit"
-          : "←/→ tabs · ↑/↓ select · f fill this step · s switch to its tab · x abandon · a add links · r refresh · q quit",
+          : "←/→ tabs · ↑/↓ select · f fill this step · s switch to its tab · m mark submitted · x abandon · a add links · r refresh · q quit",
       width,
       "\x1b[2m",
     ));
@@ -435,6 +453,24 @@ async function ui() {
     const result = await api<{ added: number; waiting: number; now?: boolean }>("/v1/inbox", "POST", { urls });
     return `Queued ${result.added} link${result.added === 1 ? "" : "s"}. ${result.now ? "The extension is tracking it now." : "The extension tracks them within a minute."}`;
   };
+  // Its own code changing (the fixer's new section, a new key) restarts the
+  // view in place, so a view left open never shows the old groups: a view
+  // started before "needs fixing" existed showed applications under repair
+  // as needing the applicant. Not while a link is being typed.
+  const sources = ["lane.ts", "lane-view.ts", "lane-repairs.ts", "lane-live.ts"].map((name) => fileURLToPath(new URL(name, import.meta.url)))
+    .concat(fileURLToPath(new URL("../src/shared/repairs.ts", import.meta.url)));
+  const stamp = () => sources.map((file) => { try { return statSync(file).mtimeMs; } catch { return 0; } }).join(",");
+  const started = stamp();
+  setInterval(() => {
+    if (typing !== undefined || stamp() === started) return;
+    if (spinner) clearInterval(spinner);
+    process.stdin.removeAllListeners("data");
+    process.stdin.setRawMode(false);
+    process.stdin.pause();
+    out.write("\x1b[?25h\x1b[2J\x1b[H");
+    const next = spawn(process.execPath, [...process.execArgv, ...process.argv.slice(1)], { stdio: "inherit", env: process.env });
+    next.on("exit", (code) => process.exit(code ?? 0));
+  }, 3000).unref();
   out.write("\x1b[?25l");
   process.stdin.setRawMode(true);
   process.stdin.resume();
@@ -466,6 +502,20 @@ async function ui() {
       } else message = "Not abandoned.";
       return draw();
     }
+    if (submitting) {
+      const app = submitting;
+      submitting = undefined;
+      if (k === "\u0003") return quit();
+      if (k === "y" || k === "Y") {
+        message = `Marking ${name(app)} submitted…`;
+        draw();
+        const result = await line.send("submitted", app.id);
+        message = result.ok ? `${name(app)}: ${result.detail || "marked submitted."}` : `${name(app)}: ${result.error}`;
+        queue = await snapshot().catch(() => queue);
+        readSubmissions();
+      } else message = "Not marked submitted.";
+      return draw();
+    }
     const list = rows();
     if (k === "q" || k === "\u0003") return quit();
     if (k === "\x1b[C" || k === "\t") (tab = (tab + 1) % tabs.length), (row = 0);
@@ -488,7 +538,10 @@ async function ui() {
       message = await queueLinks([listing.url]).catch((error) => error.message);
       if (found) found = { ...found, listings: found.listings.map((item) => (item.id === listing.id ? { ...item, tracked: true } : item)) };
     } else if (k === "a") typing = "";
-    else if (k === "x" && !searching() && list[row]) {
+    else if (k === "m" && !searching() && list[row]) {
+      submitting = list[row] as QueueSummaryItem;
+      message = `Mark ${name(submitting)} submitted? Use this once you have sent it on the site. y to mark it, any other key to keep it as it is.`;
+    } else if (k === "x" && !searching() && list[row]) {
       abandoning = list[row] as QueueSummaryItem;
       message = `Abandon ${name(abandoning)}? Any fill stops; what is on the page stays. y to abandon, any other key to keep it.`;
     } else if ((k === "f" || k === "s") && !searching() && list[row]) {
@@ -516,6 +569,26 @@ async function pair() {
   console.log("Type it on the extension's dashboard: Connect to Application Lane on this computer.");
 }
 
+const repairContext = (): RepairContext => ({
+  words,
+  json,
+  dataDirectory,
+  api,
+  snapshot,
+  find,
+  name,
+  short,
+  send: async (action, applicationId) => {
+    const line = await connect();
+    try {
+      return await line.send(action, applicationId);
+    } finally {
+      line.socket.close();
+    }
+  },
+  distBuild: () => readFile(join(packageRoot, "dist", "extension", "build.json"), "utf8").then((text) => JSON.parse(text), () => undefined),
+});
+
 const commands: Record<string, () => Promise<unknown>> = {
   add,
   pair,
@@ -525,10 +598,19 @@ const commands: Record<string, () => Promise<unknown>> = {
   fill: () => act("fill"),
   switch: () => act("switch"),
   abandon: () => act("abandon"),
+  submitted: () => act("submitted"),
+  unlock: () => act("unlock"),
+  own,
   refresh: () => act("refresh"),
   reload,
-  fixing: () => markFixing(false),
-  fixed: () => markFixing(true),
+  repair: () => repairCommands(repairContext()).open(),
+  fixing: () => repairCommands(repairContext()).own(),
+  retry: () => repairCommands(repairContext()).retry(),
+  check: () => repairCommands(repairContext()).check(),
+  fixed: () => repairCommands(repairContext()).fixed(),
+  release: () => repairCommands(repairContext()).release(),
+  repairs: () => repairCommands(repairContext()).list(),
+  published: () => repairCommands(repairContext()).publish(),
   search,
   ui,
 };
@@ -544,8 +626,14 @@ if (!run) {
   abandon <application> stop applying: any fill stops, and it moves to Abandoned
   reload              the extension takes its newest build (not while anything is being filled)
   refresh <application> reload its page, as after a reload (not while it is being filled)
-  fixing [<application> [note]]  mark it as being fixed (shown apart; leave it alone); alone, list them
-  fixed <application> it is done being fixed
+  repair <application> --report <id> | --capture <id> | --defect "<what>"
+                      open a repair from what shows the problem (needs fixing)
+  fixing [<application> [next action]]  the fixer owns it (being fixed); alone, list open repairs
+  retry <application> --reason repair|profile|page  refill it on the newest build, with a reason
+  check <application> [--confirm <n>]  check the settled page; releases it once every defect is gone
+  fixed <application> the same check
+  release <application> "<why>"  back to the applicant with defects open, saying why
+  repairs [--all] [--json]  repair records; published <commit> marks a pushed batch
   search [options]    find openings to apply for (see below); search add 1 2 queues them
   ui                  a full-screen view: tabs by stage, f fill, s switch, x abandon, a add links, a find-jobs tab
   pair                show a new pairing code to connect another browser or extension

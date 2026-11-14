@@ -18,6 +18,7 @@
     "test:browser": "playwright test --grep-invert \"throughput benchmark\"",
     "benchmark": "playwright test --grep \"throughput benchmark\"",
     "verify": "npm run check && npm test && npm run build && npm run test:browser",
+    "validate": "node --import tsx scripts/validate.ts",
     "tailoring:import": "node --import tsx scripts/tailoring-import.ts",
     "lane": "node --import tsx scripts/lane.ts",
     "package": "node scripts/package.mjs"

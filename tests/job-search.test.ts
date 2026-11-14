@@ -4,7 +4,7 @@ import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { profileSchema } from "../src/shared/model";
-import { boardFor, isTracked, openingKey, profileTargets, searchJobs, searchSettingsSchema } from "../src/server/job-search";
+import { boardFor, isTracked, knownOpenings, openingKey, profileTargets, searchJobs, searchSettingsSchema } from "../src/server/job-search";
 import { sameOpening, workdayOpening } from "../src/shared/matching";
 
 const day = 86_400_000;
@@ -130,4 +130,28 @@ test("a listing is tracked by its application's job id or its company and title,
   // Another company with the same title, or another title at the company.
   assert.equal(isTracked(listing("Epsilon", "Platform Engineer", "https://jobs.epsilon.test/1"), known), false);
   assert.equal(isTracked(listing("Acme", "Data Engineer", "https://careers.acme.test/jobs/1"), known), false);
+});
+
+// Openings applied to were offered again by a later search: an
+// application saved under its site's name ("sec" for one employer's Workday, an
+// Ashby board's UUID), its requisition after an underscore, and a title
+// carrying its requisition number.
+test("a listing is tracked by its job's id whatever the company was saved as", () => {
+  const known = [
+    { url: "https://zeta.wd3.myworkdayjobs.com/en-US/Zeta_Careers/job/Plano-TX/Data-Analyst-Intern_R121996/apply/applyManually", company: "zeta-careers", title: "Data Analyst Intern" },
+    { url: "https://jobs.ashbyhq.com/eta/955d48ad-9380-4621-91f4-51f3f093ac10/application?embed=true", company: "F7d8749a 72d6 407c Bf98 292ea630c73a", title: "Engineer I, Software" },
+    { url: "https://career5.successfactors.example/portalcareer?_s.crb=x", company: "theta", title: "Data Analyst Intern (73956)" },
+  ];
+  const listing = (company: string, title: string, url: string) => ({ company, title, url, locations: [] });
+  assert.equal(isTracked(listing("Zeta", "ePro Data Analyst Intern", "https://zeta.wd3.myworkdayjobs.com/Zeta_Careers/job/Plano-TX/Data-Analyst-Intern_R121996"), known), true);
+  assert.equal(isTracked(listing("Eta", "Software Engineer 1 New Grad", "https://jobs.ashbyhq.com/f7d8749a-72d6-407c-bf98-292ea630c73a/955d48ad-9380-4621-91f4-51f3f093ac10"), known), true);
+  assert.equal(isTracked(listing("Theta", "Data Analyst Intern", "https://jobs.theta.example/job/Data-Analyst-Intern/1455610233/"), known), true);
+  // An application whose tab ended on its confirmation page is still known
+  // by the listing it began at.
+  const sent = knownOpenings([{ url: "https://iota.example/confirmation?LeverAppId=2358ba43", sourceUrl: "https://jobs.lever.co/iota/85c6aec7-8da2-445d-9c4d-812365dbce97/apply", company: "Iota", title: "Data Science Intern [Summer 2027]" }]);
+  assert.equal(isTracked(listing("Iota", "Data Scientist Intern", "https://jobs.lever.co/iota/85c6aec7-8da2-445d-9c4d-812365dbce97/apply"), sent), true);
+  // Another requisition on the same site, and another job on the same Ashby
+  // board (the board's UUID is not the job's), are not these.
+  assert.equal(isTracked(listing("Zeta", "AI Data Analyst Intern", "https://zeta.wd3.myworkdayjobs.com/Zeta_Careers/job/Plano-TX/AI-Data-Analyst-Intern_R121971-1"), known), false);
+  assert.equal(isTracked(listing("Eta", "Hardware Engineer", "https://jobs.ashbyhq.com/f7d8749a-72d6-407c-bf98-292ea630c73a/11111111-2222-4333-8444-555555555555"), known), false);
 });

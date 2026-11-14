@@ -100,10 +100,69 @@ export function applyMainWorld(
     "keyType",
     "reactSelectOptions",
     "reactSelectChoose",
+    "sfPicklistOptions",
     "ui5",
   ]);
   if (!supported.has(request.method))
     return fail("Unsupported MAIN-world method.");
+  if (request.method === "sfPicklistOptions") {
+    // A SuccessFactors pick list loads its options only once opened, and
+    // opening one during a fill got in the way of the fill, so
+    // a question answered by its options ("Are you authorized to work in
+    // the country where position is based?", PACCAR's SuccessFactors) was left empty. The list's own model (juic's component
+    // for "<id>:_input") names its picklist and holds the controller the
+    // page asks for each page of options; it is asked the same way, and
+    // nothing on the page is opened or changed.
+    const registry = (window as any).juic?.Component?._registry;
+    const ids = [
+      element.id.endsWith("_input") ? element.id.slice(0, -"_input".length) : "",
+      element.closest('[id$="_selectContainer"]')?.id.slice(0, -"_selectContainer".length) || "",
+    ].filter(Boolean);
+    const model = ids.map((id) => registry?.[id]?._model).find(
+      (candidate) => candidate && typeof candidate._controller?.getPicklistByPageWithExcludeOption === "function",
+    );
+    const picklistId = model?._picklistId;
+    if (!model || !picklistId || (typeof picklistId !== "string" && typeof picklistId !== "number"))
+      return fail("not-sf-picklist");
+    // A list under another (State under Country) has none until its parent
+    // is chosen.
+    if (model._parentPicklistId && !model._parentOptionId)
+      return fail("The list waits on another list's answer.");
+    const page = (index: number, total?: number) =>
+      new Promise<any>((resolve) => {
+        const timer = setTimeout(() => resolve(undefined), 5000);
+        const done = (result: unknown) => { clearTimeout(timer); resolve(result); };
+        try {
+          model._controller.getPicklistByPageWithExcludeOption(
+            model._parentOptionId ?? null, picklistId,
+            { pageNumber: index + 1, pageIndex: index, pageSize: 100, startIndex: index * 100,
+              endIndex: index * 100 + 99, filterType: null, filterValue: null,
+              ...(typeof total === "number" ? { totalCount: total } : {}) },
+            null, false, null, true,
+            // DWR's call options: its own error handler would show an alert.
+            { callback: done, errorHandler: () => done(undefined), warningHandler: () => done(undefined), timeout: 5000 },
+          );
+        } catch {
+          done(undefined);
+        }
+      });
+    return (async () => {
+      const labels: string[] = [];
+      let total: number | undefined;
+      for (let index = 0; index < 3; index++) {
+        const result = await page(index, total);
+        const options = result?.picklistOptions;
+        if (!Array.isArray(options)) break;
+        if (typeof result.totalCount === "number") total = result.totalCount;
+        for (const option of options)
+          if (option && !option.disabled && typeof option.label === "string" && option.label.trim())
+            labels.push(option.label.replace(/\s+/g, " ").trim());
+        if (options.length < 100 || (total !== undefined && (index + 1) * 100 >= total)) break;
+      }
+      if (!labels.length) return fail("The list's options did not load.");
+      return { ok: true, value: JSON.stringify([...new Set(labels)].slice(0, 300)) };
+    })();
+  }
   if (
     request.method === "reactSelectOptions" ||
     request.method === "reactSelectChoose"
@@ -551,6 +610,14 @@ export function applyMainWorld(
         host.dispatchEvent(
           new CustomEvent(type, { bubbles: true, composed: true, detail: { value, valid: true } }),
         );
+      // The box it shows may hold another value written into it directly: a
+      // component given the value it already had does not draw it again, and
+      // PACCAR's job rows kept showing today's date over their start dates
+      //. It shows the component's value.
+      if (element instanceof HTMLInputElement && element.value !== value) {
+        Object.getOwnPropertyDescriptor(Object.getPrototypeOf(element), "value")?.set?.call(element, value);
+        element.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+      }
       return host.value === value
         ? { ok: true, value }
         : fail("The UI5 component did not keep the value.");

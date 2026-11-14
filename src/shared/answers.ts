@@ -113,7 +113,7 @@ function seasonOption(value: string, optionText: string): number | undefined {
 }
 
 export function rankOption(
-  proposal: { value: string; choices?: string[]; decline?: boolean; numeric?: number },
+  proposal: { value: string; choices?: string[]; decline?: boolean; numeric?: number; scale?: number },
   optionText: string,
 ): number | undefined {
   const text = norm(optionText);
@@ -124,6 +124,17 @@ export function rankOption(
   if (text === norm(proposal.value)) return 0.5;
   const choice = (proposal.choices || []).findIndex((c) => norm(c) === text);
   if (choice >= 0) return 1 + choice;
+  // A street search's listing is the whole address ("323 EAST VETERANS WAY,
+  // TEMPE, ARIZONA"), with directions and suffixes spelled out (Oracle's
+  // Address Line 1). The saved street with its city (and state,
+  // ZIP) says which; the street alone is the listing when only one fits.
+  if (/^\d/.test(optionText.trim()) && optionText.includes(",")) {
+    const listed = streetKey(optionText);
+    const choiceAt = (proposal.choices || []).findIndex((c) => streetKey(c) === listed);
+    if (choiceAt >= 0) return 20 + choiceAt / 100;
+    const street = optionText.split(",")[0];
+    if (/^\d/.test(proposal.value.trim()) && streetKey(street) === streetKey(proposal.value)) return 48;
+  }
   // A list that prefixes or suffixes its own short code: "CS - Computer
   // Science", "Computer Science (CS)", "Master of Science (M.S)" (one employer's
   // Workday). The rest must be the whole answer.
@@ -132,7 +143,9 @@ export function rankOption(
   const coded =
     optionText.match(/^\s*[A-Z][A-Z&/]{1,7}\s*[-–—:]\s+(.+)$/)?.[1] ??
     optionText.match(/^(.+?)\s*\([A-Z][A-Z&/.]{1,7}\)\s*$/)?.[1] ??
-    optionText.match(/^(.+?)\s*\(?\+\d{1,4}\)?\s*$/)?.[1];
+    optionText.match(/^(.+?)\s*\(?\+\d{1,4}\)?\s*$/)?.[1] ??
+    // Or one that puts the dial code first: "+1 (United States)" (Oracle's).
+    optionText.match(/^\s*\+\d{1,4}\s*\((.+)\)\s*$/)?.[1];
   if (coded && norm(coded) === norm(proposal.value)) return 40;
   // Or one of the answer's other names: "United States +1" for the
   // profile's "United States of America".
@@ -160,7 +173,12 @@ export function rankOption(
   const levelOnly = (
     norm(optionText).match(/\b(associate|bachelor|master|doctor(?:ate)?)(?: s|s)? level degree$/)?.[1] ||
     norm(optionText).match(/^(associate|bachelor|master|doctor(?:ate)?)(?: s|s)?( degree)?$/)?.[1] ||
-    (/^(ph ?d|doctorate)$/.test(norm(optionText)) ? "doctor" : undefined)
+    (/^(ph ?d|doctorate)$/.test(norm(optionText)) ? "doctor" : undefined) ||
+    // Or by its level with examples after it: Oracle's "Graduate Master's
+    // Degrees (e.g., Master of Arts, …)" and "Undergraduate Bachelor's
+    // Degrees (e.g., …)" (hdde's education form).
+    norm(optionText.replace(/\s*\(\s*e\.?\s*g\.?[^()]*\)\s*$/i, ""))
+      .match(/^(?:graduate|undergraduate) (associate|bachelor|master|doctor)(?:al)?(?: s|s)? degrees?$/)?.[1]
   )?.replace(/ate$/, "");
   if (levelOnly) {
     const level = (wording: string) =>
@@ -194,7 +212,23 @@ export function rankOption(
   // than Summer 2027" by the same reckoning.
   const seasonal = seasonOption(proposal.value, optionText);
   if (seasonal !== undefined) return seasonal;
-  if (proposal.numeric !== undefined) {
+  // A salary as a list's range (Oracle's Desired Salary Range):
+  // "$90,000 - $110,000", "$100K to $120K", "$150,000+", "Under $80,000".
+  const written = proposal.value.trim().match(/^\$\s*(\d[\d,]*(?:\.\d+)?)\s*(k)?$/i);
+  const money = written ? Number(written[1].replace(/,/g, "")) * (written[2] ? 1000 : 1) : proposal.numeric !== undefined && optionText.includes("$") ? proposal.numeric : undefined;
+  if (money !== undefined) {
+    const amount = money;
+    const sums = [...optionText.matchAll(/\$\s*(\d[\d,]*(?:\.\d+)?)\s*(k)?/gi)].map((found) => Number(found[1].replace(/,/g, "")) * (found[2] ? 1000 : 1));
+    const ranged = sums.length === 2 && /\$[^$]*?\s*(?:-|–|—|to)\s*\$/i.test(optionText);
+    if (ranged && amount >= sums[0] && amount < sums[1]) return 60;
+    if (ranged && amount === sums[1]) return 60.5;
+    if (sums.length === 1 && /^\s*\$[^$]*(?:\+|or (?:more|above|higher|over))\s*$/i.test(optionText) && amount >= sums[0]) return 61;
+    if (sums.length === 1 && /^\s*(?:below|under|less than|up to)\s*\$/i.test(optionText) && amount < sums[0]) return 61;
+  }
+  // A band with figures past the scale the number is on is another scale's:
+  // "Below 50" and "70 - 79" are never a 3.84 on four points.
+  const pastScale = proposal.scale !== undefined && (optionText.replace(/\s*\(\s*out of \d+(?:\.0+)?\s*\)\s*$/i, "").match(/\d+(?:\.\d+)?/g) || []).some((figure) => Number(figure) > proposal.scale! + 1e-9);
+  if (proposal.numeric !== undefined && !pastScale) {
     const n = proposal.numeric;
     // A note of the scale after it, "3.6 or above (out of 4.0)": a GPA is
     // answered on 4 (matching.ts), so only that scale's note is set aside.
@@ -215,6 +249,14 @@ export function rankOption(
     // "2.4 or below" (one employer's GPA list).
     const atMost = optionText.match(new RegExp(`^\\s*(\\d+(?:\\.\\d+)?)\\s*or (?:below|less|lower|under|fewer)${unit}\\s*$`, "i"));
     if (atMost && n <= Number(atMost[1])) return 61;
+    // A list of single values in tenths ("4.0", "3.9", … "3.0 or under",
+    // one employer's Lever GPA list): 3.84 is "3.8", the value
+    // it does not fall short of; never rounded up to one it hasn't reached.
+    const step = optionText.match(/^\s*(\d+)\.(\d+)\s*$/);
+    if (step && n !== Number(optionText)) {
+      const at = Number(optionText);
+      if (n > at && n < at + 10 ** -step[2].length - 1e-9) return 62;
+    }
   }
   return;
 }
@@ -246,7 +288,7 @@ export function pickOption<T>(
       !tied.every((option) => norm(text(option)) === norm(text(tied[0]))) ||
       new Set(written).size !== written.length
     )
-      throw new Error("Dropdown has duplicate matching options; choose manually.");
+      throw new Error(`Dropdown has duplicate matching options (${tied.slice(0, 4).map((option) => text(option).trim().slice(0, 40)).join(" | ")}); choose manually.`);
     const wordings = [proposal.value, ...(proposal.choices || [])].map((wording) => wording.trim().toLowerCase());
     return tied.find((option) => wordings.includes(text(option).trim().toLowerCase())) || tied[0];
   }
@@ -258,6 +300,18 @@ function degreeSubjects(text: string): { level: string; subjects: string[] } | u
   const match = norm(text.replace(/\([^()]*\)\s*$/, "")).match(/^(?:[a-z]{1,4} )*?(associate|bachelor|master|doctor)(?: s|s)? (?:degree )?(?:of|in) (.+)$/);
   if (!match) return;
   return { level: match[1], subjects: match[2].split(/ or | and /).map((subject) => subject.trim()).filter(Boolean) };
+}
+
+// A street address with its directions and suffixes spelled out, to be
+// compared as written differently: "323 E. Veterans Way" and "323 EAST
+// VETERANS WAY" are one street.
+const streetWords: Record<string, string> = {
+  n: "north", s: "south", e: "east", w: "west", ne: "northeast", nw: "northwest", se: "southeast", sw: "southwest",
+  st: "street", ave: "avenue", av: "avenue", blvd: "boulevard", dr: "drive", rd: "road", ln: "lane", ct: "court",
+  pl: "place", cir: "circle", pkwy: "parkway", hwy: "highway", ter: "terrace", trl: "trail", sq: "square",
+};
+function streetKey(text: string): string {
+  return norm(text).split(" ").map((word) => streetWords[word] || word).join(" ");
 }
 
 // As model.ts normalizes (not imported: model.ts reads this file).

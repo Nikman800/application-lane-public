@@ -14,6 +14,7 @@ import {
   type ValueContext,
 } from "../values";
 import { normalize, type Profile } from "../../shared/model";
+import { pickOption } from "../../shared/answers";
 import { skillNames } from "../../shared/skill-names";
 import { pickMonth } from "../page/month-picker";
 import { listedNames, type OptionsSource, type SiteOptions } from "./options-source";
@@ -285,7 +286,8 @@ async function defaultExecute(request: MethodRequest): Promise<boolean> {
   if (action?.event) dispatchConfiguredEvent(element, action);
   if (method === "event") return true;
   if (method === "click" || method === "reactClick") {
-    if (isForbiddenClick(element, request.forbidden || new Set()))
+    // An entry's save the row's own pass already verified (see entrySave).
+    if (!request.entrySave && isForbiddenClick(element, request.forbidden || new Set()))
       throw new Error(
         "Refused to activate a submit or certification control.",
       );
@@ -622,7 +624,7 @@ function fallbackLabel(key: string): RegExp | undefined {
     address: /^(street |mailing |home )?address( (line )?1)?$/i,
     city: /^(city|current city)$/i,
     company: /^(company|employer|organization)( name)?$/i,
-    country: /^country( region| of residence)?$/i,
+    country: /^country( (or )?region)?( of residence)?$/i,
     degree: /^degree$/i,
     email: /^e ?mail( address)?$/i,
     end_month: /^(end|grad|graduation)( date)? month$/i,
@@ -853,6 +855,15 @@ function dismissPopup(element: Element) {
 // closed, not left over the form: one employer's Phone Device Type stayed open
 // after "Mobile" matched none of "Home" and "Home Cellular".
 // Its own Escape, then a press on the page as Workday's rules make.
+function clearSearchBox(element: Element) {
+  if (!isTag(element, "input") || !(element as HTMLInputElement).value) return;
+  const input = element as HTMLInputElement;
+  Object.getOwnPropertyDescriptor(viewOf(element).HTMLInputElement.prototype, "value")?.set?.call(input, "");
+  input.dispatchEvent(new (viewOf(element).Event)("input", { bubbles: true, composed: true }));
+  input.dispatchEvent(new (viewOf(element).KeyboardEvent)("keydown", { key: "Escape", code: "Escape", keyCode: 27, bubbles: true, composed: true }));
+  input.blur();
+}
+
 async function closeOpenedList(element: Element, options: InterpreterOptions) {
   if (!element.matches('button[aria-haspopup="listbox"]') || element.getAttribute("aria-expanded") !== "true") return;
   element.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", code: "Escape", keyCode: 27, bubbles: true, composed: true }));
@@ -990,6 +1001,25 @@ async function searchDropdown(
   ]
     .filter((term) => /[a-z]{3}/i.test(term))
     .slice(0, 5);
+  // A short list is whole on its first page: ICE's language levels
+  // (Proficient, Medium, Basic) held the sixth of a native speaker's
+  // wordings, never searched. An option
+  // written exactly as one of the answers is taken from it; anything looser
+  // is left to the search, as a fragment on an unfiltered page may mislead
+  // (and a parser's "Michigan state university" is not the list's own).
+  if (!select2 && (await open())) {
+    opened = true;
+    // Apostrophes and spacing aside: "Masters Degree" asked for is the
+    // list's "Master's Degree" (ICE's Degree).
+    const plain = (text: string) => text.replace(/['’`]/g, "").replace(/\s+/g, " ").trim().toLowerCase();
+    const exact = (item: Element) => values.some((value) => plain(label(item)) === plain(value));
+    // The first page loads a moment after the list opens; until then it
+    // holds only "— Make a Selection —". ICE's degree search answered no
+    // query at all, so the opened list was the only way to its options.
+    for (let waited = 0; waited < 2000 && !results().some(exact) && results().filter((item) => !/make a selection|select one|^-+$/i.test(label(item))).length === 0; waited += 100)
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    if (await choose(results().find(exact))) return "selected";
+  }
   for (const term of terms) {
     const items = await searchFor(term);
     // Matched against the full answers and the term searched, never against
@@ -1561,6 +1591,48 @@ function matchHistoryRows(
   return assigned;
 }
 
+// Oracle keeps what earlier fills saved: the same entry twice, and an entry
+// saved empty ("Unnamed Major"). Both are deleted with the tile's own Delete
+// button, nothing else is (Higher: three "Data Science" tiles for
+// two schools). Returns the tiles that are left. The confirmation Oracle may
+// ask for is handled as any dialog with a Delete / Yes / OK button: its
+// markup was not captured.
+async function removeDamagedTiles(
+  tiles: Element[],
+  globals: GlobalConfig,
+  options: InterpreterOptions,
+): Promise<Element[]> {
+  const label = (tile: Element) => (tile.getAttribute("aria-label") || "").replace(/\s+/g, " ").trim();
+  const seen = new Set<string>();
+  const doomed = tiles.filter((tile) => {
+    const name = label(tile);
+    if (!name) return false;
+    if (/^unnamed\b/i.test(name)) return true;
+    const key = `${tile.closest('[role="region"]')?.getAttribute("aria-label") || ""}|${name}`;
+    if (seen.has(key)) return true;
+    seen.add(key);
+    return false;
+  });
+  for (const tile of doomed) {
+    const card = tile.closest("article, .apply-flow-profile-item-tile") || tile.parentElement || tile;
+    const remove = card.querySelector<HTMLElement>(
+      'button.apply-flow-profile-item-tile__delete-icon[aria-label="Delete"]',
+    );
+    if (!remove || options.isLocked?.(remove)) continue;
+    const clicked = await (options.execute || defaultExecute)({ element: remove, globals, method: "click", signal: options.signal, values: [] });
+    if (!clicked) continue;
+    const now = () => options.now?.() ?? Date.now();
+    for (let deadline = now() + 3_000; tile.isConnected && now() < deadline; ) {
+      const confirm = [...tile.ownerDocument.querySelectorAll<HTMLElement>('.app-dialog__wrapper--active, [role="dialog"], [role="alertdialog"]')]
+        .flatMap((dialog) => [...dialog.querySelectorAll<HTMLElement>("button")])
+        .find((button) => /^(delete|yes|ok|confirm|remove)$/i.test((button.textContent || "").trim()) && !button.closest("[hidden]"));
+      if (confirm) await (options.execute || defaultExecute)({ element: confirm, globals, method: "click", signal: options.signal, values: [] });
+      await sleep(options.pollMs ?? 100, options.signal);
+    }
+  }
+  return tiles.filter((tile) => !doomed.includes(tile));
+}
+
 function historySelectors(
   selectors: InputSelector[],
   collection: "education" | "experience",
@@ -1613,7 +1685,11 @@ function historySelectors(
 // made with every form submission blocked (content.ts), so no form can be
 // submitted by it whatever the page does.
 function entrySave(element: Element, scope: Element | undefined, forbidden: Set<Element>) {
-  if (!scope || !isTag(element, "button") || !scope.contains(element)) return false;
+  // SAIC's entry editor keeps its footer, with the Save button, beside the
+  // fields' container rather than in it.
+  const footer = scope?.nextElementSibling;
+  const inside = Boolean(scope?.contains(element)) || Boolean(footer?.matches(".profile-item-footer") && footer.contains(element));
+  if (!scope || !isTag(element, "button") || !inside) return false;
   return (
     ![...forbidden].some((submit) => submit === element || element.contains(submit)) &&
     !dangerousLabel.test(labelOf(element))
@@ -1781,6 +1857,21 @@ async function runAction(
     paths(action.path).every((path) => /^%INPUTPATH%(\/\.)?$/.test(path.trim()));
   if (actionPaths.length && !selfOnly) {
     const timeout = action.removedTime ?? action.time;
+    // The entries a ranked pick chooses among, and the one it chooses.
+    const listed = () =>
+      [...new Set(actionPaths.flatMap((path) => queryXPathAll(root, path, path.startsWith(".") ? container : undefined)))]
+        .filter((element) => element.isConnected && !ownedElsewhere(element, base) && !placeholderOption(element, values, base));
+    const chosen = (): Element | undefined => {
+      const entries = listed();
+      const text = (element: Element) => (element.textContent || "").replace(/\s+/g, " ").trim();
+      const exact = matchOption(values, entries.map((element, at) => ({ label: text(element), value: `entry:${at}` })), globals);
+      if (exact) return entries[Number(exact.value.slice(6))];
+      try {
+        return pickOption({ value: values[0] || "", choices: values }, entries, text);
+      } catch {
+        return undefined;
+      }
+    };
     const found =
       action.removed || timeout
         ? await waitFor(
@@ -1790,13 +1881,15 @@ async function runAction(
             timeout ?? 0,
             Boolean(action.removed),
             options,
-            action.removed ? undefined : (element) => !ownedElsewhere(element, base) && !placeholderOption(element, values, base),
+            action.removed ? undefined : action.rankedPick ? (element) => chosen() === element : (element) => !ownedElsewhere(element, base) && !placeholderOption(element, values, base),
             // Only a list a button opens: a search's list stays as it was
             // until its answer comes, and one employer's skills answered after a
             // second, past this wait.
             action.removed || !base.matches('button[aria-haspopup="listbox"]') ? undefined : openListSettled(root, options),
           )
-        : actionPaths.flatMap((path) =>
+        : action.rankedPick
+          ? chosen()
+          : actionPaths.flatMap((path) =>
             queryXPathAll(
               root,
               path,
@@ -1817,7 +1910,7 @@ async function runAction(
     // "Pennsylvania State University-University Park" is the
     // profile's "…University, University Park", and the list's "…University
     // University Park Dietetic Internship", before it, is not.
-    if (values.length > 1 && !selfOnly && !siteOrdered.has(action)) {
+    if (values.length > 1 && !selfOnly && !action.rankedPick && !siteOrdered.has(action)) {
       const plain = (text: string) => text.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
       const rank = (element: Element) =>
         values.findIndex((candidate) => {
@@ -1965,8 +2058,11 @@ export async function interpretConfig(
           request.element.matches('option,[role="option"]') && request.values.length &&
           // Its name as shown counts too: Workday names each search result
           // with its state ("Data Science not checked"), and one employer's field of
-          // study was never picked.
-          ![labelOf(request.element), normalize(request.element.textContent || "")].some((label) =>
+          // study was never picked. A numbered step of a scale
+          // counts by its name: "3 - Advanced" is the confirmed "Advanced"
+          // (a Workday language level).
+          ![labelOf(request.element), normalize(request.element.textContent || ""),
+            (request.element.textContent || "").replace(/\s+/g, " ").trim().replace(/^\d+\s+-\s+(?=\S)/, "")].some((label) =>
             Boolean(label) && matchOption(request.values, [{ label, value: request.element.getAttribute("value") || label }], globals)))
         throw new Error("The configured option does not exactly match a confirmed value.");
       const accepted = await executor({
@@ -1992,6 +2088,8 @@ export async function interpretConfig(
     ...config.inputSelectors.map((entry) => ({ entry, early: false })),
   ];
   const earlyCountry = order.some(({ early }) => early);
+  // Row sections put off until the others have run (see the Add button).
+  const retried = new Set<string>();
   for (const { entry: [key, choices], early } of order) {
     if (key === "country" && earlyCountry && !early) {
       const tried = results.filter((result) => result.key === key);
@@ -2022,6 +2120,7 @@ export async function interpretConfig(
     let lastReason = notMatched;
     let lastStatus: "skipped" | "failed" = "failed";
     let completed = false;
+    let deferredRows = false;
     const addedRows = new Set<number>();
     selectorChoices: for (const choice of choices) {
       const selector: SelectorConfig =
@@ -2048,6 +2147,22 @@ export async function interpretConfig(
           const linkKey = (value: string) => value.trim().toLowerCase().replace(/^[a-z][a-z0-9+.-]*:\/\//, "").replace(/^www\./, "").replace(/\/+$/, "");
           const held = (row: Element) =>
             [...row.querySelectorAll<HTMLInputElement>('input:not([type="hidden"]):not([type="checkbox"]):not([type="radio"])')].map((input) => input.value).filter((value) => value.trim());
+          // A Websites section a Workday tenant titles "an employer" ("Add any
+          // relevant websites.") is for that link alone: five links were
+          // given there, and rows holding other links are deleted.
+          const linkedInOnly = list === "websites" && Boolean(root.querySelector('[role="group"][aria-labelledby="LinkedIn-section"]'));
+          const isLinkedIn = (value: string) => /(^|\.)linkedin\.com$/.test(linkKey(value).split("/")[0]);
+          if (linkedInOnly) {
+            for (let removed = 0; removed < 10; removed++) {
+              const stray = [...root.querySelectorAll('[role="group"][aria-labelledby^="LinkedIn-"][aria-labelledby$="-panel"]')]
+                .find((row) => held(row).length && !held(row).some(isLinkedIn));
+              const remove = stray && [...stray.querySelectorAll("button")].find((button) => /^\s*delete\s*$/i.test(button.textContent || ""));
+              if (!stray || !remove) break;
+              await (options.execute || defaultExecute)({ element: remove, guardElement: stray, globals, method: "click", signal: options.signal, values: [] });
+              for (let waited = 0; stray.isConnected && waited < 2_000; waited += 100) await sleep(100, options.signal);
+              if (stray.isConnected) break;
+            }
+          }
           const onPage = new Set(
             list === "websites"
               ? paths(selector.containerPath)
@@ -2058,12 +2173,22 @@ export async function interpretConfig(
           );
           const items = list === "languages"
             ? profileLanguages(profile.languages).map((row) => row.language)
-            : linksToShare(config, profile, root, context).filter((link) => !onPage.has(linkKey(link)));
+            : linksToShare(config, profile, root, context).filter((link) => !onPage.has(linkKey(link)) && (!linkedInOnly || isLinkedIn(link)));
           let count = 0;
           // What a row's fill wants the applicant to look at (a closest pick).
           const cautions: string[] = [];
           const visited = new Set<Element>();
+          // A language Oracle already lists as a saved tile ("English (United
+          // States)", kept by an earlier fill) is not added again: its list no
+          // longer offers that entry, and a second row sat open on the other
+          // Englishes (Higher).
+          const savedLanguages = list === "languages"
+            ? (await removeDamagedTiles(paths(selector.savedRowPath).flatMap((path) => queryXPathAll(root, path, context)), globals, options))
+                .map((tile) => ` ${plainText(tile.textContent)} `)
+            : [];
+          const alreadySaved = (item: string) => Boolean(plainText(item)) && savedLanguages.some((tile) => tile.includes(` ${plainText(item)} `));
           for (let index = 0; index < Math.min(items.length, selector.limit ?? items.length); index++) {
+            if (list === "languages" && alreadySaved(items[index])) continue;
             const substitute = (path: string) =>
               path.replaceAll("%INDEX0%", String(index)).replaceAll("%NUMBER0%", String(index + 1));
             const free = (row: Element) => !visited.has(row) && !(list === "websites" && held(row).length);
@@ -2088,6 +2213,16 @@ export async function interpretConfig(
               if (!(await (options.execute || defaultExecute)({ element: add, globals, method: "click", signal: options.signal, values: [] }))) break;
               const confirmed = await waitFor(root, paths(selector.confirmAddedPath).map(substitute), context, selector.time ?? 5_000, false, options);
               scope = rowAt() || (confirmed && (list !== "websites" || free(confirmed)) ? confirmed : undefined);
+              // A site whose rows are all alike (Oracle's links) confirms the
+              // first row at once, a row held by a link; the one just added
+              // is drawn a moment later.
+              if (!scope && list === "websites") {
+                const deadline = (options.now?.() ?? Date.now()) + (selector.time ?? 5_000);
+                while (!scope && (options.now?.() ?? Date.now()) < deadline) {
+                  await sleep(options.pollMs ?? 100, options.signal);
+                  scope = rowAt();
+                }
+              }
             }
             if (!scope) {
               lastReason = `The added ${list} row was not confirmed.`;
@@ -2190,18 +2325,45 @@ export async function interpretConfig(
             for (let node = walker.nextNode(); node; node = walker.nextNode()) pieces.push(node.textContent || "");
             return pieces.join(" ");
           };
-          const savedTileElements = paths(selector.savedRowPath)
-            .flatMap((path) => queryXPathAll(root, path, context));
-          const savedTiles = savedTileElements.map((tile) => ` ${plainText(tileText(tile))} `);
+          const savedTileElements = await removeDamagedTiles(
+            paths(selector.savedRowPath).flatMap((path) => queryXPathAll(root, path, context)),
+            globals,
+            options,
+          );
+          // Oracle's timeline cards give the dates in words: "From March 2026 to
+          // No date provided". Read as a tile's "03 2026 present".
+          const monthNumbers = ["january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november", "december"];
+          const datesAsNumbers = (text: string) =>
+            text
+              .replace(/\bfrom\s+(?=[a-z]+\s+\d{4})/gi, "")
+              .replace(/\s+to\s+(?=[a-z]+\s+\d{4}|no date)/gi, " ")
+              .replace(/\bno date provided\b/gi, "present")
+              .replace(/\b(january|february|march|april|may|june|july|august|september|october|november|december)\s+(\d{4})\b/gi, (_, month: string, year: string) => `${String(monthNumbers.indexOf(month.toLowerCase()) + 1).padStart(2, "0")} ${year}`);
+          const savedTiles = savedTileElements.map((tile) => ` ${plainText(datesAsNumbers(tileText(tile)))} `);
           // A saved entry is an existing row too: Workable draws a new entry's
           // editor first in its list, and the confirmation, by position, named
           // the saved MSU card instead. Nothing of Penn State's went in, the
           // editor was never saved, and MSU's name reached it from the page's
           // first school.
           knownRows.push(...savedTileElements.filter((tile) => !tile.querySelector('input:not([type="hidden"]),textarea,select')));
+          // Oracle's tile names the major and the dates, not the school
+          // ("Data Science 08/2025 - 05/2027"): a tile showing a row's start
+          // and end is that row (Higher, each refill added the
+          // entries again). A tile with no dates ("Unnamed Major") is none.
+          const monthYear = (value: string | undefined) => {
+            const found = value?.match(/^(\d{4})-(\d{2})/);
+            return found ? `${found[2]} ${found[1]}` : "";
+          };
+          const savedWithDates = (row: Profile["education"][number]) => {
+            const start = monthYear(row.startDate);
+            if (!start) return false;
+            const end = monthYear(row.endDate) || (row.endDate ? "" : "present");
+            return Boolean(end) && savedTiles.some((tile) => tile.includes(` ${start} ${end} `));
+          };
           const saved = new Set(
             rows.flatMap((row, index) => {
               if (!savedTiles.length) return [];
+              if (savedWithDates(row)) return [index];
               const subject = plainText(row.fieldOfStudy || row.title);
               const organization = plainText(row.organization);
               const year = row.startDate?.match(/\d{4}/)?.[0];
@@ -2228,9 +2390,13 @@ export async function interpretConfig(
           // shadow roots no match could read) went by page order to the saved
           // first school, the second was added again, and the open one was
           // never saved.
-          if (saved.size && existingScopes.length) {
+          // A saved entry's own card or tile is no editor either: Oracle's
+          // timeline cards were taken for the open row of the next entry,
+          // and the card, not a new form, was the one "filled".
+          const editors = existingScopes.filter((scope) => !savedTileElements.some((tile) => tile === scope || tile.contains(scope)));
+          if ((saved.size || editors.length < existingScopes.length) && existingScopes.length) {
             const unsaved = rows.map((row, index) => ({ row, index })).filter(({ index }) => !saved.has(index));
-            const rematched = matchHistoryRows(collection, unsaved.map(({ row }) => row), existingScopes, (element) =>
+            const rematched = matchHistoryRows(collection, unsaved.map(({ row }) => row), editors, (element) =>
               Boolean(options.isReplaceable?.(element)),
             );
             matchedScopes = new Map([...rematched].map(([at, scope]) => [unsaved[at].index, scope]));
@@ -2262,22 +2428,56 @@ export async function interpretConfig(
               .find((candidate) => candidate.isConnected);
             const detectedScopes = () =>
               repeatedScopes(collection, context).filter(
-                (candidate) => !addButton || !candidate.contains(addButton),
+                (candidate) =>
+                  (!addButton || !candidate.contains(addButton)) &&
+                  !savedTileElements.some((tile) => tile === candidate || tile.contains(candidate)),
               );
+            // A row an earlier entry was written into is that entry's, still
+            // open when its Save was refused: the next entry is added as its
+            // own. A path naming any open editor found the first school's
+            // again, and the second was never added (one employer's
+            // SmartRecruiters form).
+            const otherEntry = (row: Element) =>
+              visitedScopes.has(row) && !(selector.allowReuse && fresh(row));
             let scope: Element | undefined = matchedScopes.size
               ? matchedScopes.get(index)
               : containerPaths.flatMap((path) =>
                   queryXPathAll(root, substituteIndex(path), context),
-                )[0] || detectedScopes()[index];
+                ).find((row) => !otherEntry(row)) || detectedScopes()[index];
+            if (scope && otherEntry(scope)) scope = undefined;
             options.note?.({ rows: collection, index, scope: Boolean(scope), add: !scope && Boolean(selector.addButtonPath) });
             if (!scope && selector.addButtonPath) {
               if (!addedRows.has(index)) {
-                const add = paths(selector.addButtonPath)
-                  .flatMap((path) => queryXPathAll(root, path, context))
-                  .find((candidate) => candidate.isConnected);
+                // Oracle opens one entry form at a time, work or education,
+                // and hides every Add button while one is open: the Add waits for the form before it
+                // to close, and a section that still has no Add button is
+                // tried again once the other sections have saved theirs.
+                const findAdd = () =>
+                  paths(selector.addButtonPath)
+                    .flatMap((path) => queryXPathAll(root, path, context))
+                    .find((candidate) => candidate.isConnected && !candidate.closest("[hidden]"));
+                let add = findAdd();
+                for (
+                  const deadline = (options.now?.() ?? Date.now()) + (retried.has(key) ? selector.time ?? 5_000 : 2_500);
+                  !add && (options.now?.() ?? Date.now()) < deadline;
+                ) {
+                  await sleep(options.pollMs ?? 100, options.signal);
+                  add = findAdd();
+                }
+                if (!add && !retried.has(key) && !options.context && count + saved.size === 0 && selector.allowReuse) {
+                  retried.add(key);
+                  order.push({ entry: [key, choices], early: false });
+                  deferredRows = true;
+                  break selectorChoices;
+                }
                 if (!add) {
-                  lastReason = `No Add button was found for ${collection}.`;
-                  lastStatus = "skipped";
+                  // An entry form the site kept open (it refuses to save one
+                  // with a required answer missing) disables every Add button.
+                  const kept = selector.allowReuse && [...visitedScopes].some((row) => row.isConnected && !fresh(row));
+                  lastReason = kept
+                    ? `The ${collection} entry form was not saved (the site kept it open, so its Add buttons stay disabled). Complete its required fields and save it.`
+                    : `No Add button was found for ${collection}.`;
+                  lastStatus = kept ? "failed" : "skipped";
                   break selectorChoices;
                 }
                 if (options.isLocked?.(add)) {
@@ -2358,7 +2558,17 @@ export async function interpretConfig(
             // unsaved entry still showing its values is never overwritten.
             if (!scope || (visitedScopes.has(scope) && !(selector.allowReuse && fresh(scope)))) continue;
             visitedScopes.add(scope);
-            const statuses = await interpretConfig(
+            // Whose entry this form is, for the page-wide fill to read: it
+            // wrote row 0's school and major into the form opened for row 1.
+            scope.setAttribute("data-lane-entry", `${collection}:${index}`);
+            // The page-wide fill leaves the form alone while the row rule
+            // writes it: both picked in Oracle's one shared list, and a
+            // pick landed in the other's box (dates saved with a month or
+            // year missing).
+            scope.setAttribute("data-lane-entry-busy", "");
+            let statuses: Awaited<ReturnType<typeof interpretConfig>>;
+            try {
+              statuses = await interpretConfig(
               root,
               url,
               {
@@ -2380,6 +2590,9 @@ export async function interpretConfig(
                 used,
               },
             );
+            } finally {
+              scope.removeAttribute("data-lane-entry-busy");
+            }
             count += statuses.filter(
               (status) => status.status === "filled",
             ).length;
@@ -2482,6 +2695,28 @@ export async function interpretConfig(
         ? values.map((value) => candidates.find((candidate) => named(candidate) === normalize(value))).find(Boolean)
         : undefined;
       let element: Element | undefined = exactly || candidates[0];
+      // A list of pills (Oracle's Degree: "Graduate Master's Degrees (e.g., …)")
+      // is picked from by the answer's own wording of each option, not by the
+      // first one the path reaches.
+      if (!exactly && candidates.length > 1 && candidates.every((candidate) => candidate.matches('button[role="radio"]') && candidate.closest(".cx-select-pills-container"))) {
+        const picked = matchOption(
+          values,
+          candidates.map((candidate, at) => ({ label: (candidate.textContent || "").replace(/\s+/g, " ").trim(), value: `pill:${at}` })),
+          globals,
+        );
+        element = picked ? candidates[Number(picked.value.slice(5))] : undefined;
+        if (!element) {
+          lastReason = `The site's list has no option for "${values[0]}".`;
+          lastStatus = "skipped";
+          continue;
+        }
+        if (element.getAttribute("aria-checked") === "true") {
+          options.onConfirmed?.(element);
+          results.push({ key, status: "skipped", reason: "The site's value is already right." });
+          completed = true;
+          break;
+        }
+      }
       if (!element && selector.time)
         element = await waitFor(
           root,
@@ -2742,7 +2977,7 @@ export async function interpretConfig(
               /^(default|defaultWithoutBlur|keyType|trustedType|trustedSearch|trustedChoose)$/.test(action.method || ""),
             ) &&
             selector.actions.some((action) =>
-              paths(action.path).some((path) => /%(LOWER|UPPER)?VALUE%/.test(path)),
+              action.rankedPick || paths(action.path).some((path) => /%(LOWER|UPPER)?VALUE%/.test(path)),
             );
           if (typesThenPicks) {
             // Search confirmed names before short codes. A missing named
@@ -2869,6 +3104,13 @@ export async function interpretConfig(
             // A list already showing one of its answers (a second fill of the
             // step) is not opened again: Workday's Degree was left open over
             // the form.
+            // A read-only box its picker already set (Tesla's start date) is done: opening its calendar again
+            // and clicking the chosen day cleared it.
+            if (!selector.everyValue && isTag(element, "input") && (element as HTMLInputElement).readOnly && (textValue(element) || "").trim() && selector.actions.some((action) => action.path)) {
+              results.push({ key, status: "filled" });
+              completed = true;
+              break;
+            }
             const showing = !isTag(element, "input") && !isTag(element, "textarea") ? normalize(textValue(element) || "") : "";
             if (!selector.everyValue && showing && selector.actions.some((action) => action.path) && values.some((value) => normalize(value) === showing)) {
               results.push({ key, status: "filled" });
@@ -2908,6 +3150,11 @@ export async function interpretConfig(
               }
             } catch (error) {
               if (!isAbortError(error)) await closeOpenedList(element, options);
+              // A pass that ends mid-search (its time is up, or a pause)
+              // skips the steps that empty the box: the typed skill stayed,
+              // the site committed it when focus moved on, and that change
+              // read as the applicant's edit and paused the fill.
+              else if (pickBox) clearSearchBox(element);
               throw error;
             }
           }
@@ -2942,7 +3189,7 @@ export async function interpretConfig(
           throw new Error("Site did not accept the configured value.");
         // A search whose optional pick found nothing ("No results") leaves
         // its list open, and an open list hides the rest of the form from
-        // the next look at it (Ashby, Talos's Location; nightly).
+        // the next look at it (Ashby, Talos's Location; eval).
         const opened = element.matches('[aria-expanded="true"]')
           ? element
           : element.querySelector('[role="combobox"][aria-expanded="true"]');
@@ -2970,6 +3217,7 @@ export async function interpretConfig(
         if (!selector.allowReuse) used.delete(element);
       }
     }
+    if (deferredRows) continue;
     // Configured row rules can report success while leaving fields untouched
     // (their conditions skip every step), so the row fallback also runs after a
     // successful pass and fills only what is still empty.

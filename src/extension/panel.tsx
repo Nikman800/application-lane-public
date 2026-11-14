@@ -1,4 +1,6 @@
+import { usableImages } from "../shared/issue-images";
 import { answerChoices, canonicalAnswer, choiceLabels, leftReasons, type ChoiceField } from "../shared/answers";
+import { leftReason } from "../shared/questions";
 import { DRAFT_ONLY_NOTE, draftOnlySite } from "../shared/matching";
 import React, { useEffect, useReducer, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
@@ -26,6 +28,9 @@ import {
   type QueueState,
   type TabContext,
   type IssueReport,
+  type IssueImage,
+  type RoleOverride,
+  ISSUE_IMAGE_LIMIT,
   type SubmissionRecord,
   type FixerOverview,
   type FixerResult,
@@ -342,29 +347,93 @@ function IssueText({ item }: { item: string }) {
   );
 }
 
-function AppIssues({ app }: { app: Application }) {
+// What the applicant has to do on an application, grouped by what it is and
+// said briefly: the questions it needs from them (each with why the fill
+// left it), values to check, notes about the documents, and anything else.
+// One flat list of every note, questions at full length with no reason,
+// told them nothing about what to do.
+const shortQuestion = (text: string) => {
+  const plain = text.replace(/\s+/g, " ").trim();
+  // The question itself where a preamble comes first ("…if you are hired.Are you…").
+  const asked = plain.match(/(?:^|[.!?]\s*)((?:are|do|did|have|has|will|would|can|could|is|what|which|how|when|where|who|please|i |if )[^?]*\??)\s*$/i)?.[1] || plain;
+  return asked.length > 120 ? `${asked.slice(0, 117).trimEnd()}…` : asked;
+};
+type Issue = { text: string; full: string; why?: string };
+function issueGroups(app: Application) {
   const { reasons, used } = leftReasons(app.missing);
-  const problems = app.missing.filter((item) => !noteItem.test(item) && !used.has(item));
+  const answer: Issue[] = [];
+  const check: Issue[] = [];
+  const documents: Issue[] = [];
+  const other: Issue[] = [];
+  // "Legal or eligibility question left for you: <question>" says why a
+  // required question was left: shown as its reason, not a second entry.
+  const legal = app.missing.flatMap((item) => item.match(/^Legal or eligibility question left for you: ([\s\S]*)$/)?.[1] ?? []);
+  for (const item of app.missing) {
+    if (noteItem.test(item) || used.has(item) || /^Legal or eligibility question left for you: /.test(item)) continue;
+    const required = item.match(/^Required: ([\s\S]*)$/)?.[1];
+    if (required !== undefined) {
+      const question = required.replace(/\s*\(left alone: [^)]*\)[\s\S]*$/, "");
+      const lock = required.match(/\(left alone: ([^)]*)\)/)?.[1];
+      answer.push({
+        text: shortQuestion(question),
+        full: question,
+        why: reasons.get(item) || (lock ? `Kept empty by ${lock}. Choose Unlock empty fields to have it filled.` : leftReason(question)) ||
+          (legal.some((asked) => asked.startsWith(question.slice(0, 60)) || question.startsWith(asked.slice(0, 60))) ? "A legal or eligibility question: Application Lane leaves these to you. Save an answer in your profile to reuse it." : undefined) ||
+          "Your profile has no answer for it yet. Answer it here, or save an answer in your profile to reuse it.",
+      });
+      continue;
+    }
+    const sited = item.match(/^([\s\S]*?): "([\s\S]*?)" was filled in by the site from your resume and not corrected/);
+    if (sited) {
+      check.push({ text: shortQuestion(sited[1]), full: sited[1], why: `The site put "${sited[2].slice(0, 80)}" here from your resume. Check it.` });
+      continue;
+    }
+    if (/^(Kept a paragraph|Took a sentence|Kept your resume|The cover letter|Drafts)\b/i.test(item)) {
+      documents.push({ text: item.length > 160 ? `${item.slice(0, 157).trimEnd()}…` : item, full: item });
+      continue;
+    }
+    other.push({ text: item.length > 200 ? `${item.slice(0, 197).trimEnd()}…` : item, full: item });
+  }
+  return { answer, check, documents, other };
+}
+
+function IssueList({ items, mark }: { items: Issue[]; mark?: string }) {
+  return (
+    <ul>
+      {items.map((item, i) => (
+        <li key={i} title={item.full}>
+          {mark && <><span className="question-mark required">{mark}</span>{" "}</>}
+          {item.text}
+          {item.why && <p className="app-note">{item.why}</p>}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function AppIssues({ app }: { app: Application }) {
+  const { answer, check, documents, other } = issueGroups(app);
   const notes = app.missing.filter((item) => noteItem.test(item));
+  const count = answer.length + check.length + documents.length + other.length;
+  const parts = [
+    answer.length && `${answer.length} to answer`,
+    check.length && `${check.length} to check`,
+    documents.length && `${documents.length} about your documents`,
+    other.length && `${other.length} other`,
+  ].filter(Boolean).join(" · ");
   return (
     <>
-      {problems.length > 0 && (
+      {count > 0 && (
         // Folded by default: a list of varying length above the buttons moved
         // Fill this step about as it grew.
         <details className="app-problems" aria-label="Problems to resolve">
           <summary>
-            <strong>
-              {problems.length} {problems.length === 1 ? "problem needs" : "problems need"} you
-            </strong>
+            <strong>Needs you: {parts}</strong>
           </summary>
-          <ul>
-            {problems.map((item, i) => (
-              <li key={i}>
-                <IssueText item={item} />
-                {reasons.has(item) && <p className="app-note">Why it was not answered: {reasons.get(item)}</p>}
-              </li>
-            ))}
-          </ul>
+          {answer.length > 0 && <><h4>Questions to answer before submitting</h4><IssueList items={answer} mark="Required" /></>}
+          {check.length > 0 && <><h4>Values to check</h4><IssueList items={check} /></>}
+          {documents.length > 0 && <><h4>Your documents</h4><IssueList items={documents} /></>}
+          {other.length > 0 && <><h4>Other</h4><IssueList items={other} /></>}
         </details>
       )}
       {notes.length > 0 && (
@@ -467,6 +536,100 @@ function App() {
   const [issueCategory, setIssueCategory] = useState<IssueCategory>("fill-failure");
   const [issueNote, setIssueNote] = useState("");
   const [issueConsent, setIssueConsent] = useState(false);
+  // Screenshots pasted into the report (Ctrl+V) or attached.
+  const [issueImages, setIssueImages] = useState<(IssueImage & { url: string })[]>([]);
+  const [issueImageError, setIssueImageError] = useState("");
+  // While the report dialog is up the background knows it, so a reload waits.
+  useEffect(() => {
+    if (!issueTarget) return;
+    const beat = () => void chrome.runtime.sendMessage({ type: "REPORT_OPEN", open: true }).catch(() => {});
+    beat();
+    const timer = setInterval(beat, 5000);
+    return () => {
+      clearInterval(timer);
+      void chrome.runtime.sendMessage({ type: "REPORT_OPEN", open: false }).catch(() => {});
+    };
+  }, [issueTarget]);
+  const addIssueImages = async (files: File[]) => {
+    const images = files.filter((file) => /^image\/(png|jpeg|webp|gif)$/.test(file.type));
+    if (!images.length) return false;
+    const added: (IssueImage & { url: string })[] = [];
+    let error = "";
+    for (const file of images) {
+      if (file.size === 0) {
+        error = `${file.name || "An image"} was empty and was not added. Use Paste image, or copy the screenshot again.`;
+        continue;
+      }
+      if (file.size > ISSUE_IMAGE_LIMIT.bytes) {
+        error = `${file.name || "An image"} is over ${ISSUE_IMAGE_LIMIT.bytes / 1024 / 1024} MB and was not added.`;
+        continue;
+      }
+      const url = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result));
+        reader.onerror = () => reject(reader.error);
+        reader.readAsDataURL(file);
+      });
+      const data = url.slice(url.indexOf(",") + 1);
+      if (!data) {
+        error = `${file.name || "An image"} was empty and was not added. Copy the screenshot again.`;
+        continue;
+      }
+      added.push({ mime: file.type as IssueImage["mime"], data, url });
+    }
+    setIssueImages((current) => {
+      const next = [...current, ...added];
+      if (next.length > ISSUE_IMAGE_LIMIT.count) error = `A report holds up to ${ISSUE_IMAGE_LIMIT.count} images.`;
+      return next.slice(0, ISSUE_IMAGE_LIMIT.count);
+    });
+    setIssueImageError(error);
+    return true;
+  };
+  // Images on a clipboard: as files, and as items (some copies carry only
+  // the latter).
+  const clipboardImages = (data: DataTransfer | null) => {
+    if (!data) return [];
+    const files = [...data.files].filter((file) => file.type.startsWith("image/"));
+    if (files.length) return files;
+    return [...data.items]
+      .filter((item) => item.kind === "file" && item.type.startsWith("image/"))
+      .map((item) => item.getAsFile())
+      .filter((file): file is File => !!file);
+  };
+  // A screenshot pasted anywhere while the report dialog is open, not only
+  // in its note (: pasting did nothing).
+  useEffect(() => {
+    if (!issueTarget) return;
+    const onPaste = (event: ClipboardEvent) => {
+      const images = clipboardImages(event.clipboardData);
+      if (!images.length) return;
+      event.preventDefault();
+      // A screenshot some tools copy arrives through a paste as an empty file
+      // (the clipboard renders it only when asked): read it from the
+      // clipboard itself, as the Paste image button does.
+      if (images.every((file) => file.size === 0)) void pasteIssueImage();
+      else void addIssueImages(images);
+    };
+    document.addEventListener("paste", onPaste, true);
+    return () => document.removeEventListener("paste", onPaste, true);
+  }, [issueTarget]);
+  // The "Paste image" button: the clipboard read directly.
+  const pasteIssueImage = async () => {
+    try {
+      const items = await navigator.clipboard.read();
+      const files: File[] = [];
+      for (const item of items)
+        for (const type of item.types.filter((type) => type.startsWith("image/"))) {
+          const blob = await item.getType(type);
+          // A clipboard image is a PNG whatever it was copied from.
+          files.push(new File([blob], `pasted.${type.split("/")[1]}`, { type }));
+        }
+      if (!files.length) return setIssueImageError("The clipboard holds no image. Copy a screenshot first.");
+      await addIssueImages(files);
+    } catch (error) {
+      setIssueImageError(`The clipboard could not be read: ${(error as Error).message}`);
+    }
+  };
   const [issues, setIssues] = useState<Array<Omit<IssueReport, "frames">>>([]);
   const [submissions, setSubmissions] = useState<SubmissionRecord[] | undefined>();
   const [fixer, setFixer] = useState<FixerOverview | undefined>();
@@ -1290,7 +1453,7 @@ function App() {
                       </button>
                     )}
                     {/* Also here, where the applicant works: the Applications list is out of view. */}
-                    {linkedApplication?.missing.some((item) => /edit lock/.test(item)) && (
+                    {linkedApplication?.missing.some((item) => /edit lock|locked by a trusted user edit/.test(item)) && (
                       <button
                         className="secondary"
                         title="Fields you left empty are locked against filling. Unlock them so Fill this step can fill them; fields with a value are never overwritten."
@@ -1842,7 +2005,7 @@ function App() {
                               Mark submitted
                             </button>
                           )}
-                          {app.missing.some((item) => /edit lock/.test(item)) && (
+                          {app.missing.some((item) => /edit lock|locked by a trusted user edit/.test(item)) && (
                             <button
                               className="text-button"
                               title="Fields you left empty are locked against filling. Unlock them so Fill this step can fill them; fields with a value are never overwritten."
@@ -2533,7 +2696,9 @@ function App() {
                   <label>
                     Where you hear about jobs, in preference order (one per
                     line, such as LinkedIn or Company website; not a
-                    person's name)
+                    person's name). Left empty, "How did you hear about us?"
+                    is answered Application Lane, as Other where a list
+                    does not name it
                     <textarea
                       rows={4}
                       value={profile.referralSource.join("\n")}
@@ -2810,6 +2975,7 @@ function App() {
                                 />{" "}
                                 I am still studying here
                               </label>
+
                               <TranscriptPicker
                                 value={row.transcript}
                                 onChange={(name) =>
@@ -2904,6 +3070,78 @@ function App() {
                       </button>
                     </div>
                   ))}
+                </section>
+                <section className="card" aria-label="Differences by job type">
+                  <div className="section-title">
+                    <h2>Differences by job type</h2>
+                    <button
+                      className="text-button"
+                      type="button"
+                      onClick={() =>
+                        edit("roleOverrides", [
+                          ...(profile.roleOverrides || []),
+                          (profile.roleOverrides || []).some((override) => override.name === "Internships & co-ops")
+                            ? { name: "New job type", titleWords: [], education: [] }
+                            : { name: "Internships & co-ops", titleWords: ["intern", "internship", "co-op"], education: [] },
+                        ])
+                      }
+                    >
+                      + Add job type
+                    </button>
+                  </div>
+                  <p className="help">
+                    What changes for some jobs: a later graduation date for
+                    internships, say. A job whose title has one of a type's
+                    words is filled with these values instead; the first type
+                    that matches is used.
+                  </p>
+                  {(profile.roleOverrides || []).map((override, index) => {
+                    const change = (update: Partial<RoleOverride>) =>
+                      edit("roleOverrides", (profile.roleOverrides || []).map((other, at) => (at === index ? { ...other, ...update } : other)));
+                    return (
+                      <div className="history-row" key={index}>
+                        <div className="form-grid">
+                          <label>
+                            Name
+                            <input value={override.name} maxLength={80} onChange={(e) => change({ name: e.target.value })} />
+                          </label>
+                          <label>
+                            Job title words (comma-separated)
+                            <input
+                              value={override.titleWords.join(", ")}
+                              placeholder="intern, internship, co-op"
+                              onChange={(e) => change({ titleWords: e.target.value.split(",").map((word) => word.trim()).filter(Boolean).slice(0, 20) })}
+                            />
+                          </label>
+                          {profile.education.map((row, rowIndex) => (
+                            <label key={rowIndex}>
+                              End date at {row.organization || `education ${rowIndex + 1}`} (optional)
+                              <input
+                                value={override.education.find((entry) => entry.index === rowIndex)?.endDate || ""}
+                                placeholder={row.endDate || "YYYY-MM-DD"}
+                                maxLength={20}
+                                onChange={(e) =>
+                                  change({
+                                    education: [
+                                      ...override.education.filter((entry) => entry.index !== rowIndex),
+                                      ...(e.target.value.trim() ? [{ index: rowIndex, endDate: e.target.value.trim() }] : []),
+                                    ].sort((a, b) => a.index - b.index),
+                                  })
+                                }
+                              />
+                            </label>
+                          ))}
+                        </div>
+                        <button
+                          className="text-button muted"
+                          type="button"
+                          onClick={() => edit("roleOverrides", (profile.roleOverrides || []).filter((_, at) => at !== index))}
+                        >
+                          Remove job type
+                        </button>
+                      </div>
+                    );
+                  })}
                 </section>
                 <RecurringAnswers
                   profileRevision={profile.revision}
@@ -3338,8 +3576,41 @@ function App() {
             </label>
             <label>
               What were you doing?
-              <textarea rows={4} value={issueNote} onChange={(event) => setIssueNote(event.target.value)} placeholder="A short note helps reproduce the problem." />
+              <textarea
+                rows={4}
+                value={issueNote}
+                onChange={(event) => setIssueNote(event.target.value)}
+                placeholder="A short note helps reproduce the problem. Paste screenshots here (Ctrl+V)."
+              />
             </label>
+            <div className="issue-images">
+              {issueImages.map((image, index) => (
+                <figure key={index}>
+                  <img src={image.url} alt={`Screenshot ${index + 1}`} />
+                  <button className="icon-button" aria-label={`Remove screenshot ${index + 1}`} onClick={() => setIssueImages((current) => current.filter((_, at) => at !== index))}>×</button>
+                </figure>
+              ))}
+              {issueImages.length < ISSUE_IMAGE_LIMIT.count && (
+                <button type="button" className="secondary attach-image" onClick={() => void pasteIssueImage()}>
+                  Paste image
+                </button>
+              )}
+              {issueImages.length < ISSUE_IMAGE_LIMIT.count && (
+                <label className="secondary attach-image">
+                  Attach image
+                  <input
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp,image/gif"
+                    multiple
+                    onChange={(event) => {
+                      void addIssueImages([...(event.target.files || [])]);
+                      event.target.value = "";
+                    }}
+                  />
+                </label>
+              )}
+            </div>
+            {issueImageError && <p className="help error">{issueImageError}</p>}
             <label className="snapshot-consent">
               <input type="checkbox" checked={issueConsent} onChange={(event) => setIssueConsent(event.target.checked)} />
               Include this page’s rendered markup and entered form values. Passwords and recognized security tokens are redacted.
@@ -3349,13 +3620,27 @@ function App() {
               <button
                 className="primary"
                 disabled={!issueConsent || busy}
-                onClick={() =>
+                onClick={() => {
+                  // The form closes now: capturing (pausing the fill, saving the
+                  // recording, reading every frame, the network log and the
+                  // upload) took seconds with the menu left open. What it was
+                  // given is kept, and the outcome is said when it is saved.
+                  const given = {
+                    tabId: issueTarget.tabId,
+                    category: issueCategory,
+                    note: issueNote,
+                    images: usableImages(issueImages).map(({ mime, data }) => ({ mime, data })),
+                  };
+                  setIssueTarget(undefined);
+                  setIssueNote("");
+                  setIssueImages([]);
+                  setIssueImageError("");
+                  setIssueConsent(false);
+                  setNotice("Saving the report…");
                   void action(async () => {
                     const result = await command<{ report: IssueReport; saved: boolean; saveError: string }>({
                       type: "REPORT_ISSUE",
-                      tabId: issueTarget.tabId,
-                      category: issueCategory,
-                      note: issueNote,
+                      ...given,
                     });
                     if (result.saved)
                       setIssues((current) => [{ ...result.report, frames: undefined } as Omit<IssueReport, "frames">, ...current]);
@@ -3365,13 +3650,10 @@ function App() {
                         JSON.stringify(result.report, null, 2),
                         "application/json",
                       );
-                    setIssueTarget(undefined);
-                    setIssueNote("");
-                    setIssueConsent(false);
                     setQueue(await command({ type: "STATE" }));
                     setNotice(result.saved ? "Issue saved locally." : `Backend unavailable; report downloaded instead. ${result.saveError}`);
-                  })
-                }
+                  });
+                }}
               >
                 Capture report
               </button>

@@ -420,6 +420,21 @@ test("issue reports persist locally, export intact, delete individually, and cle
     assert.deepEqual(JSON.parse(await readFile(join(directory, "issues", `${id}.har.json`), "utf8")), har);
     assert.deepEqual(JSON.parse(await readFile(join(directory, "recordings", `${recording.id}.json`), "utf8")), recording);
     assert.equal(exported.har, undefined);
+    // Screenshots pasted into a report are files beside it, named in it,
+    // and go when it goes.
+    const pictured = randomUUID();
+    const png = Buffer.from("89504e470d0a1a0a0000000d49484452", "hex");
+    const withImages = await fetch(`${url}/v1/issues`, { method: "POST", headers,
+      body: JSON.stringify({ ...report, id: pictured, images: [{ mime: "image/png", data: png.toString("base64") }, { mime: "image/jpeg", data: "/9j/4AAQ" }] }) });
+    assert.equal(withImages.status, 201);
+    const picturedReport = await (await fetch(`${url}/v1/issues/${pictured}`, { headers })).json();
+    assert.deepEqual(picturedReport.images, [`${pictured}.image-1.png`, `${pictured}.image-2.jpg`]);
+    assert.deepEqual(await readFile(join(directory, "issues", `${pictured}.image-1.png`)), png);
+    // Not an image type, or not base64: refused.
+    for (const images of [[{ mime: "text/html", data: "PGI+" }], [{ mime: "image/png", data: "<script>" }]])
+      assert.notEqual((await fetch(`${url}/v1/issues`, { method: "POST", headers, body: JSON.stringify({ ...report, id: randomUUID(), images }) })).status, 201);
+    assert.equal((await fetch(`${url}/v1/issues/${pictured}`, { method: "DELETE", headers })).status, 200);
+    await assert.rejects(readFile(join(directory, "issues", `${pictured}.image-1.png`)));
     const blockedId = randomUUID();
     await mkdir(join(directory, "issues", `${blockedId}.har.json`));
     const rejected = await fetch(`${url}/v1/issues`, { method: "POST", headers,

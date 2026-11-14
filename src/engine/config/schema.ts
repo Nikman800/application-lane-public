@@ -46,6 +46,11 @@ export const actionSchema = z
     // allowFailure the form still goes on when the list offers nothing, and
     // the applicant is told the question is theirs to pick.
     pickRequired: z.boolean().optional(),
+    // On a click that picks from a list the site offers for typed text: the
+    // option is the one the answer's ranked matching chooses among the entries
+    // the path reaches (a listed name with a note after it, the entry naming
+    // the school's state), not the one whose text is exactly the answer.
+    rankedPick: z.boolean().optional(),
     removed: z.boolean().optional(),
     removedTime: z.number().nonnegative().optional(),
     skipOnEmptyValue: z.boolean().optional(),
@@ -186,6 +191,12 @@ export const siteConfigSchema = z
     embeddedPaths: z.array(z.array(z.string())),
     inputSelectors: z.array(inputSelectorSchema),
     pathsExcluded: z.array(z.array(z.string())),
+    // An empty resume slot on a site that parses an uploaded resume and
+    // writes what it read over the form (PACCAR's SuccessFactors wrote
+    // "UNSPECIFIED" as a company). Where one matches, the resume
+    // is uploaded first and alone, and the form is filled once the site has
+    // settled, so the profile's values are written last.
+    resumeFirstPaths: z.array(z.string()).optional(),
     submitButtonPaths: z.array(z.string()),
     submittedSuccessPaths: z.array(z.string()),
     trackedInputSelectors: z.array(trackedInputSelectorSchema),

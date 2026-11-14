@@ -70,7 +70,10 @@ test("invented evidence, foreign IDs and invented requirements cannot yield a go
     assert.equal(result.requirements[0].status, "uncertain");
     assert.deepEqual(result.requirements[0].evidence, []);
   }
-  assert.equal(fit([matched, { ...tests, requirement: "Security clearance required" }]).verdict, "unknown");
+  const invented = fit([matched, { ...tests, requirement: "Security clearance required" }]);
+  assert.equal(invented.verdict, "unknown");
+  // Said as what happened: the posting was read.
+  assert.match(invented.summary, /posting was read, but the fit check quoted a requirement that is not in it/);
   assert.equal(normalizeFit({ requirements: [] }, request(), profile, entries).verdict, "unknown");
 });
 

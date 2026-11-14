@@ -87,7 +87,7 @@ export function attachLive(server: Server, config: Config) {
           if (!extension)
             return send(peer, { type: "result", id: message.id, ok: false, error: "The extension is not connected. Open Chrome with Application Lane paired." });
           waiting.set(message.id, peer);
-          send(extension, { type: "command", id: message.id, action: message.action, applicationId: message.applicationId });
+          send(extension, { type: "command", id: message.id, action: message.action, applicationId: message.applicationId, ...(typeof message.data === "string" && message.data.length <= 20_000 ? { data: message.data } : {}) });
         }
       });
       ws.on("close", () => {

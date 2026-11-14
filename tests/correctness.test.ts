@@ -27,6 +27,11 @@ test("text is compared in any script, with accents folded, and nothing never mat
   const schools = [{ label: "清华大学", value: "q" }, { label: "北京大学", value: "b" }];
   assert.deepEqual(matchOption(["北京大学"], schools, globals), { label: "北京大学", value: "b" });
   assert.equal(matchOption(["—"], [{ label: "–", value: "x" }], globals), undefined);
+  // Oracle's degree pills name a level with examples after it.
+  const pills = ["Graduate Master's Degrees (e.g., Master of Arts, Master of Business Administration)", "Undergraduate Bachelor's Degrees (e.g., Bachelor of Science)", "Other"].map((label, at) => ({ label, value: String(at) }));
+  assert.equal(matchOption(["Master of Science", "Master's", "MS"], pills, globals)?.value, "0");
+  assert.equal(matchOption(["Bachelor of Science", "Bachelor's"], pills, globals)?.value, "1");
+  assert.equal(matchOption(["Doctor of Philosophy"], pills, globals), undefined);
   assert.equal(pickOption({ value: "北京大学" }, ["清华大学", "北京大学"], (option) => option), "北京大学");
   assert.equal(pickOption({ value: "—" }, ["–"], (option) => option), undefined);
 });
@@ -242,6 +247,11 @@ test("'worked here before' comes from the work history, and No only with the app
   assert.equal(answer(question, applying(never, undefined, "Contoso Air Brake")), undefined);
   // Worked there, but before the time asked about.
   assert.equal(answer("Have you worked for Contoso in the past 12 months?", never), "No");
+  // one employer's contractor wording: the employer is the one the
+  // services were provided to.
+  const services = "Have you ever provided services to Acme or any of its subsidiaries/affiliates as a contingent worker or contractor on behalf of a staffing company or other service provider?";
+  assert.equal(answer(services, applying(never, undefined, "acme-careers")), "No");
+  assert.equal(answer(services.replace("Acme", "Contoso Electric"), applying(never, undefined, "contoso-careers")), "Yes");
   // An older profile's global "No" becomes the toggle.
   assert.equal(person({ priorEmployment: "No" }).neverWorkedForApplyingCompanies, true);
   assert.equal(person({ priorEmployment: "Yes" }).neverWorkedForApplyingCompanies, undefined);
