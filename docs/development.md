@@ -26,7 +26,7 @@ npm ci
 
 ```bash
 npm run check                              # TypeScript type check
-node --import tsx --test tests/*.test.ts   # unit tests (same as npm test)
+npm test                                   # unit tests (every tests/*.test.ts)
 npm run build                              # build the extension and the backend bundle
 npm run dev                                # backend that restarts when src/ changes
 ```
